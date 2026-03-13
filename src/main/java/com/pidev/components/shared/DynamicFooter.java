@@ -1,0 +1,244 @@
+package com.pidev.components.shared;
+
+import javafx.scene.layout.*;
+import javafx.scene.control.*;
+import javafx.scene.text.Text;
+import javafx.scene.paint.Color;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.effect.BlurType;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.animation.*;
+import javafx.util.Duration;
+import com.pidev.utils.theme.ThemeManager;
+
+/**
+ * Dynamic Footer Component - Dynamic island design footer
+ */
+public class DynamicFooter {
+    
+    private final HBox root;
+    private final StackPane wrapper;
+    
+    public DynamicFooter() {
+        this.wrapper = new StackPane();
+        this.root = new HBox();
+        setupLayout();
+        startAnimations();
+    }
+    
+    private void setupLayout() {
+        // Main footer container with dynamic island styling
+        root.setSpacing(0);
+        root.setAlignment(Pos.CENTER);
+        root.setPadding(new Insets(6, 16, 6, 16));
+        
+        // Apply dynamic island background with theme-aware colors
+        applyThemeStyling();
+        
+        // Add root to wrapper (no extra elements)
+        wrapper.getChildren().add(root);
+        
+        // Footer content container
+        HBox footerContent = new HBox();
+        footerContent.setSpacing(0);
+        footerContent.setAlignment(Pos.CENTER);
+        footerContent.setMaxWidth(Double.MAX_VALUE);
+        
+        // Left side - App branding
+        VBox leftSection = new VBox();
+        leftSection.setAlignment(Pos.CENTER_LEFT);
+        leftSection.setSpacing(2);
+        leftSection.setPadding(new Insets(0, 0, 0, 0)); // No left padding to push to edge
+        
+    Text appName = new Text("Dynamic Island App");
+    appName.setFont(javafx.scene.text.Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 11));
+        appName.setFill(Color.web(ThemeManager.getInstance().getIslandTextColor()));
+        
+    Text copyrightText = new Text("© 2025 All rights reserved");
+    copyrightText.setFont(javafx.scene.text.Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 8));
+        copyrightText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
+        
+        leftSection.getChildren().addAll(appName, copyrightText);
+        
+        // Center - Quick links with better styling
+        HBox centerSection = new HBox();
+        centerSection.setSpacing(12);
+        centerSection.setAlignment(Pos.CENTER);
+        
+        // Create footer links with improved design
+        centerSection.getChildren().addAll(
+            createFooterLink("📚", "Documentation"),
+            createFooterLink("💬", "Support"),
+            createFooterLink("🐙", "GitHub"),
+            createFooterLink("📄", "License")
+        );
+        
+        // Right side - Made with love (enhanced)
+        VBox rightSection = new VBox();
+        rightSection.setAlignment(Pos.CENTER_RIGHT);
+        rightSection.setSpacing(2);
+        rightSection.setPadding(new Insets(0, 0, 0, 0)); // No right padding to push to edge
+        
+        HBox loveText = new HBox();
+        loveText.setSpacing(6);
+        loveText.setAlignment(Pos.CENTER_RIGHT);
+        
+    Text loveText1 = new Text("Made with");
+    loveText1.setFont(javafx.scene.text.Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 9));
+        loveText1.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
+        
+        Text heart = new Text("❤️");
+        heart.setFont(javafx.scene.text.Font.font(11));
+        
+    Text loveText2 = new Text("by Amine");
+    loveText2.setFont(javafx.scene.text.Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 9));
+        loveText2.setFill(Color.web(ThemeManager.getInstance().getModernAccentColor()));
+        
+        loveText.getChildren().addAll(loveText1, heart, loveText2);
+        
+    Text versionText = new Text("v1.0.0");
+    versionText.setFont(javafx.scene.text.Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 7));
+        versionText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
+        
+        rightSection.getChildren().addAll(loveText, versionText);
+        
+        // Add sections to footer content
+        footerContent.getChildren().addAll(leftSection, centerSection, rightSection);
+        
+        // Set grow priorities to push content to edges
+        HBox.setHgrow(leftSection, Priority.ALWAYS);
+        HBox.setHgrow(centerSection, Priority.NEVER);
+        HBox.setHgrow(rightSection, Priority.ALWAYS);
+        
+        // Force alignment to edges
+        leftSection.setAlignment(Pos.CENTER_LEFT);
+        rightSection.setAlignment(Pos.CENTER_RIGHT);
+        
+        root.getChildren().add(footerContent);
+    }
+    
+    private VBox createFooterLink(String icon, String text) {
+        VBox link = new VBox();
+        link.setSpacing(3);
+        link.setAlignment(Pos.CENTER);
+        link.setPadding(new Insets(4, 10, 4, 10));
+        link.setCursor(javafx.scene.Cursor.HAND);
+        
+        // Link icon with theme-aware styling
+        Text linkIcon = new Text(icon);
+        linkIcon.setFont(javafx.scene.text.Font.font(18));
+        linkIcon.setFill(Color.web(ThemeManager.getInstance().getIslandTextColor()));
+        
+        // Link text with improved typography
+        Text linkText = new Text(text);
+        linkText.setFont(javafx.scene.text.Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 9));
+        linkText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));        link.getChildren().addAll(linkIcon, linkText);
+        
+        // Enhanced hover effects with smooth transitions
+        link.setOnMouseEntered(e -> {
+            ThemeManager themeManager = ThemeManager.getInstance();
+            link.setStyle(
+                "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
+                "-fx-background-radius: 12px;" +
+                "-fx-scale-x: 1.05;" +
+                "-fx-scale-y: 1.05;"
+            );
+            
+            // Animate icon
+            ScaleTransition iconScale = new ScaleTransition(Duration.millis(150), linkIcon);
+            iconScale.setToX(1.2);
+            iconScale.setToY(1.2);
+            iconScale.play();
+            
+            // Change text and icon color on hover
+            linkText.setFill(Color.web(themeManager.getModernAccentColor()));
+            linkIcon.setFill(Color.web(themeManager.getModernAccentColor()));
+        });
+        
+        link.setOnMouseExited(e -> {
+            link.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-scale-x: 1.0;" +
+                "-fx-scale-y: 1.0;"
+            );
+            
+            // Reset icon
+            ScaleTransition iconScale = new ScaleTransition(Duration.millis(150), linkIcon);
+            iconScale.setToX(1.0);
+            iconScale.setToY(1.0);
+            iconScale.play();
+            
+            // Reset text and icon color
+            linkText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
+            linkIcon.setFill(Color.web(ThemeManager.getInstance().getIslandTextColor()));
+        });
+        
+        // Add click effect
+        link.setOnMousePressed(e -> {
+            link.setStyle(
+                "-fx-background-color: " + ThemeManager.getInstance().getLiquidGlassHover() + ";" +
+                "-fx-background-radius: 12px;" +
+                "-fx-scale-x: 0.95;" +
+                "-fx-scale-y: 0.95;"
+            );
+        });
+        
+        link.setOnMouseReleased(e -> {
+            link.setStyle(
+                "-fx-background-color: " + ThemeManager.getInstance().getLiquidGlassHover() + ";" +
+                "-fx-background-radius: 12px;" +
+                "-fx-scale-x: 1.05;" +
+                "-fx-scale-y: 1.05;"
+            );
+        });
+        
+        return link;
+    }
+    
+    private void applyThemeStyling() {
+        ThemeManager themeManager = ThemeManager.getInstance();
+        
+        // Apply dynamic island background with enhanced styling
+        root.setStyle(
+            "-fx-background-color: " + themeManager.getDynamicIslandBackground() + ";" +
+            "-fx-background-radius: 50px;" +
+            "-fx-border-color: " + themeManager.getDynamicIslandBorder() + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 50px;"
+        );
+        
+        // TRON neon edge glow
+        DropShadow footerShadow = new DropShadow();
+        footerShadow.setBlurType(BlurType.GAUSSIAN);
+        footerShadow.setColor(ThemeManager.getInstance().getNeonGlowColor().deriveColor(0, 1, 1, 0.35));
+        footerShadow.setRadius(22);
+        footerShadow.setOffsetX(0);
+        footerShadow.setOffsetY(6);
+        root.setEffect(footerShadow);
+    }
+    
+    private void startAnimations() {
+        // Create subtle floating animation for the dynamic island
+        TranslateTransition floatAnimation = new TranslateTransition(Duration.seconds(4), root);
+        floatAnimation.setFromY(0);
+        floatAnimation.setToY(2);
+        floatAnimation.setAutoReverse(true);
+        floatAnimation.setCycleCount(Animation.INDEFINITE);
+        floatAnimation.setInterpolator(Interpolator.EASE_BOTH);
+        floatAnimation.play();
+    }
+    
+    public StackPane getRoot() {
+        return wrapper;
+    }
+    
+    public void cleanup() {
+        // Cleanup resources if needed
+    }
+    
+    // Public method to refresh theme-dependent styles
+    public void refreshTheme() {
+        applyThemeStyling();
+    }
+}
