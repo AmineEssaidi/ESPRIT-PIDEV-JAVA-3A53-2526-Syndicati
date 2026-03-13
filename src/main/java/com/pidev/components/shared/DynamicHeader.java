@@ -1,1717 +1,869 @@
 package com.pidev.components.shared;
 
-import javafx.animation.*;
+import com.pidev.MainApplication;
+import com.pidev.utils.navigation.NavigationManager;
+import com.pidev.utils.theme.ThemeManager;
+import javafx.animation.PauseTransition;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.Tooltip;
-import javafx.util.Duration;
-import javafx.scene.effect.DropShadow;
-import javafx.scene.effect.BlurType;
-import javafx.scene.layout.*;
+import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
+import javafx.stage.Popup;
+import javafx.stage.Window;
 import javafx.util.Duration;
-import com.pidev.utils.theme.ThemeManager;
-import com.pidev.utils.navigation.NavigationManager;
-import com.pidev.components.shared.ConnectionStatusPill;
+
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Enhanced Dynamic Header Component - Main header with improved island hosting tabs
- */
 public class DynamicHeader {
-    
+
     private final StackPane root;
     private final ThemeManager themeManager;
-    private HBox navSection;
-    private HBox mainTabs;
-    private boolean isExpanded = false;
-    private String currentExpandedTab = null;
+
     private Runnable backgroundUpdateCallback;
-    
-    // Enhanced state management
-    private Map<String, Button> mainTabButtons = new HashMap<>();
-    private Map<String, Button> submenuButtons = new HashMap<>();
-    private String activeTab = "Home";
-    
-    // Animation and layout properties
-    private double originalNavSectionWidth;
-    private double originalNavSectionHeight;
-    private HBox subMenuContainer;
-    private StackPane islandContainer;
-    
-    // Profile dropdown state
-    private boolean isProfileDropdownOpen = false;
-    private boolean isTabDropdownOpen = false;
-    
-    // Navigation island expansion
-    private HBox navPillIsland;
-    private HBox submenuContainer;
-    
-    // Profile pill expansion
-    private StackPane profileContainer;
-    private Circle profileIconRef;
-    
-    // Search pill expansion
-    private StackPane searchContainer;
-    private boolean isSearchExpanded = false;
-    
+
+    private HBox navbar;
+    private HBox leftSection;
+    private HBox rightSection;
+    private HBox tabsPill;
+
+    private final Map<String, Button> tabButtons = new LinkedHashMap<>();
+    private final Map<String, Popup> tabDropdownPopups = new HashMap<>();
+
+    private VBox notificationDropdown;
+    private Popup profilePopup;
+    private Node profileAnchor;
+    private Node notificationAnchor;
+
+    private PauseTransition closeTabDelay;
+    private PauseTransition closeProfileDelay;
+    private PauseTransition closeNotificationDelay;
+    private String activeTab = "home";
+
     public DynamicHeader() {
         this.root = new StackPane();
         this.themeManager = ThemeManager.getInstance();
-        
-        setupLayout();
+        buildLayout();
         applyThemeStyling();
     }
-    
-    private void setupLayout() {
-        // Main header container - now transparent, only child elements are visible
-        root.setPadding(new Insets(12, 16, 12, 16));
-        
-        // Transparent background - no visible big island
-        root.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 0;" +
-            "-fx-border-color: transparent;" +
-            "-fx-border-width: 0;"
-        );
-        
-        // No shadow on the root container
-        root.setEffect(null);
-        
-        // Create main layout with centered navigation pill
-        HBox mainLayout = new HBox();
-        mainLayout.setAlignment(Pos.CENTER);
-        mainLayout.setSpacing(0);
-        
-        // Left growing spacer
+
+    private void buildLayout() {
+        root.setPadding(new Insets(10, 30, 0, 30));
+        root.setAlignment(Pos.TOP_CENTER);
+        root.setStyle("-fx-background-color: transparent;");
+        root.setPickOnBounds(false);
+        root.setMinHeight(Region.USE_PREF_SIZE);
+        root.setPrefHeight(Region.USE_COMPUTED_SIZE);
+        root.setMaxHeight(Region.USE_PREF_SIZE);
+
+        navbar = new HBox();
+        navbar.setAlignment(Pos.CENTER_LEFT);
+        navbar.setPadding(new Insets(12, 22, 12, 22));
+        navbar.setSpacing(16);
+        navbar.setMinHeight(80);
+        navbar.setPrefHeight(80);
+        navbar.setPickOnBounds(true);
+
+        leftSection = buildLeftSection();
+        HBox centerSection = buildCenterSection();
+        rightSection = buildRightSection();
+
+        leftSection.setMinWidth(320);
+        leftSection.setPrefWidth(320);
+        rightSection.setMinWidth(320);
+        rightSection.setPrefWidth(320);
+
         Region leftSpacer = new Region();
-        HBox.setHgrow(leftSpacer, Priority.ALWAYS);
-        
-        // Center section: Navigation pill island with tabs
-        HBox navPillIsland = createNavigationPillIsland();
-        
-        // Right growing spacer (equal to left)
         Region rightSpacer = new Region();
+        HBox.setHgrow(leftSpacer, Priority.ALWAYS);
         HBox.setHgrow(rightSpacer, Priority.ALWAYS);
 
-        // Right section (connection pill, theme toggle, logout, profile)
-        HBox rightSection = createProfileSection();
-        
-        mainLayout.getChildren().addAll(leftSpacer, navPillIsland, rightSpacer, rightSection);
-        root.getChildren().add(mainLayout);
+        navbar.getChildren().addAll(leftSection, leftSpacer, centerSection, rightSpacer, rightSection);
+        root.getChildren().add(navbar);
+        if (notificationDropdown != null) {
+            root.getChildren().add(notificationDropdown);
+            StackPane.setAlignment(notificationDropdown, Pos.TOP_LEFT);
+        }
     }
-    
-    private HBox createNavigationPillIsland() {
-        navPillIsland = new HBox();
-        navPillIsland.setSpacing(25);
-        navPillIsland.setAlignment(Pos.CENTER);
-        navPillIsland.setPadding(new Insets(12, 150, 12, 150));
-        
-        // Liquid glass styling for the navigation pill
-        navPillIsland.setStyle(
-            "-fx-background-color: " + themeManager.getLiquidGlassBackground() + ";" +
-            "-fx-background-radius: 25px;" +
-            "-fx-border-color: " + themeManager.getLiquidGlassBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 25px;"
-        );
-        
-        // Add subtle shadow
-        DropShadow pillShadow = new DropShadow();
-        pillShadow.setBlurType(BlurType.GAUSSIAN);
-        pillShadow.setColor(Color.color(0, 0, 0, 0.3));
-        pillShadow.setRadius(12);
-        pillShadow.setOffsetX(0);
-        pillShadow.setOffsetY(3);
-        navPillIsland.setEffect(pillShadow);
-        
-        // Create search icon pill on the left
-        StackPane searchPill = createSearchIconPill();
-        
-        // Create navigation tabs with text labels
-        Button homeTab = createNavPillTab("Home", true);
-        Button servicesTab = createNavPillTab("Services", false);
-        Button aboutTab = createNavPillTab("About", false);
-        Button dashboardTab = createNavPillTab("Dashboard", false);
-        
-        // Store tab references
-        mainTabButtons.put("Home", homeTab);
-        mainTabButtons.put("Services", servicesTab);
-        mainTabButtons.put("About", aboutTab);
-        mainTabButtons.put("Dashboard", dashboardTab);
-        
-        navPillIsland.getChildren().addAll(searchPill, homeTab, servicesTab, aboutTab, dashboardTab);
-        
-        return navPillIsland;
-    }
-    
-    private StackPane createSearchIconPill() {
-        searchContainer = new StackPane();
-        searchContainer.setAlignment(Pos.CENTER_LEFT);
-        
-        // Create search icon (magnifying glass)
-        Text searchIcon = new Text("🔍");
-        searchIcon.setFont(Font.font(16));
-        searchIcon.setFill(Color.WHITE);
-        
-        // Initial collapsed state - just the icon
-        HBox collapsedSearch = new HBox();
-        collapsedSearch.setAlignment(Pos.CENTER);
-        collapsedSearch.setPadding(new Insets(8, 10, 8, 10));
-        collapsedSearch.getChildren().add(searchIcon);
-        collapsedSearch.setCursor(javafx.scene.Cursor.HAND);
-        
-        searchContainer.getChildren().add(collapsedSearch);
-        
-        // Hover effect - morph into expanded search pill
-        searchContainer.setOnMouseEntered(e -> expandSearchPill());
-        // Don't set onMouseExited here - let the expanded search handle it
-        
-        return searchContainer;
-    }
-    
-    private void expandSearchPill() {
-        if (isSearchExpanded) return;
-        isSearchExpanded = true;
-        
-        // Create expanded search pill
-        HBox expandedSearch = new HBox();
-        expandedSearch.setAlignment(Pos.CENTER_LEFT);
-        expandedSearch.setSpacing(8);
-        expandedSearch.setPadding(new Insets(8, 16, 8, 16));
-        expandedSearch.setPrefWidth(250);
-        expandedSearch.setMaxWidth(250);
-        
-        // Liquid glass styling
-        expandedSearch.setStyle(
-            "-fx-background-color: " + themeManager.getLiquidGlassBackground() + ";" +
-            "-fx-background-radius: 20px;" +
-            "-fx-border-color: black;" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 20px;"
-        );
-        
-        // Search icon
-        Text searchIcon = new Text("🔍");
-        searchIcon.setFont(Font.font(16));
-        searchIcon.setFill(Color.WHITE);
-        
-        // Create TextField for typing
-        javafx.scene.control.TextField searchField = new javafx.scene.control.TextField();
-        searchField.setPromptText("Search...");
-        searchField.setPrefWidth(180);
-        searchField.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-text-fill: white;" +
-            "-fx-prompt-text-fill: rgba(255, 255, 255, 0.6);" +
-            "-fx-font-size: 13px;" +
-            "-fx-border-width: 0;" +
-            "-fx-background-insets: 0;" +
-            "-fx-padding: 0;"
-        );
-        searchField.setFocusTraversable(true);
-        
-        expandedSearch.getChildren().addAll(searchIcon, searchField);
-        
-        // Keep expanded when hovering or typing
-        expandedSearch.setOnMouseEntered(e -> {
-            // Keep expanded
+
+    private HBox buildLeftSection() {
+        HBox left = new HBox();
+        left.setAlignment(Pos.CENTER_LEFT);
+
+        Button logo = new Button("SYNDICATI");
+        logo.setMinWidth(95);
+        logo.setPrefWidth(95);
+        logo.setAlignment(Pos.CENTER);
+        logo.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        logo.setPadding(new Insets(8, 10, 8, 10));
+        styleGhostPill(logo);
+        logo.setOnAction(e -> {
+            activeTab = "home";
+            updateTabsState();
+            closeAllPopups();
+            NavigationManager.getInstance().navigateTo("home");
         });
-        
-        // Prevent collapse on mouse exit if focused
-        expandedSearch.setOnMouseExited(e -> {
-            if (!searchField.isFocused()) {
-                collapseSearchPill();
-            }
-        });
-        
-        // Collapse when focus is lost and not hovering
-        searchField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
-            if (!isNowFocused && !expandedSearch.isHover()) {
-                collapseSearchPill();
-            }
-        });
-        
-        // Animate expansion
-        expandedSearch.setScaleX(0.8);
-        expandedSearch.setOpacity(0);
-        
-        ScaleTransition scaleTransition = new ScaleTransition(Duration.millis(200), expandedSearch);
-        scaleTransition.setFromX(0.8);
-        scaleTransition.setToX(1.0);
-        
-        FadeTransition fadeTransition = new FadeTransition(Duration.millis(200), expandedSearch);
-        fadeTransition.setFromValue(0);
-        fadeTransition.setToValue(1.0);
-        
-        searchContainer.getChildren().clear();
-        searchContainer.getChildren().add(expandedSearch);
-        
-        ParallelTransition transition = new ParallelTransition(scaleTransition, fadeTransition);
-        transition.play();
+
+        left.getChildren().add(logo);
+        return left;
     }
-    
-    private void collapseSearchPill() {
-        if (!isSearchExpanded) return;
-        isSearchExpanded = false;
-        
-        // Create collapsed search icon
-        Text searchIcon = new Text("🔍");
-        searchIcon.setFont(Font.font(16));
-        searchIcon.setFill(Color.WHITE);
-        
-        HBox collapsedSearch = new HBox();
-        collapsedSearch.setAlignment(Pos.CENTER);
-        collapsedSearch.setPadding(new Insets(8, 10, 8, 10));
-        collapsedSearch.getChildren().add(searchIcon);
-        collapsedSearch.setCursor(javafx.scene.Cursor.HAND);
-        
-        // Animate collapse
-        collapsedSearch.setScaleX(0.8);
-        collapsedSearch.setOpacity(0);
-        
-        ScaleTransition scaleTransition = new ScaleTransition(Duration.millis(200), collapsedSearch);
-        scaleTransition.setFromX(0.8);
-        scaleTransition.setToX(1.0);
-        
-        FadeTransition fadeTransition = new FadeTransition(Duration.millis(200), collapsedSearch);
-        fadeTransition.setFromValue(0);
-        fadeTransition.setToValue(1.0);
-        
-        searchContainer.getChildren().clear();
-        searchContainer.getChildren().add(collapsedSearch);
-        
-        ParallelTransition transition = new ParallelTransition(scaleTransition, fadeTransition);
-        transition.play();
+
+    private HBox buildCenterSection() {
+        HBox center = new HBox();
+        center.setAlignment(Pos.CENTER);
+
+        tabsPill = new HBox();
+        tabsPill.setAlignment(Pos.CENTER);
+        tabsPill.setSpacing(4);
+        tabsPill.setPadding(new Insets(8));
+
+        Button home = createTabButton("home", "Home");
+        home.setOnAction(e -> {
+            activeTab = "home";
+            updateTabsState();
+            closeAllPopups();
+            NavigationManager.getInstance().navigateTo("home");
+        });
+
+        Button services = createTabButton("services", "Services");
+        Map<String, String> servicesItems = new LinkedHashMap<>();
+        servicesItems.put("Residence", "services/residence");
+        servicesItems.put("Forum", "services/forum");
+        servicesItems.put("Syndicat", "services/syndicat");
+        servicesItems.put("Evenement", "services/evenement");
+        attachTabDropdown("services", services, servicesItems);
+
+        Button about = createTabButton("about", "About");
+        Map<String, String> aboutItems = new LinkedHashMap<>();
+        aboutItems.put("Our Team", "about");
+        aboutItems.put("Company", "about");
+        aboutItems.put("Contact", "about");
+        attachTabDropdown("about", about, aboutItems);
+
+        tabsPill.getChildren().addAll(home, services, about);
+        center.getChildren().add(tabsPill);
+        updateTabsState();
+        return center;
     }
-    
-    private Button createNavPillTab(String tabName, boolean isActive) {
-        Button tab = new Button(tabName);
-        tab.setPadding(new Insets(10, 20, 10, 20));
-        tab.setMinWidth(Region.USE_PREF_SIZE);
-        tab.setPrefWidth(Region.USE_COMPUTED_SIZE);
-        tab.setMaxWidth(Region.USE_PREF_SIZE);
-        
-        // Apply styling based on active state
-        updateNavPillTabStyle(tab, tabName, isActive);
-        
-        // Hover effects
+
+    private Button createTabButton(String key, String text) {
+        Button tab = new Button(text);
+        tabButtons.put(key, tab);
+        tab.setPadding(new Insets(12, 20, 12, 20));
+        tab.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
         tab.setOnMouseEntered(e -> {
-            if (!tabName.equals(activeTab)) {
-                // Use light font for hover on non-active tabs
-                tab.setFont(Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
+            if (!key.equals(activeTab)) {
                 tab.setStyle(
-                    "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
-                    "-fx-background-radius: 18px;" +
-                    "-fx-text-fill: rgba(255, 255, 255, 0.85);" +
+                    "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)") + ";" +
+                    "-fx-background-radius: 25px;" +
+                    "-fx-text-fill: " + (themeManager.isDarkMode() ? "#ffffff" : "#111827") + ";" +
                     "-fx-cursor: hand;"
                 );
             }
         });
-        
-        tab.setOnMouseExited(e -> {
-            updateNavPillTabStyle(tab, tabName, tabName.equals(activeTab));
-        });
-        
-        // Click handler
-        tab.setOnAction(e -> handleNavPillTabClick(tabName));
-        
+        tab.setOnMouseExited(e -> updateTabsState());
         return tab;
     }
-    
-    private void updateNavPillTabStyle(Button tab, String tabName, boolean isActive) {
-        if (isActive || tabName.equals(activeTab)) {
-            // Active tab: bold font, white text with glow effect
-            tab.setFont(Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-            tab.setStyle(
-                "-fx-background-color: " + themeManager.getLiquidGlassFocus() + ";" +
-                "-fx-background-radius: 18px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-effect: dropshadow(gaussian, " + themeManager.getModernAccentColor() + ", 10, 0.4, 0, 0);"
-            );
-        } else {
-            // Non-active tabs: light font, muted gray text, no glow
-            tab.setFont(Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
-            tab.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-background-radius: 18px;" +
-                "-fx-text-fill: rgba(255, 255, 255, 0.6);" +
-                "-fx-cursor: hand;"
-            );
+
+    private void attachTabDropdown(String key, Button anchorTab, Map<String, String> items) {
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setHideOnEscape(true);
+
+        VBox content = new VBox();
+        content.setPadding(new Insets(10));
+        content.setSpacing(3);
+        content.setPrefWidth(210);
+
+        for (Map.Entry<String, String> entry : items.entrySet()) {
+            Button row = new Button(entry.getKey());
+            row.setMaxWidth(Double.MAX_VALUE);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.setPadding(new Insets(10, 12, 10, 12));
+            row.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+            styleDropdownRow(row);
+            String route = entry.getValue();
+            row.setOnAction(e -> {
+                closeAllPopups();
+                activeTab = key;
+                updateTabsState();
+                NavigationManager.getInstance().navigateTo(route);
+            });
+            content.getChildren().add(row);
         }
-    }
-    
-    private void handleNavPillTabClick(String tabName) {
-        // Update active tab state
-        String previousTab = activeTab;
-        activeTab = tabName;
-        
-        // Update previous and new tab styles
-        if (mainTabButtons.containsKey(previousTab)) {
-            updateNavPillTabStyle(mainTabButtons.get(previousTab), previousTab, false);
-        }
-        if (mainTabButtons.containsKey(activeTab)) {
-            updateNavPillTabStyle(mainTabButtons.get(activeTab), activeTab, true);
-        }
-        
-        // Check if tab has submenu, show dropdown
-        if (tabName.equals("Services") || tabName.equals("About")) {
-            showTabDropdown(mainTabButtons.get(tabName), tabName);
-        } else {
-            // Navigate directly for tabs without submenu
-            switch (tabName) {
-                case "Home":
-                    NavigationManager.getInstance().navigateTo("home");
-                    break;
-                case "Dashboard":
-                    NavigationManager.getInstance().navigateTo("dashboard");
-                    break;
+
+        content.setOnMouseEntered(e -> cancelTabCloseDelay());
+        content.setOnMouseExited(e -> scheduleCloseTabPopup(key));
+        popup.getContent().add(content);
+
+        anchorTab.setOnMouseEntered(e -> showTabPopup(key, anchorTab));
+        anchorTab.setOnMouseExited(e -> scheduleCloseTabPopup(key));
+        anchorTab.setOnAction(e -> {
+            if (popup.isShowing()) {
+                popup.hide();
+            } else {
+                showTabPopup(key, anchorTab);
             }
-        }
+        });
+
+        tabDropdownPopups.put(key, popup);
     }
-    
-    private void showTabDropdown(Button tabButton, String tabName) {
-        // If already expanded with this tab, collapse it
-        if (isTabDropdownOpen) {
-            collapseNavigationIsland();
+
+    private void showTabPopup(String key, Button anchor) {
+        cancelTabCloseDelay();
+        closeNotificationPopup();
+        closeProfilePopup();
+
+        Popup popup = tabDropdownPopups.get(key);
+        if (popup == null) {
             return;
         }
-        
-        isTabDropdownOpen = true;
-        
-        // Create submenu container
-        submenuContainer = new HBox();
-        submenuContainer.setSpacing(8);
-        submenuContainer.setAlignment(Pos.CENTER);
-        
-        // Add back arrow
-        Button backBtn = new Button("←");
-    backBtn.setFont(Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
-        backBtn.setPadding(new Insets(10, 15, 10, 15));
-        backBtn.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 15px;" +
-            "-fx-text-fill: rgba(255, 255, 255, 0.7);" +
-            "-fx-cursor: hand;"
-        );
-        backBtn.setOnMouseEntered(e -> backBtn.setStyle(
-            "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
-            "-fx-background-radius: 15px;" +
-            "-fx-text-fill: white;" +
-            "-fx-cursor: hand;"
-        ));
-        backBtn.setOnMouseExited(e -> backBtn.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 15px;" +
-            "-fx-text-fill: rgba(255, 255, 255, 0.7);" +
-            "-fx-cursor: hand;"
-        ));
-        backBtn.setOnAction(e -> collapseNavigationIsland());
-        
-        submenuContainer.getChildren().add(backBtn);
-        
-        // Add submenu items based on tab
-        if (tabName.equals("Services")) {
-            Button webDevBtn = createSubmenuButton("Web Development");
-            Button mobileAppBtn = createSubmenuButton("Mobile Apps");
-            Button cloudBtn = createSubmenuButton("Cloud Solutions");
-            submenuContainer.getChildren().addAll(webDevBtn, mobileAppBtn, cloudBtn);
-        } else if (tabName.equals("About")) {
-            Button companyBtn = createSubmenuButton("Company");
-            Button teamBtn = createSubmenuButton("Team");
-            Button contactBtn = createSubmenuButton("Contact");
-            submenuContainer.getChildren().addAll(companyBtn, teamBtn, contactBtn);
-        }
-        
-        // Animate expansion
-        expandNavigationIsland();
-    }
-    
-    private Button createSubmenuButton(String text) {
-        Button btn = new Button(text);
-    btn.setFont(Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
-        btn.setPadding(new Insets(10, 20, 10, 20));
-        btn.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 15px;" +
-            "-fx-text-fill: rgba(255, 255, 255, 0.7);" +
-            "-fx-cursor: hand;"
-        );
-        
-        btn.setOnMouseEntered(e -> btn.setStyle(
-            "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
-            "-fx-background-radius: 15px;" +
-            "-fx-text-fill: white;" +
-            "-fx-cursor: hand;"
-        ));
-        
-        btn.setOnMouseExited(e -> btn.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 15px;" +
-            "-fx-text-fill: rgba(255, 255, 255, 0.7);" +
-            "-fx-cursor: hand;"
-        ));
-        
-        btn.setOnAction(e -> {
-            collapseNavigationIsland();
-            NavigationManager.getInstance().navigateTo(activeTab.toLowerCase());
-        });
-        
-        return btn;
-    }
-    
-    private void expandNavigationIsland() {
-        // Store original children
-        java.util.List<javafx.scene.Node> originalChildren = new java.util.ArrayList<>(navPillIsland.getChildren());
-        
-        // Fade out main tabs
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(200), navPillIsland);
-        fadeOut.setFromValue(1.0);
-        fadeOut.setToValue(0.0);
-        
-        fadeOut.setOnFinished(e -> {
-            // Replace with submenu
-            navPillIsland.getChildren().clear();
-            navPillIsland.getChildren().addAll(submenuContainer.getChildren());
-            
-            // Fade in submenu
-            navPillIsland.setOpacity(0);
-            FadeTransition fadeIn = new FadeTransition(Duration.millis(200), navPillIsland);
-            fadeIn.setFromValue(0.0);
-            fadeIn.setToValue(1.0);
-            fadeIn.play();
-        });
-        
-        fadeOut.play();
-    }
-    
-    private void collapseNavigationIsland() {
-        if (!isTabDropdownOpen) return;
-        
-        isTabDropdownOpen = false;
-        
-        // Fade out submenu
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(200), navPillIsland);
-        fadeOut.setFromValue(1.0);
-        fadeOut.setToValue(0.0);
-        
-        fadeOut.setOnFinished(e -> {
-            // Restore main tabs with search pill
-            navPillIsland.getChildren().clear();
-            navPillIsland.getChildren().addAll(
-                searchContainer,
-                mainTabButtons.get("Home"),
-                mainTabButtons.get("Services"),
-                mainTabButtons.get("About"),
-                mainTabButtons.get("Dashboard")
-            );
-            
-            // Fade in main tabs
-            navPillIsland.setOpacity(0);
-            FadeTransition fadeIn = new FadeTransition(Duration.millis(200), navPillIsland);
-            fadeIn.setFromValue(0.0);
-            fadeIn.setToValue(1.0);
-            fadeIn.play();
-        });
-        
-        fadeOut.play();
-    }
-    
-    private StackPane createIslandContainer() {
-        // Create the main island container
-        StackPane islandContainer = new StackPane();
-        islandContainer.setPadding(new Insets(10, 20, 10, 20));
-        
-        // Apply enhanced island styling
-        String islandStyle = "-fx-background-color: " + themeManager.getDynamicIslandBackground() + ";" +
-            "-fx-background-radius: 35px;" +
-            "-fx-border-color: " + themeManager.getDynamicIslandBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 35px;";
-        islandContainer.setStyle(islandStyle);
-        
-        // TRON glow around island
-        DropShadow islandShadow = new DropShadow();
-        islandShadow.setBlurType(BlurType.GAUSSIAN);
-        islandShadow.setColor(themeManager.getNeonGlowColor().deriveColor(0, 1, 1, 0.45));
-        islandShadow.setRadius(24);
-        islandShadow.setOffsetX(0);
-        islandShadow.setOffsetY(6);
-        islandContainer.setEffect(islandShadow);
-        
-        // Create the navigation section
-        navSection = new HBox();
-        navSection.setSpacing(10);
-        navSection.setAlignment(Pos.CENTER);
-        
-        // Create main tabs container
-        mainTabs = new HBox();
-        mainTabs.setSpacing(10);
-        mainTabs.setAlignment(Pos.CENTER);
-        
-        // Create and store main navigation tabs
-        Button homeTab = createEnhancedNavTab("Home", true);
-        Button servicesTab = createEnhancedNavTab("Services", false);
-        Button aboutTab = createEnhancedNavTab("About", false);
-        Button dashboardTab = createEnhancedNavTab("Dashboard", false);
-        
-        // Store tab references
-        mainTabButtons.put("Home", homeTab);
-        mainTabButtons.put("Services", servicesTab);
-        mainTabButtons.put("About", aboutTab);
-        mainTabButtons.put("Dashboard", dashboardTab);
-        
-        mainTabs.getChildren().addAll(homeTab, servicesTab, aboutTab, dashboardTab);
-        
-        // Create sub-menu container (initially hidden)
-        subMenuContainer = new HBox();
-        subMenuContainer.setSpacing(10);
-        subMenuContainer.setAlignment(Pos.CENTER);
-        subMenuContainer.setVisible(false);
-        subMenuContainer.setOpacity(0.0);
-        
-        // Add both containers to the island
-        islandContainer.getChildren().addAll(mainTabs, subMenuContainer);
-        
-        // Store original dimensions for animations
-        islandContainer.layoutBoundsProperty().addListener((obs, oldBounds, newBounds) -> {
-            if (!isExpanded && newBounds.getWidth() > 0) {
-                originalNavSectionWidth = newBounds.getWidth();
-                originalNavSectionHeight = newBounds.getHeight();
-            }
-        });
-        
-        return islandContainer;
-    }
-    
-    private Button createEnhancedNavTab(String text, boolean isActive) {
-        Button tab = new Button(text);
-    tab.setFont(Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 15));
-        tab.setPadding(new Insets(10, 16, 10, 16));
-        
-        // Enhanced sizing with better proportions - fixed Dashboard width
-        if (text.equals("Dashboard")) {
-            tab.setMinWidth(110);
-            tab.setMaxWidth(110);
-            tab.setPrefWidth(110);
-        } else {
-            tab.setMinWidth(90);
-            tab.setMaxWidth(90);
-            tab.setPrefWidth(90);
-        }
-        
-        // Apply enhanced styling based on active state
-        updateTabStyle(tab, text, isActive);
-        
-        // Enhanced hover effects with smooth transitions - FIXED: Proper active state checking
-        tab.setOnMouseEntered(e -> {
-            // Always check current activeTab state, not the cached value
-            if (!text.equals(activeTab)) {
-                tab.setStyle(
-                    "-fx-background-color: " + themeManager.getTabHoverColor() + ";" +
-                    "-fx-background-radius: 15px;" +
-                    "-fx-text-fill: white;" +
-                    "-fx-cursor: hand;" +
-                    "-fx-effect: dropshadow(gaussian, " + themeManager.getModernAccentColor() + ", 12, 0.4, 0, 0);" +
-                    "-fx-scale-x: 1.05;" +
-                    "-fx-scale-y: 1.05;"
-                );
-            }
-        });
-        
-        tab.setOnMouseExited(e -> {
-            // Always check current activeTab state and apply correct styling
-            if (!text.equals(activeTab)) {
-                tab.setStyle(
-                    "-fx-background-color: transparent;" +
-                    "-fx-background-radius: 15px;" +
-                    "-fx-text-fill: white;" +
-                    "-fx-cursor: hand;" +
-                    "-fx-scale-x: 1.0;" +
-                    "-fx-scale-y: 1.0;"
-                );
-            } else {
-                // If this is the active tab, ensure it shows active styling
-                tab.setStyle(
-                    "-fx-background-color: " + themeManager.getActiveTabColor() + ";" +
-                    "-fx-background-radius: 15px;" +
-                    "-fx-text-fill: white;" +
-                    "-fx-cursor: hand;" +
-                    "-fx-effect: dropshadow(gaussian, " + themeManager.getModernAccentColor() + ", 15, 0.45, 0, 0);" +
-                    "-fx-scale-x: 1.0;" +
-                    "-fx-scale-y: 1.0;"
-                );
-            }
-        });
-        
-        // Enhanced click handlers with better state management
-        tab.setOnAction(e -> {
-            System.out.println("Tab clicked: " + text); // Debug output
-            handleTabClick(text);
-        });
-        
-        // Ensure button is properly enabled and clickable
-        tab.setDisable(false);
-        tab.setFocusTraversable(true);
-        
-        return tab;
-    }
-    
-    private void updateTabStyle(Button tab, String text, boolean isActive) {
-        if (isActive || text.equals(activeTab)) {
-            tab.setStyle(
-                "-fx-background-color: " + themeManager.getActiveTabColor() + ";" +
-                "-fx-background-radius: 15px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-effect: dropshadow(gaussian, " + themeManager.getModernAccentColor() + ", 15, 0.45, 0, 0);" +
-                "-fx-scale-x: 1.0;" +
-                "-fx-scale-y: 1.0;"
-            );
-        } else {
-            tab.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-background-radius: 15px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-scale-x: 1.0;" +
-                "-fx-scale-y: 1.0;"
-            );
-        }
-    }
-    
-    private void handleTabClick(String tabName) {
-        // Update active tab state
-        updateActiveTab(tabName);
-        
-        switch (tabName) {
-            case "Home":
-                navigateToHome();
-                break;
-            case "Services":
-                toggleSubmenu("Services");
-                break;
-            case "About":
-                toggleSubmenu("About");
-                break;
-            case "Dashboard":
-                navigateToDashboard();
-                break;
-        }
-    }
-    
-    private void updateActiveTab(String newActiveTab) {
-        // Update previous active tab - ensure it's properly cleared
-        if (mainTabButtons.containsKey(activeTab)) {
-            Button previousTab = mainTabButtons.get(activeTab);
-            updateTabStyle(previousTab, activeTab, false);
-            // Force clear any hover effects that might be stuck
-            previousTab.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-background-radius: 15px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-scale-x: 1.0;" +
-                "-fx-scale-y: 1.0;"
-            );
-        }
-        
-        // Set new active tab
-        activeTab = newActiveTab;
-        
-        // Update new active tab style
-        if (mainTabButtons.containsKey(activeTab)) {
-            updateTabStyle(mainTabButtons.get(activeTab), activeTab, true);
-        }
-    }
-    
-    private void refreshTabStates() {
-        // Ensure all tabs are properly styled based on current active tab
-        for (Map.Entry<String, Button> entry : mainTabButtons.entrySet()) {
-            String tabName = entry.getKey();
-            Button tab = entry.getValue();
-            boolean isActive = tabName.equals(activeTab);
-            
-            // Force clear any stuck hover effects and apply correct styling
-            if (isActive) {
-                tab.setStyle(
-                    "-fx-background-color: " + themeManager.getActiveTabColor() + ";" +
-                    "-fx-background-radius: 15px;" +
-                    "-fx-text-fill: white;" +
-                    "-fx-cursor: hand;" +
-                    "-fx-effect: dropshadow(gaussian, " + themeManager.getModernAccentColor() + ", 15, 0.45, 0, 0);" +
-                    "-fx-scale-x: 1.0;" +
-                    "-fx-scale-y: 1.0;"
-                );
-            } else {
-                tab.setStyle(
-                    "-fx-background-color: transparent;" +
-                    "-fx-background-radius: 15px;" +
-                    "-fx-text-fill: white;" +
-                    "-fx-cursor: hand;" +
-                    "-fx-scale-x: 1.0;" +
-                    "-fx-scale-y: 1.0;"
-                );
+
+        for (Map.Entry<String, Popup> e : tabDropdownPopups.entrySet()) {
+            if (!e.getKey().equals(key)) {
+                e.getValue().hide();
             }
         }
-    }
-    
-    private HBox createProfileSection() {
-        HBox container = new HBox();
-        container.setSpacing(12);
-        container.setAlignment(Pos.CENTER_RIGHT);
-        
-        // Connection status pill
-        ConnectionStatusPill connectionPill = new ConnectionStatusPill();
-        
-        // Profile icon with dropdown
-        StackPane profileIconContainer = createProfileIconWithDropdown();
-        
-        container.getChildren().addAll(connectionPill.getPillContainer(), profileIconContainer);
-        return container;
+
+        Node content = popup.getContent().get(0);
+        content.applyCss();
+        content.autosize();
+        double w = content.prefWidth(-1);
+
+        Bounds b = anchor.localToScreen(anchor.getBoundsInLocal());
+        if (b == null) {
+            return;
+        }
+
+        popup.show(anchor, b.getMinX() + (b.getWidth() - w) / 2.0, b.getMaxY() + 12);
     }
 
-    private HBox createWindowControls() {
-        HBox bar = new HBox();
-        bar.setAlignment(Pos.CENTER_RIGHT);
-        bar.setSpacing(6);
-
-        javafx.scene.control.Button btnMin = flatWinButton("–");
-        javafx.scene.control.Button btnMax = flatWinButton("□");
-        javafx.scene.control.Button btnClose = flatWinButton("✕");
-
-        // Add tooltips using setTooltip for buttons
-        Tooltip minTooltip = new Tooltip("Minimize");
-        minTooltip.setShowDelay(Duration.millis(200));
-        btnMin.setTooltip(minTooltip);
-        
-        Tooltip maxTooltip = new Tooltip("Maximize");
-        maxTooltip.setShowDelay(Duration.millis(200));
-        btnMax.setTooltip(maxTooltip);
-        
-        Tooltip closeTooltip = new Tooltip("Close");
-        closeTooltip.setShowDelay(Duration.millis(200));
-        btnClose.setTooltip(closeTooltip);
-
-        btnMin.setOnAction(e -> {
-            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            stage.setIconified(true);
-        });
-        btnMax.setOnAction(e -> {
-            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            stage.setMaximized(!stage.isMaximized());
-            // Update tooltip text based on state
-            maxTooltip.setText(stage.isMaximized() ? "Restore" : "Maximize");
-        });
-        btnClose.setOnAction(e -> {
-            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            stage.close();
-        });
-
-        // Drag window via header
-        final double[] dragOffset = new double[2];
-        root.setOnMousePressed(e -> {
-            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            dragOffset[0] = e.getScreenX() - stage.getX();
-            dragOffset[1] = e.getScreenY() - stage.getY();
-        });
-        root.setOnMouseDragged(e -> {
-            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            if (!stage.isMaximized()) {
-                stage.setX(e.getScreenX() - dragOffset[0]);
-                stage.setY(e.getScreenY() - dragOffset[1]);
+    private void scheduleCloseTabPopup(String key) {
+        cancelTabCloseDelay();
+        closeTabDelay = new PauseTransition(Duration.millis(160));
+        closeTabDelay.setOnFinished(e -> {
+            Popup popup = tabDropdownPopups.get(key);
+            if (popup != null && popup.isShowing()) {
+                Node content = popup.getContent().isEmpty() ? null : popup.getContent().get(0);
+                boolean hoveringContent = content != null && content.isHover();
+                boolean hoveringAnchor = tabButtons.containsKey(key) && tabButtons.get(key).isHover();
+                if (!hoveringContent && !hoveringAnchor) {
+                    popup.hide();
+                }
             }
         });
-
-        bar.getChildren().addAll(btnMin, btnMax, btnClose);
-        return bar;
+        closeTabDelay.play();
     }
 
-    private javafx.scene.control.Button flatWinButton(String text) {
-        javafx.scene.control.Button b = new javafx.scene.control.Button(text);
-        b.setMinSize(28, 24);
-        b.setPrefSize(28, 24);
-        b.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-background-radius: 8px;" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 12px;"
-        );
-        b.setOnMouseEntered(e -> b.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.18);" +
-            "-fx-background-radius: 8px;" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 12px;"
-        ));
-        b.setOnMouseExited(e -> b.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-background-radius: 8px;" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 12px;"
-        ));
-        return b;
-    }
-    
-    private StackPane createThemeToggle() {
-        StackPane toggleContainer = new StackPane();
-        
-        // Toggle track (background)
-        javafx.scene.shape.Rectangle track = new javafx.scene.shape.Rectangle(65, 35);
-        track.setArcWidth(35);
-        track.setArcHeight(35);
-        track.setFill(Color.web(themeManager.getToggleTrackBackground()));
-        track.setStroke(Color.web(themeManager.getToggleTrackBorder()));
-        track.setStrokeWidth(1);
-        
-        // Toggle thumb container
-        StackPane thumbContainer = new StackPane();
-        thumbContainer.setTranslateX(themeManager.isDarkMode() ? -16 : 16);
-        
-        // Moon icon (dark mode)
-        Text moonIcon = new Text("☾");
-        moonIcon.setFont(Font.font(16));
-        moonIcon.setFill(Color.WHITE);
-        moonIcon.setOpacity(themeManager.isDarkMode() ? 1.0 : 0.0);
-        
-        // Sun icon (light mode)
-        Text sunIcon = new Text("☀");
-        sunIcon.setFont(Font.font(16));
-        sunIcon.setFill(Color.web("#f59e0b"));
-        sunIcon.setOpacity(themeManager.isDarkMode() ? 0.0 : 1.0);
-        
-        // Add shadow to thumb container
-        DropShadow thumbShadow = new DropShadow();
-        thumbShadow.setBlurType(BlurType.GAUSSIAN);
-        thumbShadow.setColor(Color.color(0, 0, 0, 0.3));
-        thumbShadow.setRadius(6);
-        thumbShadow.setOffsetX(0);
-        thumbShadow.setOffsetY(3);
-        thumbContainer.setEffect(thumbShadow);
-        
-        thumbContainer.getChildren().addAll(moonIcon, sunIcon);
-        toggleContainer.getChildren().addAll(track, thumbContainer);
-        
-        // Add click handler
-        toggleContainer.setOnMouseClicked(e -> {
-            toggleTheme(thumbContainer, sunIcon, moonIcon, track);
-        });
-        
-        // Add hover effect
-        track.setOnMouseEntered(e -> {
-            track.setFill(Color.web(themeManager.getToggleTrackHover()));
-        });
-        track.setOnMouseExited(e -> {
-            track.setFill(Color.web(themeManager.getToggleTrackBackground()));
-        });
-        
-        return toggleContainer;
-    }
-    
-    private StackPane createLogoutButton() {
-        StackPane buttonContainer = new StackPane();
-        
-        // Button background
-        javafx.scene.shape.Rectangle buttonBg = new javafx.scene.shape.Rectangle(65, 35);
-        buttonBg.setArcWidth(35);
-        buttonBg.setArcHeight(35);
-        buttonBg.setFill(Color.web(themeManager.getLiquidGlassBackground()));
-        buttonBg.setStroke(Color.web(themeManager.getLiquidGlassBorder()));
-        buttonBg.setStrokeWidth(1);
-        
-        // Door icon
-        Text doorIcon = new Text("🚪");
-        doorIcon.setFont(Font.font(16));
-        doorIcon.setFill(Color.WHITE);
-        
-        buttonContainer.getChildren().addAll(buttonBg, doorIcon);
-        
-        // Add shadow
-        DropShadow buttonShadow = new DropShadow();
-        buttonShadow.setBlurType(BlurType.GAUSSIAN);
-        buttonShadow.setColor(Color.color(0, 0, 0, 0.3));
-        buttonShadow.setRadius(6);
-        buttonShadow.setOffsetX(0);
-        buttonShadow.setOffsetY(3);
-        buttonContainer.setEffect(buttonShadow);
-        
-        // Add hover effects
-        buttonContainer.setOnMouseEntered(e -> {
-            buttonBg.setFill(Color.web(themeManager.getLiquidGlassHover()));
-            buttonContainer.setScaleX(1.05);
-            buttonContainer.setScaleY(1.05);
-        });
-        
-        buttonContainer.setOnMouseExited(e -> {
-            buttonBg.setFill(Color.web(themeManager.getLiquidGlassBackground()));
-            buttonContainer.setScaleX(1.0);
-            buttonContainer.setScaleY(1.0);
-        });
-        
-        // Add click handler
-        buttonContainer.setOnMouseClicked(e -> handleLogout());
-        
-        return buttonContainer;
-    }
-    
-    private StackPane createProfileIconWithDropdown() {
-        profileContainer = new StackPane();
-        profileContainer.setAlignment(Pos.CENTER);
-        
-        // Profile icon
-        profileIconRef = new Circle(20);
-        profileIconRef.setFill(Color.web(themeManager.getModernAccentColor()));
-        profileIconRef.setStroke(Color.WHITE);
-        profileIconRef.setStrokeWidth(2);
-        
-        // Add shadow
-        DropShadow profileShadow = new DropShadow();
-        profileShadow.setBlurType(BlurType.GAUSSIAN);
-        profileShadow.setColor(themeManager.getNeonGlowColor().deriveColor(0, 1, 1, 0.5));
-        profileShadow.setRadius(12);
-        profileShadow.setOffsetX(0);
-        profileShadow.setOffsetY(4);
-        profileIconRef.setEffect(profileShadow);
-        
-        // Add hover effects - expand on hover
-        profileIconRef.setOnMouseEntered(e -> {
-            if (!isProfileDropdownOpen) {
-                profileIconRef.setScaleX(1.1);
-                profileIconRef.setScaleY(1.1);
-                expandProfilePill();
-            }
-        });
-        
-        profileIconRef.setOnMouseExited(e -> {
-            if (!isProfileDropdownOpen) {
-                profileIconRef.setScaleX(1.0);
-                profileIconRef.setScaleY(1.0);
-            }
-        });
-        
-        profileContainer.getChildren().add(profileIconRef);
-        return profileContainer;
-    }
-    
-    private void toggleProfilePill() {
-        if (isProfileDropdownOpen) {
-            collapseProfilePill();
-        } else {
-            expandProfilePill();
+    private void cancelTabCloseDelay() {
+        if (closeTabDelay != null) {
+            closeTabDelay.stop();
         }
     }
-    
-    private void expandProfilePill() {
-        isProfileDropdownOpen = true;
-        
-        // Create expanded pill container
-        HBox expandedPill = new HBox();
-        expandedPill.setSpacing(12);
-        expandedPill.setAlignment(Pos.CENTER);
-        expandedPill.setPadding(new Insets(8, 16, 8, 16));
-        expandedPill.setStyle(
-            "-fx-background-color: " + themeManager.getLiquidGlassBackground() + ";" +
-            "-fx-background-radius: 25px;" +
-            "-fx-border-color: " + themeManager.getLiquidGlassBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 25px;"
-        );
-        
-        // Add shadow
-        DropShadow pillShadow = new DropShadow();
-        pillShadow.setBlurType(BlurType.GAUSSIAN);
-        pillShadow.setColor(Color.color(0, 0, 0, 0.3));
-        pillShadow.setRadius(12);
-        pillShadow.setOffsetX(0);
-        pillShadow.setOffsetY(4);
-        expandedPill.setEffect(pillShadow);
-        
-        // Collapse when mouse exits the expanded pill
-        expandedPill.setOnMouseExited(e -> {
-            collapseProfilePill();
-        });
-        
-        // Profile icon button (navigates to profile)
-        Text profileIcon = new Text("👤");
-        profileIcon.setFont(Font.font(18));
-        profileIcon.setFill(Color.WHITE);
-        profileIcon.setCursor(javafx.scene.Cursor.HAND);
-        Tooltip profileTooltip = new Tooltip("Profile");
-        profileTooltip.setShowDelay(Duration.millis(200));
-        Tooltip.install(profileIcon, profileTooltip);
-        profileIcon.setOnMouseClicked(e -> {
-            collapseProfilePill();
-            NavigationManager.getInstance().navigateTo("profile");
-        });
-        
-        // Settings icon button
-        Text settingsIcon = new Text("⚙");
-        settingsIcon.setFont(Font.font(18));
-        settingsIcon.setFill(Color.WHITE);
-        settingsIcon.setCursor(javafx.scene.Cursor.HAND);
-        Tooltip settingsTooltip = new Tooltip("Settings");
-        settingsTooltip.setShowDelay(Duration.millis(200));
-        Tooltip.install(settingsIcon, settingsTooltip);
-        settingsIcon.setOnMouseClicked(e -> {
-            collapseProfilePill();
-            NavigationManager.getInstance().navigateTo("settings");
-        });
-        
-        // Theme toggle icon button
-        Text themeIcon = new Text(themeManager.isDarkMode() ? "☀" : "☾");
-        themeIcon.setFont(Font.font(18));
-        themeIcon.setFill(Color.WHITE);
-        themeIcon.setCursor(javafx.scene.Cursor.HAND);
-        Tooltip themeTooltip = new Tooltip(themeManager.isDarkMode() ? "Light Mode" : "Dark Mode");
-        themeTooltip.setShowDelay(Duration.millis(200));
-        Tooltip.install(themeIcon, themeTooltip);
-        themeIcon.setOnMouseClicked(e -> {
+
+    private HBox buildRightSection() {
+        HBox right = new HBox();
+        right.setAlignment(Pos.CENTER_RIGHT);
+        right.setSpacing(10);
+
+        StackPane themeToggle = buildThemeToggle();
+        StackPane bell = buildNotificationTrigger();
+        StackPane profile = buildProfileTrigger();
+
+        right.getChildren().addAll(themeToggle, bell, profile);
+        return right;
+    }
+
+    private StackPane buildThemeToggle() {
+        StackPane wrap = new StackPane();
+        wrap.setAlignment(Pos.CENTER);
+        wrap.setMinSize(62, 34);
+        wrap.setPrefSize(62, 34);
+        wrap.setMaxSize(62, 34);
+
+        Rectangle track = new Rectangle(62, 34);
+        track.setArcWidth(34);
+        track.setArcHeight(34);
+
+        Circle thumb = new Circle(13);
+        Label icon = new Label(themeManager.isDarkMode() ? "D" : "L");
+        icon.setFont(Font.font(12));
+
+        updateThemeToggleVisual(track, thumb, icon);
+
+        wrap.getChildren().addAll(track, thumb, icon);
+        wrap.setOnMouseClicked(e -> {
             themeManager.toggleTheme();
+            updateThemeToggleVisual(track, thumb, icon);
             applyThemeStyling();
             if (backgroundUpdateCallback != null) {
                 backgroundUpdateCallback.run();
             }
-            themeIcon.setText(themeManager.isDarkMode() ? "☀" : "☾");
-            themeTooltip.setText(themeManager.isDarkMode() ? "Light Mode" : "Dark Mode");
         });
-        
-        // Logout icon button
-        Text logoutIcon = new Text("🚪");
-        logoutIcon.setFont(Font.font(18));
-        logoutIcon.setFill(Color.WHITE);
-        logoutIcon.setCursor(javafx.scene.Cursor.HAND);
-        Tooltip logoutTooltip = new Tooltip("Logout");
-        logoutTooltip.setShowDelay(Duration.millis(200));
-        Tooltip.install(logoutIcon, logoutTooltip);
-        logoutIcon.setOnMouseClicked(e -> {
-            collapseProfilePill();
-            handleLogout();
-        });
-        
-        expandedPill.getChildren().addAll(profileIcon, settingsIcon, themeIcon, logoutIcon);
-        
-        // Fade out icon
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(150), profileIconRef);
-        fadeOut.setFromValue(1.0);
-        fadeOut.setToValue(0.0);
-        
-        fadeOut.setOnFinished(e -> {
-            profileContainer.getChildren().clear();
-            profileContainer.getChildren().add(expandedPill);
-            
-            // Fade in expanded pill
-            expandedPill.setOpacity(0);
-            FadeTransition fadeIn = new FadeTransition(Duration.millis(150), expandedPill);
-            fadeIn.setFromValue(0.0);
-            fadeIn.setToValue(1.0);
-            fadeIn.play();
-        });
-        
-        fadeOut.play();
+
+        return wrap;
     }
-    
-    private void collapseProfilePill() {
-        isProfileDropdownOpen = false;
-        
-        javafx.scene.Node currentContent = profileContainer.getChildren().get(0);
-        
-        // Fade out expanded pill
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(150), currentContent);
-        fadeOut.setFromValue(1.0);
-        fadeOut.setToValue(0.0);
-        
-        fadeOut.setOnFinished(e -> {
-            profileContainer.getChildren().clear();
-            profileContainer.getChildren().add(profileIconRef);
-            
-            // Fade in icon
-            profileIconRef.setOpacity(0);
-            FadeTransition fadeIn = new FadeTransition(Duration.millis(150), profileIconRef);
-            fadeIn.setFromValue(0.0);
-            fadeIn.setToValue(1.0);
-            fadeIn.play();
-        });
-        
-        fadeOut.play();
+
+    private void updateThemeToggleVisual(Rectangle track, Circle thumb, Label icon) {
+        boolean dark = themeManager.isDarkMode();
+        track.setFill(Color.web(dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.75)"));
+        track.setStroke(Color.web(dark ? "rgba(255,255,255,0.20)" : "rgba(15,23,42,0.12)"));
+        thumb.setFill(Color.web(dark ? "#111827" : "#ffffff"));
+        thumb.setTranslateX(dark ? 13 : -13);
+        icon.setText(dark ? "D" : "L");
+        icon.setTextFill(Color.web(dark ? "#e5e7eb" : "#111827"));
+        icon.setTranslateX(dark ? 13 : -13);
     }
-    
-    private void showProfileDropdown(Circle profileIcon) {
-        // Prevent multiple dropdowns from opening
-        if (isProfileDropdownOpen) {
+
+    private StackPane buildNotificationTrigger() {
+        StackPane wrap = new StackPane();
+        wrap.setAlignment(Pos.CENTER);
+        notificationAnchor = wrap;
+
+        Button bellButton = new Button("N");
+        bellButton.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        bellButton.setPadding(new Insets(8, 12, 8, 12));
+        styleGhostPill(bellButton);
+
+        Circle badge = new Circle(4.5, Color.web("#ff3b30"));
+        StackPane.setAlignment(badge, Pos.TOP_RIGHT);
+        StackPane.setMargin(badge, new Insets(4, 5, 0, 0));
+
+        notificationDropdown = buildNotificationDropdown();
+        notificationDropdown.setVisible(false);
+        notificationDropdown.setManaged(false);
+        notificationDropdown.setMouseTransparent(true);
+        notificationDropdown.toFront();
+
+        notificationDropdown.setOnMouseEntered(e -> cancelNotificationCloseDelay());
+        notificationDropdown.setOnMouseExited(e -> scheduleCloseNotificationPopup());
+
+        wrap.setOnMouseEntered(e -> {
+            cancelNotificationCloseDelay();
+            showNotificationPopup();
+        });
+        wrap.setOnMouseExited(e -> scheduleCloseNotificationPopup());
+
+        bellButton.setOnAction(e -> {
+            if (notificationDropdown != null && notificationDropdown.isVisible()) {
+                closeNotificationPopup();
+                return;
+            }
+            showNotificationPopup();
+        });
+
+        wrap.getChildren().addAll(bellButton, badge);
+        return wrap;
+    }
+
+    private VBox buildNotificationDropdown() {
+        VBox box = new VBox();
+        box.setPadding(new Insets(0));
+        box.setSpacing(0);
+        box.setPrefWidth(300);
+        box.setMaxWidth(300);
+        box.setMinWidth(300);
+
+        HBox header = new HBox();
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setPadding(new Insets(18, 20, 14, 20));
+        Label title = new Label("Notifications");
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        title.setTextFill(themeManager.isDarkMode() ? Color.web("#f3f4f6") : Color.web("#111827"));
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Button close = new Button("x");
+        close.setPadding(new Insets(4, 10, 4, 10));
+        styleGhostPill(close);
+        close.setOnAction(e -> closeNotificationPopup());
+        header.getChildren().addAll(title, spacer, close);
+
+        VBox rows = new VBox();
+        rows.setPadding(new Insets(8));
+        rows.setSpacing(6);
+        rows.getChildren().addAll(
+            notifRow("System", "Your dashboard is synced", "now"),
+            notifRow("Forum", "New comment on your topic", "5 min"),
+            notifRow("Residence", "Maintenance request updated", "1 h")
+        );
+
+        box.getChildren().addAll(header, rows);
+        return box;
+    }
+
+    private VBox notifRow(String title, String body, String time) {
+        VBox row = new VBox();
+        row.setPadding(new Insets(10, 12, 10, 12));
+        row.setSpacing(2);
+        Label t = new Label(title);
+        t.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        t.setTextFill(themeManager.isDarkMode() ? Color.web("#f3f4f6") : Color.web("#111827"));
+        Label b = new Label(body);
+        b.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        b.setTextFill(themeManager.isDarkMode() ? Color.web("#cbd5e1") : Color.web("#334155"));
+        Label tm = new Label(time);
+        tm.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        tm.setTextFill(themeManager.isDarkMode() ? Color.web("#94a3b8") : Color.web("#64748b"));
+        row.getChildren().addAll(t, b, tm);
+        row.setStyle("-fx-background-radius: 14px;");
+        row.setOnMouseEntered(e -> row.setStyle(
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.05)") + ";" +
+            "-fx-background-radius: 14px;"
+        ));
+        row.setOnMouseExited(e -> row.setStyle("-fx-background-color: transparent; -fx-background-radius: 14px;"));
+        return row;
+    }
+
+    private StackPane buildProfileTrigger() {
+        StackPane wrap = new StackPane();
+        wrap.setAlignment(Pos.CENTER);
+        wrap.setMinSize(42, 42);
+
+        Circle avatar = new Circle(13, Color.web(themeManager.getAccentHex()));
+        Circle online = new Circle(4, Color.web("#22c55e"));
+        StackPane.setAlignment(online, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(online, new Insets(0, 2, 2, 0));
+
+        wrap.getChildren().addAll(avatar, online);
+        wrap.setStyle("-fx-cursor: hand;");
+        profileAnchor = wrap;
+
+        profilePopup = buildProfilePopup();
+
+        if (!profilePopup.getContent().isEmpty()) {
+            Node profileContent = profilePopup.getContent().get(0);
+            profileContent.setOnMouseEntered(e -> cancelProfileCloseDelay());
+            profileContent.setOnMouseExited(e -> scheduleCloseProfilePopup());
+        }
+
+        wrap.setOnMouseEntered(e -> {
+            cancelProfileCloseDelay();
+            showProfilePopup();
+        });
+        wrap.setOnMouseExited(e -> scheduleCloseProfilePopup());
+
+        wrap.setOnMouseClicked(e -> {
+            if (profilePopup.isShowing()) {
+                closeProfilePopup();
+                return;
+            }
+            showProfilePopup();
+        });
+
+        return wrap;
+    }
+
+    private Popup buildProfilePopup() {
+        Popup popup = new Popup();
+        popup.setAutoHide(true);
+        popup.setHideOnEscape(true);
+
+        VBox box = new VBox();
+        box.setPadding(new Insets(12));
+        box.setSpacing(6);
+        box.setPrefWidth(280);
+
+        HBox head = new HBox();
+        head.setAlignment(Pos.CENTER_LEFT);
+        head.setSpacing(10);
+        Circle pic = new Circle(20, Color.web(themeManager.getAccentHex()));
+        VBox info = new VBox();
+        Label name = new Label("User");
+        name.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
+        Label mail = new Label("user@example.com");
+        mail.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        info.getChildren().addAll(name, mail);
+        head.getChildren().addAll(pic, info);
+
+        Region sep1 = new Region();
+        sep1.setPrefHeight(1);
+        sep1.setStyle("-fx-background-color: rgba(255,255,255,0.12);");
+
+        Button profile = profileRow("My Profile", "profile");
+        Button dashboard = profileRow("Dashboard", "dashboard");
+        Button settings = profileRow("Settings", "settings");
+
+        Region sep2 = new Region();
+        sep2.setPrefHeight(1);
+        sep2.setStyle("-fx-background-color: rgba(255,255,255,0.12);");
+
+        Button logout = new Button("Log Out");
+        logout.setMaxWidth(Double.MAX_VALUE);
+        logout.setAlignment(Pos.CENTER_LEFT);
+        logout.setPadding(new Insets(9, 10, 9, 10));
+        logout.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        styleDropdownRow(logout);
+        logout.setOnAction(e -> {
+            closeProfilePopup();
+            MainApplication.getInstance().logout();
+        });
+
+        box.getChildren().addAll(head, sep1, profile, dashboard, settings, sep2, logout);
+        popup.getContent().add(box);
+        return popup;
+    }
+
+    private Button profileRow(String text, String route) {
+        Button row = new Button(text);
+        row.setMaxWidth(Double.MAX_VALUE);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(9, 10, 9, 10));
+        row.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        styleDropdownRow(row);
+        row.setOnAction(e -> {
+            closeProfilePopup();
+            NavigationManager.getInstance().navigateTo(route);
+        });
+        return row;
+    }
+
+    private void showPopupBelow(Popup popup, Node anchor, double popupWidth, double rightAlignWidth) {
+        Bounds b = anchor.localToScreen(anchor.getBoundsInLocal());
+        if (b == null) {
             return;
         }
-        
-        isProfileDropdownOpen = true;
-        
-        // Get the main container (root of LandingPageView)
-        Pane mainContainer = (Pane) root.getScene().getRoot();
-        
-        // Create dropdown if it doesn't exist or recreate it
-        VBox dropdown = createProfileDropdown();
-        dropdown.setVisible(false);
-        dropdown.setMouseTransparent(true);
-        
-        // Add to main container as overlay
-        mainContainer.getChildren().add(dropdown);
-        
-        // Position dropdown below the profile icon
-        positionDropdown(dropdown, profileIcon);
-        
-        // Open dropdown
-        openDropdown(dropdown);
-        
-        // Store dropdown reference to allow closing from outside clicks
-        dropdown.setOnMouseClicked(e -> e.consume()); // Prevent clicks inside dropdown from closing it
-        
-        // Close dropdown when clicking outside
-        mainContainer.setOnMouseClicked(event -> {
-            // Check if click is inside dropdown bounds
-            javafx.geometry.Bounds dropdownBounds = dropdown.getBoundsInParent();
-            boolean clickedInDropdown = dropdownBounds.contains(event.getX(), event.getY());
-            
-            if (!clickedInDropdown && dropdown.isVisible()) {
-                closeDropdown(dropdown);
-                // Remove from scene after closing
-                Timeline removeTimeline = new Timeline(new KeyFrame(Duration.millis(250), e -> {
-                    mainContainer.getChildren().remove(dropdown);
-                    mainContainer.setOnMouseClicked(null); // Clean up handler
-                    isProfileDropdownOpen = false; // Reset flag
-                }));
-                removeTimeline.play();
+
+        if (popup.getContent().isEmpty()) {
+            return;
+        }
+        Node popupNode = popup.getContent().get(0);
+        popupNode.applyCss();
+        popupNode.autosize();
+        double effectivePopupWidth = Math.max(popupWidth, popupNode.prefWidth(-1));
+        double effectivePopupHeight = Math.max(120, popupNode.prefHeight(-1));
+
+        double x = rightAlignWidth > 0
+            ? b.getMaxX() - rightAlignWidth
+            : b.getMinX() + (b.getWidth() - effectivePopupWidth) / 2.0;
+        double y = b.getMaxY() + 12;
+
+        // Keep popups bounded to the app root area so they never overflow outside the app box.
+        if (root.getScene() != null) {
+            Bounds appBounds = root.getScene().getRoot().localToScreen(root.getScene().getRoot().getBoundsInLocal());
+            if (appBounds != null) {
+                double minX = appBounds.getMinX() + 8;
+                double maxX = appBounds.getMaxX() - effectivePopupWidth - 8;
+                double minY = appBounds.getMinY() + 8;
+                double maxY = appBounds.getMaxY() - effectivePopupHeight - 8;
+                if (maxX >= minX) {
+                    x = Math.max(minX, Math.min(x, maxX));
+                }
+                if (maxY >= minY) {
+                    y = Math.max(minY, Math.min(y, maxY));
+                }
+            } else {
+                Window w = root.getScene().getWindow();
+                if (w != null) {
+                    double minX = w.getX() + 8;
+                    double maxX = w.getX() + w.getWidth() - effectivePopupWidth - 8;
+                    double minY = w.getY() + 8;
+                    double maxY = w.getY() + w.getHeight() - effectivePopupHeight - 8;
+                    if (maxX >= minX) {
+                        x = Math.max(minX, Math.min(x, maxX));
+                    }
+                    if (maxY >= minY) {
+                        y = Math.max(minY, Math.min(y, maxY));
+                    }
+                }
+            }
+        }
+
+        popup.show(anchor, x, y);
+    }
+
+    private void showNotificationPopup() {
+        if (notificationDropdown == null || notificationAnchor == null) {
+            return;
+        }
+        closeAllTabPopups();
+        closeProfilePopup();
+        positionNotificationDropdown();
+        notificationDropdown.setVisible(true);
+        notificationDropdown.setMouseTransparent(false);
+        notificationDropdown.toFront();
+    }
+
+    private void positionNotificationDropdown() {
+        if (notificationDropdown == null || notificationAnchor == null || root.getScene() == null) {
+            return;
+        }
+
+        notificationDropdown.applyCss();
+        notificationDropdown.autosize();
+
+        Bounds anchorScreen = notificationAnchor.localToScreen(notificationAnchor.getBoundsInLocal());
+        Bounds rootScreen = root.localToScreen(root.getBoundsInLocal());
+        if (anchorScreen == null || rootScreen == null) {
+            return;
+        }
+
+        double popupW = notificationDropdown.prefWidth(-1);
+        double popupH = Math.max(notificationDropdown.prefHeight(-1), 220);
+
+        double xScreen = anchorScreen.getMaxX() - popupW;
+        double yScreen = anchorScreen.getMaxY() + 12;
+
+        double minX = rootScreen.getMinX() + 8;
+        double maxX = rootScreen.getMaxX() - popupW - 8;
+        double minY = rootScreen.getMinY() + 8;
+        double maxY = rootScreen.getMaxY() - popupH - 8;
+
+        if (maxX >= minX) {
+            xScreen = Math.max(minX, Math.min(xScreen, maxX));
+        }
+        if (maxY >= minY) {
+            yScreen = Math.max(minY, Math.min(yScreen, maxY));
+        }
+
+        Point2D local = root.screenToLocal(xScreen, yScreen);
+        notificationDropdown.relocate(local.getX(), local.getY());
+    }
+
+    private void scheduleCloseNotificationPopup() {
+        cancelNotificationCloseDelay();
+        closeNotificationDelay = new PauseTransition(Duration.millis(180));
+        closeNotificationDelay.setOnFinished(e -> {
+            if (notificationDropdown == null) {
+                return;
+            }
+            boolean hoveringAnchor = notificationAnchor != null && notificationAnchor.isHover();
+            boolean hoveringContent = notificationDropdown != null && notificationDropdown.isHover();
+            if (!hoveringAnchor && !hoveringContent) {
+                closeNotificationPopup();
             }
         });
+        closeNotificationDelay.play();
     }
-    
-    private void positionDropdown(VBox dropdown, Circle profileIcon) {
-        javafx.geometry.Bounds iconBounds = profileIcon.localToScene(profileIcon.getBoundsInLocal());
-        
-        // Position dropdown: align right edge with icon, directly below it
-        dropdown.setLayoutX(iconBounds.getMaxX() - 180); // Right align with icon (180px dropdown width)
-        dropdown.setLayoutY(iconBounds.getMaxY() + 10); // 10px below the icon
+
+    private void cancelNotificationCloseDelay() {
+        if (closeNotificationDelay != null) {
+            closeNotificationDelay.stop();
+        }
     }
-    
-    private VBox createProfileDropdown() {
-        VBox dropdown = new VBox();
-        dropdown.setSpacing(8);
-        dropdown.setPadding(new Insets(12));
-        dropdown.setAlignment(Pos.TOP_CENTER);
-        dropdown.setMaxWidth(180);
-        dropdown.setMinWidth(180);
-        dropdown.setPrefWidth(180);
-        dropdown.setMaxHeight(Region.USE_PREF_SIZE);
-        dropdown.setPrefHeight(Region.USE_COMPUTED_SIZE);
-        
-        // Liquid glass styling
-        dropdown.setStyle(
-            "-fx-background-color: " + themeManager.getLiquidGlassBackground() + ";" +
-            "-fx-background-radius: 20px;" +
-            "-fx-border-color: " + themeManager.getLiquidGlassBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 20px;"
-        );
-        
-        // Add shadow
-        DropShadow dropdownShadow = new DropShadow();
-        dropdownShadow.setBlurType(BlurType.GAUSSIAN);
-        dropdownShadow.setColor(Color.color(0, 0, 0, 0.4));
-        dropdownShadow.setRadius(20);
-        dropdownShadow.setOffsetX(0);
-        dropdownShadow.setOffsetY(8);
-        dropdown.setEffect(dropdownShadow);
-        
-        // Profile button
-        Button profileBtn = createDropdownButton("👤 Profile", () -> {
-            NavigationManager.getInstance().navigateTo("profile");
-            dropdown.setVisible(false);
-            isProfileDropdownOpen = false;
-        });
-        
-        // Theme toggle button
-        Button themeBtn = new Button(themeManager.isDarkMode() ? "☀ Light Mode" : "☾ Dark Mode");
-    themeBtn.setFont(Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
-        themeBtn.setPadding(new Insets(10, 15, 10, 15));
-        themeBtn.setMaxWidth(Double.MAX_VALUE);
-        themeBtn.setAlignment(Pos.CENTER_LEFT);
-        
-        themeBtn.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: white;" +
-            "-fx-cursor: hand;"
-        );
-        
-        themeBtn.setOnMouseEntered(e -> {
-            themeBtn.setStyle(
-                "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;"
-            );
-        });
-        
-        themeBtn.setOnMouseExited(e -> {
-            themeBtn.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;"
-            );
-        });
-        
-        themeBtn.setOnAction(e -> {
-            themeManager.toggleTheme();
-            applyThemeStyling();
-            if (backgroundUpdateCallback != null) {
-                backgroundUpdateCallback.run();
+
+    private void showProfilePopup() {
+        if (profilePopup == null || profileAnchor == null) {
+            return;
+        }
+        closeAllTabPopups();
+        closeNotificationPopup();
+        showPopupBelow(profilePopup, profileAnchor, 280, 280);
+    }
+
+    private void scheduleCloseProfilePopup() {
+        cancelProfileCloseDelay();
+        closeProfileDelay = new PauseTransition(Duration.millis(180));
+        closeProfileDelay.setOnFinished(e -> {
+            if (profilePopup == null) {
+                return;
             }
-            // Update button text
-            themeBtn.setText(themeManager.isDarkMode() ? "☀ Light Mode" : "☾ Dark Mode");
+            Node content = profilePopup.getContent().isEmpty() ? null : profilePopup.getContent().get(0);
+            boolean hoveringAnchor = profileAnchor != null && profileAnchor.isHover();
+            boolean hoveringContent = content != null && content.isHover();
+            if (!hoveringAnchor && !hoveringContent) {
+                closeProfilePopup();
+            }
         });
-        
-        // Logout button
-        Button logoutBtn = createDropdownButton("🚪 Logout", () -> {
-            dropdown.setVisible(false);
-            isProfileDropdownOpen = false;
-            handleLogout();
-        });
-        
-        dropdown.getChildren().addAll(profileBtn, themeBtn, logoutBtn);
-        
-        return dropdown;
+        closeProfileDelay.play();
     }
-    
-    private Button createDropdownButton(String text, Runnable action) {
-        Button btn = new Button(text);
-    btn.setFont(Font.font(com.pidev.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
-        btn.setPadding(new Insets(10, 15, 10, 15));
-        btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setAlignment(Pos.CENTER_LEFT);
-        
-        btn.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: white;" +
+
+    private void cancelProfileCloseDelay() {
+        if (closeProfileDelay != null) {
+            closeProfileDelay.stop();
+        }
+    }
+
+    private void closeAllPopups() {
+        closeAllTabPopups();
+        closeNotificationPopup();
+        closeProfilePopup();
+    }
+
+    private void closeAllTabPopups() {
+        for (Popup popup : tabDropdownPopups.values()) {
+            popup.hide();
+        }
+    }
+
+    private void closeNotificationPopup() {
+        cancelNotificationCloseDelay();
+        if (notificationDropdown != null) {
+            notificationDropdown.setVisible(false);
+            notificationDropdown.setMouseTransparent(true);
+        }
+    }
+
+    private void closeProfilePopup() {
+        if (profilePopup != null) {
+            profilePopup.hide();
+        }
+    }
+
+    private void updateTabsState() {
+        for (Map.Entry<String, Button> e : tabButtons.entrySet()) {
+            String key = e.getKey();
+            Button tab = e.getValue();
+            boolean selected = key.equals(activeTab);
+            tab.setStyle(
+                "-fx-background-color: " + (selected
+                    ? (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)")
+                    : "transparent") + ";" +
+                "-fx-background-radius: 25px;" +
+                "-fx-text-fill: " + (selected
+                    ? (themeManager.isDarkMode() ? "#ffffff" : "#111827")
+                    : (themeManager.isDarkMode() ? "#d1d5db" : "#374151")) + ";" +
+                "-fx-cursor: hand;"
+            );
+            tab.setFont(Font.font(
+                MainApplication.getInstance().getLightFontFamily(),
+                selected ? FontWeight.SEMI_BOLD : FontWeight.NORMAL,
+                13
+            ));
+        }
+    }
+
+    private void styleGhostPill(Button button) {
+        button.setStyle(
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.62)") + ";" +
+            "-fx-background-radius: 22px;" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.10)") + ";" +
+            "-fx-border-radius: 22px;" +
+            "-fx-border-width: 1;" +
+            "-fx-text-fill: " + (themeManager.isDarkMode() ? "#f8fafc" : "#111827") + ";" +
             "-fx-cursor: hand;"
         );
-        
-        btn.setOnMouseEntered(e -> {
-            btn.setStyle(
-                "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;"
+        button.setMinHeight(42);
+    }
+
+    private void styleDropdownRow(Button row) {
+        String text = themeManager.isDarkMode() ? "#e5e7eb" : "#1f2937";
+        row.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-text-fill: " + text + ";" +
+            "-fx-cursor: hand;"
+        );
+        row.setOnMouseEntered(e -> row.setStyle(
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)") + ";" +
+            "-fx-background-radius: 10px;" +
+            "-fx-text-fill: " + text + ";" +
+            "-fx-cursor: hand;"
+        ));
+        row.setOnMouseExited(e -> row.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-text-fill: " + text + ";" +
+            "-fx-cursor: hand;"
+        ));
+    }
+
+    private void applyThemeStyling() {
+        navbar.setStyle(
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.55)" : "rgba(245,245,245,0.88)") + ";" +
+            "-fx-background-radius: 50px;" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.86)") + ";" +
+            "-fx-border-radius: 50px;" +
+            "-fx-border-width: 1;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 26, 0.28, 0, 6);"
+        );
+
+        tabsPill.setStyle(
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.42)") + ";" +
+            "-fx-background-radius: 30px;" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.10)") + ";" +
+            "-fx-border-radius: 30px;" +
+            "-fx-border-width: 1;"
+        );
+
+        String dropdownBg = themeManager.isDarkMode() ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.96)";
+        String dropdownBorder = themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)";
+
+        for (Popup popup : tabDropdownPopups.values()) {
+            if (!popup.getContent().isEmpty() && popup.getContent().get(0) instanceof VBox box) {
+                box.setStyle(
+                    "-fx-background-color: " + dropdownBg + ";" +
+                    "-fx-background-radius: 20px;" +
+                    "-fx-border-color: " + dropdownBorder + ";" +
+                    "-fx-border-radius: 20px;" +
+                    "-fx-border-width: 1;" +
+                    "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 24, 0.25, 0, 8);"
+                );
+                for (Node n : box.getChildren()) {
+                    if (n instanceof Button b) {
+                        styleDropdownRow(b);
+                    }
+                }
+            }
+        }
+
+        if (notificationDropdown != null) {
+            notificationDropdown.setStyle(
+                "-fx-background-color: " + dropdownBg + ";" +
+                "-fx-background-radius: 30px;" +
+                "-fx-border-color: " + dropdownBorder + ";" +
+                "-fx-border-radius: 30px;" +
+                "-fx-border-width: 1;" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 28, 0.28, 0, 8);"
             );
-        });
-        
-        btn.setOnMouseExited(e -> {
-            btn.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;"
+            for (Node n : notificationDropdown.getChildren()) {
+                if (n instanceof HBox h) {
+                    for (Node child : h.getChildren()) {
+                        if (child instanceof Label l) {
+                            l.setTextFill(themeManager.isDarkMode() ? Color.web("#f3f4f6") : Color.web("#111827"));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (profilePopup != null && !profilePopup.getContent().isEmpty() && profilePopup.getContent().get(0) instanceof VBox box) {
+            box.setStyle(
+                "-fx-background-color: " + dropdownBg + ";" +
+                "-fx-background-radius: 20px;" +
+                "-fx-border-color: " + dropdownBorder + ";" +
+                "-fx-border-radius: 20px;" +
+                "-fx-border-width: 1;" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 24, 0.25, 0, 8);"
             );
-        });
-        
-        btn.setOnAction(e -> action.run());
-        
-        return btn;
-    }
-    
-    private void toggleDropdown(VBox dropdown) {
-        if (dropdown.isVisible()) {
-            closeDropdown(dropdown);
-        } else {
-            openDropdown(dropdown);
         }
+
+        updateTabsState();
     }
-    
-    private void openDropdown(VBox dropdown) {
-        dropdown.setVisible(true);
-        dropdown.setMouseTransparent(false);
-        dropdown.setScaleY(0);
-        dropdown.setOpacity(0);
-        
-        ScaleTransition scaleTransition = new ScaleTransition(Duration.millis(250), dropdown);
-        scaleTransition.setFromY(0);
-        scaleTransition.setToY(1);
-        scaleTransition.setInterpolator(Interpolator.EASE_OUT);
-        
-        FadeTransition fadeTransition = new FadeTransition(Duration.millis(250), dropdown);
-        fadeTransition.setFromValue(0);
-        fadeTransition.setToValue(1);
-        
-        ParallelTransition parallelTransition = new ParallelTransition(scaleTransition, fadeTransition);
-        parallelTransition.play();
-    }
-    
-    private void closeDropdown(VBox dropdown) {
-        ScaleTransition scaleTransition = new ScaleTransition(Duration.millis(200), dropdown);
-        scaleTransition.setFromY(1);
-        scaleTransition.setToY(0);
-        scaleTransition.setInterpolator(Interpolator.EASE_IN);
-        
-        FadeTransition fadeTransition = new FadeTransition(Duration.millis(200), dropdown);
-        fadeTransition.setFromValue(1);
-        fadeTransition.setToValue(0);
-        
-        ParallelTransition parallelTransition = new ParallelTransition(scaleTransition, fadeTransition);
-        parallelTransition.setOnFinished(e -> {
-            dropdown.setVisible(false);
-            dropdown.setMouseTransparent(true);
-        });
-        parallelTransition.play();
-    }
-    
-    private void toggleTheme(StackPane thumbContainer, Text sunIcon, Text moonIcon, javafx.scene.shape.Rectangle track) {
-        themeManager.toggleTheme();
-        
-        // Re-apply header styles immediately
-        applyThemeStyling();
-        
-        // Notify background update callback (LandingPageView will refresh background/footer)
-        if (backgroundUpdateCallback != null) {
-            backgroundUpdateCallback.run();
-        }
-        
-        // Animate thumb movement
-        TranslateTransition thumbAnimation = new TranslateTransition(Duration.millis(300), thumbContainer);
-        FadeTransition sunFade = new FadeTransition(Duration.millis(300), sunIcon);
-        FadeTransition moonFade = new FadeTransition(Duration.millis(300), moonIcon);
-        
-        if (themeManager.isDarkMode()) {
-            thumbAnimation.setToX(-16);
-            sunFade.setToValue(0.0);
-            moonFade.setToValue(1.0);
-        } else {
-            thumbAnimation.setToX(16);
-            sunFade.setToValue(1.0);
-            moonFade.setToValue(0.0);
-        }
-        
-        thumbAnimation.setInterpolator(Interpolator.EASE_BOTH);
-        sunFade.setInterpolator(Interpolator.EASE_BOTH);
-        moonFade.setInterpolator(Interpolator.EASE_BOTH);
-        
-        ParallelTransition parallelTransition = new ParallelTransition();
-        parallelTransition.getChildren().addAll(thumbAnimation, sunFade, moonFade);
-        parallelTransition.play();
-        
-        parallelTransition.setOnFinished(e -> {
-            track.setFill(Color.web(themeManager.getToggleTrackBackground()));
-            track.setStroke(Color.web(themeManager.getToggleTrackBorder()));
-        });
-    }
-    
-    private void handleLogout() {
-        com.pidev.MainApplication.getInstance().logout();
-    }
-    
-    private void navigateToHome() {
-        NavigationManager.getInstance().navigateTo("home");
-    }
-    
-    private void navigateToDashboard() {
-        NavigationManager.getInstance().navigateTo("dashboard");
-    }
-    
+
     public void setBackgroundUpdateCallback(Runnable callback) {
         this.backgroundUpdateCallback = callback;
     }
-    
-    public void setMainContainer(Pane mainContainer) {
-        // This method is kept for compatibility but not used in the new structure
-    }
-    
-    private void toggleSubmenu(String tabName) {
-        if (islandContainer == null) return;
-        
-        if (isExpanded && currentExpandedTab != null && currentExpandedTab.equals(tabName)) {
-            collapseIsland();
-        } else {
-            expandIsland(tabName);
-        }
-    }
-    
-    private void expandIsland(String tabName) {
-        if (islandContainer == null || mainTabs == null || subMenuContainer == null) return;
-        
-        isExpanded = true;
-        currentExpandedTab = tabName;
-        
-        // CRITICAL FIX: Set the expanded tab as active when opening submenu
-        updateActiveTab(tabName);
-        
-        // Clear previous submenu content
-        subMenuContainer.getChildren().clear();
-        submenuButtons.clear();
-        
-        // Create enhanced back arrow
-        Button backArrow = createEnhancedBackArrow();
-        subMenuContainer.getChildren().add(backArrow);
-        
-        // Add sub-menu items based on tab with enhanced styling - DYNAMIC TEXT LENGTHS
-        if ("Services".equals(tabName)) {
-            Button service1 = createEnhancedSubmenuButton("Web Development", "services/web");
-            Button service2 = createEnhancedSubmenuButton("Mobile Applications", "services/mobile");
-            Button service3 = createEnhancedSubmenuButton("Technical Consulting", "services/consulting");
-            subMenuContainer.getChildren().addAll(service1, service2, service3);
-        } else if ("About".equals(tabName)) {
-            Button about1 = createEnhancedSubmenuButton("Our Company Story", "about/story");
-            Button about2 = createEnhancedSubmenuButton("Meet Our Team", "about/team");
-            Button about3 = createEnhancedSubmenuButton("Contact Information", "about/contact");
-            subMenuContainer.getChildren().addAll(about1, about2, about3);
-        }
-        
-        // Enhanced animation sequence
-        animateToSubmenu();
-    }
-    
-    private void collapseIsland() {
-        if (islandContainer == null || mainTabs == null || subMenuContainer == null) return;
-        
-        isExpanded = false;
-        currentExpandedTab = null;
-        
-        // Enhanced animation sequence
-        animateToMainTabs();
-    }
-    
-    private void animateToSubmenu() {
-        // Fade out main tabs
-        FadeTransition fadeOutMain = new FadeTransition(Duration.millis(200), mainTabs);
-        fadeOutMain.setFromValue(1.0);
-        fadeOutMain.setToValue(0.0);
-        
-        // Scale and fade in submenu
-        FadeTransition fadeInSubmenu = new FadeTransition(Duration.millis(300), subMenuContainer);
-        fadeInSubmenu.setFromValue(0.0);
-        fadeInSubmenu.setToValue(1.0);
-        
-        ScaleTransition scaleSubmenu = new ScaleTransition(Duration.millis(300), subMenuContainer);
-        scaleSubmenu.setFromX(0.8);
-        scaleSubmenu.setToX(1.0);
-        scaleSubmenu.setFromY(0.8);
-        scaleSubmenu.setToY(1.0);
-        
-        // Execute animation sequence
-        fadeOutMain.setOnFinished(e -> {
-            mainTabs.setVisible(false);
-            subMenuContainer.setVisible(true);
-            
-            ParallelTransition showSubmenu = new ParallelTransition();
-            showSubmenu.getChildren().addAll(fadeInSubmenu, scaleSubmenu);
-            showSubmenu.play();
-        });
-        
-        fadeOutMain.play();
-    }
-    
-    private void animateToMainTabs() {
-        // Fade out submenu
-        FadeTransition fadeOutSubmenu = new FadeTransition(Duration.millis(200), subMenuContainer);
-        fadeOutSubmenu.setFromValue(1.0);
-        fadeOutSubmenu.setToValue(0.0);
-        
-        // Scale and fade in main tabs
-        FadeTransition fadeInMain = new FadeTransition(Duration.millis(300), mainTabs);
-        fadeInMain.setFromValue(0.0);
-        fadeInMain.setToValue(1.0);
-        
-        ScaleTransition scaleMain = new ScaleTransition(Duration.millis(300), mainTabs);
-        scaleMain.setFromX(0.8);
-        scaleMain.setToX(1.0);
-        scaleMain.setFromY(0.8);
-        scaleMain.setToY(1.0);
-        
-        // Execute animation sequence
-        fadeOutSubmenu.setOnFinished(e -> {
-            subMenuContainer.setVisible(false);
-            mainTabs.setVisible(true);
-            
-            // CRITICAL FIX: Ensure only the correct tab shows as selected when returning from submenu
-            refreshTabStates();
-            
-            ParallelTransition showMain = new ParallelTransition();
-            showMain.getChildren().addAll(fadeInMain, scaleMain);
-            showMain.play();
-        });
-        
-        fadeOutSubmenu.play();
-    }
-    
-    private Button createEnhancedSubmenuButton(String text, String route) {
-        Button button = new Button(text);
-    button.setFont(Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-        button.setPadding(new Insets(8, 14, 8, 14)); // Restored original padding
-        
-        // CONSERVATIVE dynamic submenu button sizing - prevents text cutoff without breaking island
-        int calculatedWidth = Math.max(120, text.length() * 6 + 24); // Very conservative calculation
-        int maxWidth = Math.min(calculatedWidth, 160); // Lower cap to preserve island design
-        
-        button.setMinWidth(maxWidth);
-        button.setMaxWidth(maxWidth);
-        button.setPrefWidth(maxWidth);
-        
-        // Apply enhanced submenu styling
-        button.setStyle(
-            "-fx-background-color: " + themeManager.getTabHoverColor() + ";" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: white;" +
-            "-fx-cursor: hand;" +
-            "-fx-scale-x: 1.0;" +
-            "-fx-scale-y: 1.0;"
-        );
-        
-        // Enhanced hover effects with smooth scaling
-        button.setOnMouseEntered(e -> {
-            button.setStyle(
-                "-fx-background-color: " + themeManager.getActiveTabColor() + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-scale-x: 1.05;" +
-                "-fx-scale-y: 1.05;"
-            );
-        });
-        
-        button.setOnMouseExited(e -> {
-            button.setStyle(
-                "-fx-background-color: " + themeManager.getTabHoverColor() + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-scale-x: 1.0;" +
-                "-fx-scale-y: 1.0;"
-            );
-        });
-        
-        // Enhanced click handler with navigation
-        button.setOnAction(e -> {
-            System.out.println("Submenu clicked: " + text + " -> " + route);
-            NavigationManager.getInstance().navigateTo(route);
-            collapseIsland();
-        });
-        
-        // Store button reference
-        submenuButtons.put(text, button);
-        
-        return button;
-    }
-    
-    private Button createEnhancedBackArrow() {
-        Button backButton = new Button("←");
-    backButton.setFont(Font.font(com.pidev.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 18));
-        backButton.setPadding(new Insets(8, 12, 8, 12));
-        
-        // Enhanced back arrow sizing
-        backButton.setMinWidth(45);
-        backButton.setMaxWidth(45);
-        backButton.setPrefWidth(45);
-        
-        // Apply enhanced back arrow styling
-        backButton.setStyle(
-            "-fx-background-color: " + themeManager.getActiveTabColor() + ";" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: white;" +
-            "-fx-cursor: hand;" +
-            "-fx-scale-x: 1.0;" +
-            "-fx-scale-y: 1.0;"
-        );
-        
-        // Enhanced hover effects
-        backButton.setOnMouseEntered(e -> {
-            backButton.setStyle(
-                "-fx-background-color: " + themeManager.getTabHoverColor() + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-scale-x: 1.1;" +
-                "-fx-scale-y: 1.1;"
-            );
-        });
-        
-        backButton.setOnMouseExited(e -> {
-            backButton.setStyle(
-                "-fx-background-color: " + themeManager.getActiveTabColor() + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-text-fill: white;" +
-                "-fx-cursor: hand;" +
-                "-fx-scale-x: 1.0;" +
-                "-fx-scale-y: 1.0;"
-            );
-        });
-        
-        // Enhanced click handler with smooth animation
-        backButton.setOnAction(e -> {
-            collapseIsland();
-        });
-        
-        return backButton;
-    }
-    
-    private void applyThemeStyling() {
-        // Keep root transparent - no big island visible
-        root.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 0;" +
-            "-fx-border-color: transparent;" +
-            "-fx-border-width: 0;"
-        );
-        root.setEffect(null);
 
-        // Update navigation pill island styling
-        if (navPillIsland != null) {
-            navPillIsland.setStyle(
-                "-fx-background-color: " + themeManager.getLiquidGlassBackground() + ";" +
-                "-fx-background-radius: 25px;" +
-                "-fx-border-color: " + themeManager.getLiquidGlassBorder() + ";" +
-                "-fx-border-width: 1px;" +
-                "-fx-border-radius: 25px;"
-            );
-            
-            // Update pill shadow
-            DropShadow pillShadow = new DropShadow();
-            pillShadow.setBlurType(BlurType.GAUSSIAN);
-            pillShadow.setColor(Color.color(0, 0, 0, 0.3));
-            pillShadow.setRadius(12);
-            pillShadow.setOffsetX(0);
-            pillShadow.setOffsetY(3);
-            navPillIsland.setEffect(pillShadow);
-        }
-
-        if (islandContainer != null) {
-            String islandStyle = "-fx-background-color: " + themeManager.getDynamicIslandBackground() + ";" +
-                "-fx-background-radius: 35px;" +
-                "-fx-border-color: " + themeManager.getDynamicIslandBorder() + ";" +
-                "-fx-border-width: 1px;" +
-                "-fx-border-radius: 35px;";
-            islandContainer.setStyle(islandStyle);
-
-            // Update glow
-            DropShadow islandShadow = new DropShadow();
-            islandShadow.setBlurType(BlurType.GAUSSIAN);
-            islandShadow.setColor(themeManager.getNeonGlowColor().deriveColor(0, 1, 1, 0.45));
-            islandShadow.setRadius(24);
-            islandShadow.setOffsetX(0);
-            islandShadow.setOffsetY(6);
-            islandContainer.setEffect(islandShadow);
-        }
-
-        // Refresh tab styles to pick up new colors
-        refreshTabStates();
+    public void setMainContainer(javafx.scene.layout.Pane mainContainer) {
+        // Compatibility method.
     }
-    
-    public Pane getRoot() {
+
+    public void refreshTheme() {
+        applyThemeStyling();
+    }
+
+    public javafx.scene.layout.Pane getRoot() {
         return root;
     }
-    
+
     public void cleanup() {
-        // Cleanup resources if needed
+        cancelTabCloseDelay();
+        cancelProfileCloseDelay();
+        cancelNotificationCloseDelay();
+        closeAllPopups();
     }
 }

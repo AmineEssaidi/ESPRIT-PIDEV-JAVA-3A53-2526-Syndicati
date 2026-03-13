@@ -18,6 +18,7 @@ import com.pidev.utils.navigation.NavigationManager;
  * Main JavaFX Application - Dynamic Island Design Landing Page
  */
 public class MainApplication extends Application {
+    private static final String GLOBAL_SCROLLBAR_CSS = "/styles/app-scrollbar.css";
     
     private static MainApplication instance;
     private Stage primaryStage;
@@ -40,7 +41,8 @@ public class MainApplication extends Application {
         loginView = new LoginView();
         
         // Set up the scene with login view - dynamic sizing with min constraints
-        Scene scene = new Scene(loginView.getRoot(), 1200, 800);
+        Scene scene = new Scene(loginView.getRoot(), 1500, 900);
+        applyGlobalStyles(scene);
         // Apply global font family to entire scene (use Light as default body font)
         if (scene.getRoot() != null) {
             scene.getRoot().setStyle("-fx-font-family: '" + lightFontFamily + "';");
@@ -68,8 +70,8 @@ public class MainApplication extends Application {
         primaryStage.setResizable(true);
         
         // Set minimum window size
-        primaryStage.setMinWidth(800);
-        primaryStage.setMinHeight(600);
+        primaryStage.setMinWidth(1500);
+        primaryStage.setMinHeight(900);
         
         // Show the stage first (needed for width/height to be set)
         primaryStage.show();
@@ -149,14 +151,15 @@ public class MainApplication extends Application {
         Scene scene = new Scene(landingPageView.getRoot());
         scene.setFill(Color.TRANSPARENT); // Make scene transparent to show rounded corners
         scene.getStylesheets().clear(); // Clear any inherited styles
+        applyGlobalStyles(scene);
         // Apply global font family to entire scene (use Light as default body font)
         if (scene.getRoot() != null) {
             scene.getRoot().setStyle("-fx-font-family: '" + lightFontFamily + "';");
         }
         
         // Set minimum window size
-        primaryStage.setMinWidth(800);
-        primaryStage.setMinHeight(600);
+        primaryStage.setMinWidth(1500);
+        primaryStage.setMinHeight(900);
         
         ThemeManager.getInstance().setScene(scene);
         
@@ -214,19 +217,87 @@ public class MainApplication extends Application {
                 System.out.println("⚠️ ClashGrotesk-Bold.otf not found on classpath.");
             }
             
-            // Load ClashGrotesk-Light for body text
-            java.io.InputStream lightStream = MainApplication.class.getResourceAsStream("/ClashGrotesk-Light.otf");
-            if (lightStream != null) {
-                Font lightFont = Font.loadFont(lightStream, 14);
-                if (lightFont != null) {
-                    lightFontFamily = lightFont.getFamily();
-                    System.out.println("📦 Loaded light font: " + lightFont.getName() + " (family: " + lightFontFamily + ")");
+            // Load Archivo-Regular for body text (primary)
+            java.io.InputStream regularPrimaryStream = MainApplication.class.getResourceAsStream("/Archivo-Regular.ttf");
+            if (regularPrimaryStream != null) {
+                Font regularPrimaryFont = Font.loadFont(regularPrimaryStream, 14);
+                if (regularPrimaryFont != null) {
+                    lightFontFamily = regularPrimaryFont.getFamily();
+                    System.out.println("📦 Loaded body font (regular): " + regularPrimaryFont.getName() + " (family: " + lightFontFamily + ")");
                 } else {
-                    System.out.println("⚠️ Failed to load ClashGrotesk-Light.otf font – using default family name.");
+                    System.out.println("⚠️ Failed to load Archivo-Regular.ttf font – trying Archivo-Light.");
                 }
-                lightStream.close();
+                regularPrimaryStream.close();
             } else {
-                System.out.println("⚠️ ClashGrotesk-Light.otf not found on classpath.");
+                System.out.println("⚠️ Archivo-Regular.ttf not found on classpath – trying Archivo-Light.");
+            }
+
+            // Fallback: Archivo-Regular
+            if ("Clash Grotesk".equals(lightFontFamily)) {
+                java.io.InputStream archivoRegularStream = MainApplication.class.getResourceAsStream("/Archivo-Regular.ttf");
+                if (archivoRegularStream != null) {
+                    Font archivoRegular = Font.loadFont(archivoRegularStream, 14);
+                    if (archivoRegular != null) {
+                        lightFontFamily = archivoRegular.getFamily();
+                        System.out.println("📦 Loaded body font (regular): " + archivoRegular.getName() + " (family: " + lightFontFamily + ")");
+                    } else {
+                        System.out.println("⚠️ Failed to load Archivo-Regular.ttf font – trying Archivo-Light.");
+                    }
+                    archivoRegularStream.close();
+                } else {
+                    System.out.println("⚠️ Archivo-Regular.ttf not found on classpath – trying Archivo-Light.");
+                }
+            }
+
+            // Fallback: Archivo-Light
+            if ("Clash Grotesk".equals(lightFontFamily)) {
+                java.io.InputStream archivoLightStream = MainApplication.class.getResourceAsStream("/Archivo-Light.ttf");
+                if (archivoLightStream != null) {
+                    Font archivoLight = Font.loadFont(archivoLightStream, 14);
+                    if (archivoLight != null) {
+                        lightFontFamily = archivoLight.getFamily();
+                        System.out.println("📦 Loaded body font (light): " + archivoLight.getName() + " (family: " + lightFontFamily + ")");
+                    } else {
+                        System.out.println("⚠️ Failed to load Archivo-Light.ttf font – trying Clash fallback.");
+                    }
+                    archivoLightStream.close();
+                } else {
+                    System.out.println("⚠️ Archivo-Light.ttf not found on classpath – trying Clash fallback.");
+                }
+            }
+
+            // Fallback: ClashGrotesk-Regular
+            if ("Clash Grotesk".equals(lightFontFamily)) {
+                java.io.InputStream regularStream = MainApplication.class.getResourceAsStream("/ClashGrotesk-Regular.ttf");
+                if (regularStream != null) {
+                    Font regularFont = Font.loadFont(regularStream, 14);
+                    if (regularFont != null) {
+                        lightFontFamily = regularFont.getFamily();
+                        System.out.println("📦 Loaded regular font: " + regularFont.getName() + " (family: " + lightFontFamily + ")");
+                    } else {
+                        System.out.println("⚠️ Failed to load ClashGrotesk-Regular.ttf font – trying light font.");
+                    }
+                    regularStream.close();
+                } else {
+                    System.out.println("⚠️ ClashGrotesk-Regular.ttf not found on classpath – trying light font.");
+                }
+            }
+
+            // Final fallback: old ClashGrotesk-Light
+            if ("Clash Grotesk".equals(lightFontFamily)) {
+                java.io.InputStream lightStream = MainApplication.class.getResourceAsStream("/ClashGrotesk-Light.otf");
+                if (lightStream != null) {
+                    Font lightFont = Font.loadFont(lightStream, 14);
+                    if (lightFont != null) {
+                        lightFontFamily = lightFont.getFamily();
+                        System.out.println("📦 Loaded light fallback font: " + lightFont.getName() + " (family: " + lightFontFamily + ")");
+                    } else {
+                        System.out.println("⚠️ Failed to load ClashGrotesk-Light.otf font – using default family name.");
+                    }
+                    lightStream.close();
+                } else {
+                    System.out.println("⚠️ ClashGrotesk-Light.otf not found on classpath.");
+                }
             }
         } catch (Exception ex) {
             System.out.println("⚠️ Error loading custom fonts: " + ex.getMessage());
@@ -261,10 +332,11 @@ public class MainApplication extends Application {
         Scene scene = new Scene(loginView.getRoot());
         scene.setFill(Color.TRANSPARENT); // Keep transparency for login view too
         scene.getStylesheets().clear(); // Avoid inherited styles that could reintroduce backgrounds
+        applyGlobalStyles(scene);
         
         // Set minimum window size
-        primaryStage.setMinWidth(800);
-        primaryStage.setMinHeight(600);
+        primaryStage.setMinWidth(1500);
+        primaryStage.setMinHeight(900);
         
         ThemeManager.getInstance().setScene(scene);
         
@@ -316,6 +388,18 @@ public class MainApplication extends Application {
     
     public static MainApplication getInstance() {
         return instance;
+    }
+
+    private void applyGlobalStyles(Scene scene) {
+        java.net.URL cssUrl = MainApplication.class.getResource(GLOBAL_SCROLLBAR_CSS);
+        if (cssUrl != null) {
+            String css = cssUrl.toExternalForm();
+            if (!scene.getStylesheets().contains(css)) {
+                scene.getStylesheets().add(css);
+            }
+        } else {
+            System.out.println("⚠️ Global stylesheet not found: " + GLOBAL_SCROLLBAR_CSS);
+        }
     }
     
     private void centerStageOnScreen(Stage stage) {

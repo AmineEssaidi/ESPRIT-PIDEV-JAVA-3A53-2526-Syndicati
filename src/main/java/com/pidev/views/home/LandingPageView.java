@@ -8,10 +8,12 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import com.pidev.components.shared.DynamicHeader;
 import com.pidev.components.shared.DynamicFooter;
+import com.pidev.components.home.HomeContent;
  
 import com.pidev.interfaces.ViewInterface;
 import com.pidev.utils.theme.ThemeManager;
 import com.pidev.utils.navigation.NavigationManager;
+import com.pidev.views.dashboard.DashboardView;
 
 /**
  * Landing Page View - Main container with dynamic island header and footer
@@ -21,8 +23,11 @@ public class LandingPageView implements ViewInterface {
     private final StackPane root;
     private final DynamicHeader header;
     private final DynamicFooter footer;
+    private final Runnable accentRefreshListener;
     private VBox mainContent; // Added to allow content replacement
     private VBox darkPanel; // Store reference for theme updates
+    private HomeContent homeContent;
+    private VBox contentRow; // Stored so we can swap it out for dashboard mode
     
     
     
@@ -30,8 +35,15 @@ public class LandingPageView implements ViewInterface {
         this.root = new StackPane();
         this.header = new DynamicHeader();
         this.footer = new DynamicFooter();
+        this.accentRefreshListener = () -> {
+            applyThemeStyling();
+            refreshHomeContentIfVisible();
+            header.refreshTheme();
+            footer.refreshTheme();
+        };
         
         setupLayout();
+        ThemeManager.getInstance().addAccentChangeListener(accentRefreshListener);
         
         // Pass the main container reference to header for sub-menus
         header.setMainContainer(root);
@@ -56,7 +68,7 @@ public class LandingPageView implements ViewInterface {
         
         // Use ThemeManager for dynamic background color based on theme
         ThemeManager themeManager = ThemeManager.getInstance();
-        String backgroundColor = themeManager.isDarkMode() ? "#1a1a1e" : "#f0f0f5";
+        String backgroundColor = themeManager.isDarkMode() ? "#000000" : "#f0f0f5";
         darkPanel.setStyle(
             "-fx-background-color: " + backgroundColor + ";" + // Pure solid color
             "-fx-background-radius: 0;" // Let the scene clip handle corners
@@ -77,17 +89,36 @@ public class LandingPageView implements ViewInterface {
         mainContent = new VBox();
         mainContent.setSpacing(16);
         mainContent.setAlignment(Pos.TOP_LEFT);
-        mainContent.setPadding(new Insets(6, 10, 10, 10));
+        // Reserve space for the floating header so content starts below it without a dedicated header strip.
+        mainContent.setPadding(new Insets(102, 10, 10, 10));
 
-        // Content area is now empty - search is in the header
-        // Fill content - removed cardGrid and searchBar
+        // Build and show home content sections
+        homeContent = new HomeContent();
+        mainContent.getChildren().add(homeContent.getRoot());
 
-        // Scrollable center for cards
-        ScrollPane scrollPane = new ScrollPane(mainContent);
+        // Wrap mainContent + footer together so the footer scrolls with the page content
+        // (footer appears at the end of the content, not pinned to the window bottom)
+        ScrollPane scrollPane = new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        VBox pageWrapper = new VBox();
+        pageWrapper.setFillWidth(true);
+        // Bind max width to the scroll pane viewport so nothing overflows horizontally
+        pageWrapper.maxWidthProperty().bind(scrollPane.widthProperty());
+        pageWrapper.getChildren().add(mainContent);
+
+        // Footer container centred within the scroll area with breathing room
+        VBox footerContainer = new VBox();
+        footerContainer.setAlignment(Pos.CENTER);
+        footerContainer.setPadding(new Insets(20, 0, 24, 0));
+        footerContainer.getChildren().add(footer.getRoot());
+        pageWrapper.getChildren().add(footerContainer);
+
+        // Attach wrapped content to the already-configured scroll pane
+        scrollPane.setContent(pageWrapper);
 
         // Create window bar that spans full width
         HBox windowBar = createWindowBar();
@@ -95,14 +126,19 @@ public class LandingPageView implements ViewInterface {
         windowBar.setPickOnBounds(true);
         windowBar.setMouseTransparent(false);
         
-        // Content row: main column with header + scrollable content + footer
-        VBox contentRow = new VBox();
+        // Content row: main column with header + scrollable content (footer now lives inside scroll)
+        contentRow = new VBox();
         contentRow.setSpacing(6);
         contentRow.setAlignment(Pos.TOP_LEFT);
         contentRow.setPadding(new Insets(48, 12, 12, 12)); // Add 48px top padding for window bar space
         contentRow.setFillWidth(true);
-        contentRow.getChildren().addAll(header.getRoot(), scrollPane, footer.getRoot());
-        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        StackPane floatingHeaderLayer = new StackPane(scrollPane, header.getRoot());
+        floatingHeaderLayer.setAlignment(Pos.TOP_CENTER);
+        StackPane.setAlignment(header.getRoot(), Pos.TOP_CENTER);
+        StackPane.setMargin(header.getRoot(), new Insets(0, 0, 0, 0));
+
+        contentRow.getChildren().add(floatingHeaderLayer);
+        VBox.setVgrow(floatingHeaderLayer, Priority.ALWAYS);
         VBox.setVgrow(contentRow, Priority.ALWAYS);
         
         // Add contentRow to darkPanel (no window bar here)
@@ -137,20 +173,50 @@ public class LandingPageView implements ViewInterface {
     public void navigateToHome() {
         // Clear existing content and restore original landing page content
         mainContent.getChildren().clear();
-        
-        // Content is now in the header, nothing to add here
+        homeContent = new HomeContent();
+        mainContent.getChildren().add(homeContent.getRoot());
     }
     
     public void navigateToDashboard() {
-        // Clear existing content and show dashboard page
-        mainContent.getChildren().clear();
-        mainContent.getChildren().add(NavigationManager.getInstance().getPage("dashboard"));
+        enterDashboardMode();
+    }
+
+    /** Swap out the normal header+content with the full admin dashboard layout. */
+    public void enterDashboardMode() {
+        DashboardView dv = NavigationManager.getInstance().getDashboardView();
+        dv.setExitCallback(this::exitDashboardMode);
+        HBox adminRoot = dv.getRoot();
+        adminRoot.setMaxWidth(Double.MAX_VALUE);
+        adminRoot.setMaxHeight(Double.MAX_VALUE);
+        VBox.setVgrow(adminRoot, Priority.ALWAYS);
+        darkPanel.getChildren().clear();
+        darkPanel.getChildren().add(adminRoot);
+    }
+
+    /** Restore the normal island header + content area, go back to home. */
+    public void exitDashboardMode() {
+        darkPanel.getChildren().clear();
+        darkPanel.getChildren().add(contentRow);
+        navigateToHome();
     }
     
     public void navigateToSettings() {
         // Clear existing content and show settings page
         mainContent.getChildren().clear();
         mainContent.getChildren().add(NavigationManager.getInstance().getPage("settings"));
+    }
+
+    public void navigateToPage(String pageName) {
+        if ("home".equalsIgnoreCase(pageName)) {
+            navigateToHome();
+            return;
+        }
+        if ("dashboard".equalsIgnoreCase(pageName)) {
+            enterDashboardMode();
+            return;
+        }
+        mainContent.getChildren().clear();
+        mainContent.getChildren().add(NavigationManager.getInstance().getPage(pageName));
     }
     
     private void applyThemeStyling() {
@@ -161,16 +227,27 @@ public class LandingPageView implements ViewInterface {
         // Update darkPanel background color based on current theme
         if (darkPanel != null) {
             ThemeManager themeManager = ThemeManager.getInstance();
-            String backgroundColor = themeManager.isDarkMode() ? "#1a1a1e" : "#f0f0f5";
+            String backgroundColor = themeManager.isDarkMode() ? "#000000" : "#f0f0f5";
             darkPanel.setStyle(
                 "-fx-background-color: " + backgroundColor + ";" +
                 "-fx-background-radius: 0;"
             );
         }
     }
+
+    private void refreshHomeContentIfVisible() {
+        if (mainContent == null || homeContent == null) {
+            return;
+        }
+        if (mainContent.getChildren().contains(homeContent.getRoot())) {
+            homeContent = new HomeContent();
+            mainContent.getChildren().setAll(homeContent.getRoot());
+        }
+    }
     
     public void cleanup() {
         // Cleanup resources if needed
+        ThemeManager.getInstance().removeAccentChangeListener(accentRefreshListener);
         if (header != null) header.cleanup();
         if (footer != null) footer.cleanup();
         

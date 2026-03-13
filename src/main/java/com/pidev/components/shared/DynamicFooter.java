@@ -1,5 +1,6 @@
 package com.pidev.components.shared;
 
+import javafx.beans.value.ChangeListener;
 import javafx.scene.layout.*;
 import javafx.scene.control.*;
 import javafx.scene.text.Text;
@@ -19,15 +20,24 @@ public class DynamicFooter {
     
     private final HBox root;
     private final StackPane wrapper;
+    private ChangeListener<Number> gradientPhaseListener;
     
     public DynamicFooter() {
         this.wrapper = new StackPane();
         this.root = new HBox();
         setupLayout();
         startAnimations();
+        startBorderAnimation();
+    }
+
+    private void startBorderAnimation() {
+        gradientPhaseListener = (obs, oldVal, newVal) -> applyThemeStyling();
+        ThemeManager.getInstance().gradientPhaseProperty().addListener(gradientPhaseListener);
     }
     
     private void setupLayout() {
+        root.getChildren().clear();
+
         // Main footer container with dynamic island styling
         root.setSpacing(0);
         root.setAlignment(Pos.CENTER);
@@ -36,8 +46,10 @@ public class DynamicFooter {
         // Apply dynamic island background with theme-aware colors
         applyThemeStyling();
         
-        // Add root to wrapper (no extra elements)
-        wrapper.getChildren().add(root);
+        // Add root to wrapper (guard against duplicate on refreshTheme calls)
+        if (!wrapper.getChildren().contains(root)) {
+            wrapper.getChildren().add(root);
+        }
         
         // Footer content container
         HBox footerContent = new HBox();
@@ -197,24 +209,26 @@ public class DynamicFooter {
     }
     
     private void applyThemeStyling() {
-        ThemeManager themeManager = ThemeManager.getInstance();
+        ThemeManager tm = ThemeManager.getInstance();
+        double pulse = 0.32 + (0.12 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
+        double radius = 22 + (6 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
         
-        // Apply dynamic island background with enhanced styling
         root.setStyle(
-            "-fx-background-color: " + themeManager.getDynamicIslandBackground() + ";" +
-            "-fx-background-radius: 50px;" +
-            "-fx-border-color: " + themeManager.getDynamicIslandBorder() + ";" +
-            "-fx-border-width: 1px;" +
+            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ", " + tm.getDynamicIslandBackground() + ";" +
+            "-fx-background-insets: 0, 1.5;" +
+            "-fx-background-radius: 50px, 48.5px;" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.0) + ";" +
+            "-fx-border-width: 0;" +
             "-fx-border-radius: 50px;"
         );
         
-        // TRON neon edge glow
+        // TRON neon edge glow - matches current accent
         DropShadow footerShadow = new DropShadow();
         footerShadow.setBlurType(BlurType.GAUSSIAN);
-        footerShadow.setColor(ThemeManager.getInstance().getNeonGlowColor().deriveColor(0, 1, 1, 0.35));
-        footerShadow.setRadius(22);
+        footerShadow.setColor(tm.getNeonGlowColor().deriveColor(0, 1, 1, pulse));
+        footerShadow.setRadius(radius);
         footerShadow.setOffsetX(0);
-        footerShadow.setOffsetY(6);
+        footerShadow.setOffsetY(0);
         root.setEffect(footerShadow);
     }
     
@@ -234,11 +248,14 @@ public class DynamicFooter {
     }
     
     public void cleanup() {
-        // Cleanup resources if needed
+        if (gradientPhaseListener != null) {
+            ThemeManager.getInstance().gradientPhaseProperty().removeListener(gradientPhaseListener);
+            gradientPhaseListener = null;
+        }
     }
     
     // Public method to refresh theme-dependent styles
     public void refreshTheme() {
-        applyThemeStyling();
+        setupLayout();
     }
 }

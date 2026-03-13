@@ -1,0 +1,55 @@
+/* Global custom scrollbar skin for JavaFX ScrollPane/ListView controls */
+
+.scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical,
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-padding: 3;
+}
+
+.scroll-bar:vertical {
+    -fx-pref-width: 12;
+}
+
+.scroll-bar:horizontal {
+    -fx-pref-height: 12;
+}
+
+.scroll-bar .track {
+    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-background-radius: 999px;
+    -fx-border-color: rgba(255, 255, 255, 0.10);
+    -fx-border-radius: 999px;
+    -fx-border-width: 1;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: linear-gradient(to bottom, #8a79ff, #6f5cf2);
+    -fx-background-radius: 999px;
+    -fx-background-insets: 1;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: linear-gradient(to bottom, #a18fff, #816cf7);
+}
+
+.scroll-bar .thumb:pressed {
+    -fx-background-color: linear-gradient(to bottom, #6f5cf2, #5a48db);
+}
+
+/* Hide default arrow buttons for cleaner modern scrollbar */
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button,
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-padding: 0;
+    -fx-shape: "";
+    -fx-background-color: transparent;
+}

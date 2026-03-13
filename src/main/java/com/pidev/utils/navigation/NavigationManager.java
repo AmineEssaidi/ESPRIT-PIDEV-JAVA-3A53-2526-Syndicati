@@ -9,6 +9,10 @@ import com.pidev.views.dashboard.DashboardView;
 import com.pidev.views.services.ServiceDetailView;
 import com.pidev.views.about.AboutDetailView;
 import com.pidev.views.settings.SettingsView;
+import com.pidev.views.services.ResidencePageView;
+import com.pidev.views.services.ForumPageView;
+import com.pidev.views.services.SyndicatPageView;
+import com.pidev.views.services.EvenementPageView;
 
 /**
  * Navigation Manager - Handles page navigation and sub-menu management
@@ -24,6 +28,10 @@ public class NavigationManager {
     private ServiceDetailView serviceDetailView;
     private AboutDetailView aboutDetailView;
     private SettingsView settingsView;
+    private ResidencePageView residenceView;
+    private ForumPageView forumView;
+    private SyndicatPageView syndicatView;
+    private EvenementPageView evenementView;
     
     private NavigationManager() {}
     
@@ -43,6 +51,10 @@ public class NavigationManager {
         this.serviceDetailView = new ServiceDetailView();
         this.aboutDetailView = new AboutDetailView();
         this.settingsView = new SettingsView();
+        this.residenceView = new ResidencePageView();
+        this.forumView = new ForumPageView();
+        this.syndicatView = new SyndicatPageView();
+        this.evenementView = new EvenementPageView();
     }
     
     public Pane getPage(String pageName) {
@@ -63,6 +75,14 @@ public class NavigationManager {
                 return aboutDetailView.getRoot();
             case "settings":
                 return settingsView.getRoot();
+            case "services/residence":
+                return residenceView.getRoot();
+            case "services/forum":
+                return forumView.getRoot();
+            case "services/syndicat":
+                return syndicatView.getRoot();
+            case "services/evenement":
+                return evenementView.getRoot();
             default:
                 return landingPageView.getRoot();
         }
@@ -70,17 +90,17 @@ public class NavigationManager {
     
     public void navigateTo(String pageName) {
         System.out.println("Navigating to: " + pageName);
-        // Navigate to the specified page by updating the LandingPageView content
         if (landingPageView != null) {
-            if ("profile".equals(pageName)) {
-                landingPageView.navigateToProfile();
-            } else if ("home".equals(pageName)) {
+            if ("home".equals(pageName)) {
                 landingPageView.navigateToHome();
-            } else if ("dashboard".equals(pageName)) {
-                landingPageView.navigateToDashboard();
-            } else if ("settings".equals(pageName)) {
-                landingPageView.navigateToSettings();
+            } else {
+                landingPageView.navigateToPage(pageName);
             }
         }
+    }
+
+    /** Exposes the dashboard view so LandingPageView can set its exit callback. */
+    public DashboardView getDashboardView() {
+        return dashboardView;
     }
 }
