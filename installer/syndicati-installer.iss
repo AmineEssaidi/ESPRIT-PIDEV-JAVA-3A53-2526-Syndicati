@@ -5,7 +5,7 @@
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Syndicati"
 #define MyAppURL "https://github.com/syndicati"
-#define MyAppExeName "Syndicati.bat"
+#define MyAppExeName "Syndicati.exe"
 
 [Setup]
 ; Basic installer settings
@@ -63,12 +63,8 @@ WelcomeLabel2=This will install {#MyAppName} {#MyAppVersion} on your computer.%n
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Main application files - JAR
-Source: "..\dist\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Bundled JRE
-Source: "..\dist\jre\*"; DestDir: "{app}\jre"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Launcher
-Source: "..\dist\Syndicati.bat"; DestDir: "{app}"; Flags: ignoreversion
+; Native app image from jpackage (includes launcher + runtime)
+Source: "..\dist\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

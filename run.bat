@@ -1,25 +1,21 @@
 @echo off
-echo Starting PiDev Liquid Glass Desktop Application...
+echo Starting Syndicati Desktop Application...
 echo.
 
-REM Set JavaFX module path (adjust path as needed)
-set JAVAFX_PATH=C:\Program Files\Java\javafx-20.0.2\lib
+cd /d "%~dp0"
 
-REM Compile the application
-echo Compiling application...
-javac -cp "target/classes;%JAVAFX_PATH%\*" -d target/classes src/main/java/com/wolfs/*.java src/main/java/com/wolfs/controllers/*.java src/main/java/com/wolfs/views/*.java src/main/java/com/wolfs/components/*.java src/main/java/com/wolfs/utils/*.java
+REM Use the bundled toolchain when available
+if exist "tools\jdk-21\bin\java.exe" set "JAVA_HOME=%~dp0tools\jdk-21"
+if exist "tools\maven\bin\mvn.cmd" set "MVN=%~dp0tools\maven\bin\mvn.cmd"
+if not defined MVN set "MVN=mvn"
+
+echo Compiling and running application...
+call "%MVN%" compile javafx:run
 
 if %ERRORLEVEL% neq 0 (
-    echo Compilation failed!
+    echo Application failed to start!
     pause
     exit /b 1
 )
-
-echo Compilation successful!
-echo.
-
-REM Run the application
-echo Starting application...
-java -cp "target/classes;%JAVAFX_PATH%\*" --module-path "%JAVAFX_PATH%" --add-modules javafx.controls,javafx.fxml com.wolfs.PiDevApplication
 
 pause

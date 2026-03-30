@@ -1,13 +1,13 @@
 @echo off
 setlocal
 
-title PiDev - Smart Runner
+title Syndicati - Smart Runner
 color 0A
 
 cd /d "%~dp0"
 
 echo ================================================================
-echo   PiDev Dynamic Island - Smart Runner
+echo   Syndicati - Smart Runner
 echo ================================================================
 echo.
 

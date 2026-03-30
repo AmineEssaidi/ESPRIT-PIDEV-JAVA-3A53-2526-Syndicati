@@ -1,4 +1,4 @@
-# PiDev JavaFX Application
+# Syndicati JavaFX Application
 
 A beautiful **pure JavaFX desktop application** that recreates your Symfony web application design using only Java code - **NO HTML files, NO servers, NO external dependencies!**
 
@@ -31,19 +31,19 @@ This is a **100% Java/JavaFX project** that recreates your Symfony design using 
 
 ```
 src/main/java/com/wolfs/
-├── PiDevApplication.java          # Main application entry point
+├── MainApplication.java           # Main application entry point
+├── Launcher.java                  # Simple launcher for IntelliJ and scripts
 ├── views/
-│   └── MainHomeView.java          # Main view container
+│   ├── home/
+│   │   └── LandingPageView.java   # Main landing page container
+│   ├── login/
+│   │   └── LoginView.java         # Login, signup, and recovery views
+│   └── dashboard/
+│       └── DashboardView.java     # Dashboard and CRUD face switching
 └── components/
-    ├── FrontendHeader.java        # Dynamic island navbar
-    ├── HeroSection.java           # Hero section with floating elements
-    ├── FeaturesGrid.java          # Features grid with liquid glass cards
-    ├── StatsSection.java          # Statistics section
-    ├── TestimonialsSection.java   # Testimonials section
-    ├── PricingSection.java        # Pricing section
-    ├── FAQSection.java            # FAQ section
-    ├── CTASection.java            # Call-to-action section
-    └── FooterSection.java         # Footer section
+    └── shared/
+        ├── DynamicHeader.java     # Website-style dynamic header
+        └── DynamicFooter.java     # Footer component
 ```
 
 ## 🎨 **Design Features**
@@ -71,8 +71,8 @@ src/main/java/com/wolfs/
 
 ### Option 1: IntelliJ IDEA (Recommended)
 1. Open the project in IntelliJ IDEA
-2. Navigate to `src/main/java/com/wolfs/PiDevApplication.java`
-3. Right-click and select "Run 'PiDevApplication.main()'"
+2. Navigate to `src/main/java/com/syndicati/MainApplication.java`
+3. Right-click and select "Run 'MainApplication.main()'"
 4. Your beautiful Symfony design will load in a desktop window!
 
 ### Option 2: Maven Command Line

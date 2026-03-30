@@ -1,11 +1,11 @@
-@echo off
+﻿@echo off
 setlocal enabledelayedexpansion
 
-title PiDev - Development Runner
+title Syndicati - Development Runner
 color 0A
 
 echo ============================================
-echo   PiDev Dynamic Island - Dev Runner
+echo   Syndicati - Dev Runner
 echo ============================================
 echo.
 
@@ -78,7 +78,7 @@ cd /d "%~dp0"
 :main_loop
 cls
 echo ============================================
-echo   PiDev Dynamic Island - Dev Runner
+echo   Syndicati - Dev Runner
 echo ============================================
 echo.
 echo [1] Run application (compile + run)
@@ -113,7 +113,7 @@ goto :main_loop
 echo.
 echo [INFO] Compiling and running application...
 echo.
-call "%MAVEN_CMD%" compile exec:java -Dexec.mainClass="com.pidev.Launcher" -q
+call "%MAVEN_CMD%" compile exec:java -Dexec.mainClass="com.syndicati.Launcher" -q
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] Application exited with error.
@@ -127,7 +127,7 @@ goto :main_loop
 echo.
 echo [INFO] Cleaning and rebuilding...
 echo.
-call "%MAVEN_CMD%" clean compile exec:java -Dexec.mainClass="com.pidev.Launcher"
+call "%MAVEN_CMD%" clean compile exec:java -Dexec.mainClass="com.syndicati.Launcher"
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] Application exited with error.
@@ -159,10 +159,11 @@ if %ERRORLEVEL% neq 0 (
 )
 
 REM Run the application
-start /wait cmd /c ""%MAVEN_CMD%" exec:java -Dexec.mainClass="com.pidev.Launcher" -q"
+start /wait cmd /c ""%MAVEN_CMD%" exec:java -Dexec.mainClass="com.syndicati.Launcher" -q"
 
 echo.
 echo [%TIME%] Application closed. Restarting in 2 seconds...
 echo          (Press Ctrl+C to stop)
 timeout /t 2 /nobreak >nul
 goto :watch_loop
+

@@ -1,20 +1,20 @@
-# Running Dynamic Island Landing Page in IntelliJ IDEA
+# Running Syndicati in IntelliJ IDEA
 
 ## Quick Setup Instructions
 
 ### 1. Open Project in IntelliJ
 - Open IntelliJ IDEA
-- Open the project folder: `ami_pidev_java`
+- Open the project folder: `Syndicati_Java`
 
 ### 2. Run the Application
 
 #### Option A: Run MainApplication (Recommended)
-1. Navigate to `src/main/java/com/wolfs/MainApplication.java`
+1. Navigate to `src/main/java/com/syndicati/MainApplication.java`
 2. Right-click on the file
 3. Select "Run 'MainApplication.main()'"
 
 #### Option B: Run Launcher
-1. Navigate to `src/main/java/com/wolfs/Launcher.java`
+1. Navigate to `src/main/java/com/syndicati/Launcher.java`
 2. Right-click on the file
 3. Select "Run 'Launcher.main()'"
 
@@ -45,16 +45,20 @@ If you get JavaFX module errors:
 
 ## Project Structure
 ```
-src/main/java/com/wolfs/
+src/main/java/com/syndicati/
 ├── MainApplication.java      # Main JavaFX application
 ├── Launcher.java            # Simple launcher for IntelliJ
 ├── views/
-│   └── LandingPageView.java # Main landing page view
+│   ├── home/
+│   │   └── LandingPageView.java # Main landing page view
+│   └── login/
+│       └── LoginView.java       # Login page view
 ├── components/
-│   ├── DynamicHeader.java   # Dynamic island header
-│   └── DynamicFooter.java   # Dynamic island footer
+│   └── shared/
+│       ├── DynamicHeader.java   # Dynamic island header
+│       └── DynamicFooter.java   # Dynamic island footer
 └── interfaces/
-    └── ViewInterface.java   # View interface
+  └── ViewInterface.java       # View interface
 ```
 
 ## Next Steps

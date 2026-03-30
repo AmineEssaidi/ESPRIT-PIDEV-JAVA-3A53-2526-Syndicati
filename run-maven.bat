@@ -1,5 +1,5 @@
-@echo off
-echo Starting PiDev Liquid Glass Desktop Application with Maven...
+﻿@echo off
+echo Starting Syndicati Desktop Application with Maven...
 echo.
 
 REM Clean and compile
@@ -17,6 +17,7 @@ echo.
 
 REM Run the application
 echo Starting application...
-mvn exec:java -Dexec.mainClass="com.wolfs.PiDevApplication"
+mvn exec:java -Dexec.mainClass="com.syndicati.Launcher"
 
 pause
+
