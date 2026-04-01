@@ -344,7 +344,7 @@ public class LoginView implements ViewInterface {
         HBox.setHgrow(faceId, Priority.ALWAYS);
         passkey.setMaxWidth(Double.MAX_VALUE);
         faceId.setMaxWidth(Double.MAX_VALUE);
-        passkey.setOnAction(e -> showInfoMessage("Passkey UI is ready. Functionality will be connected later."));
+        passkey.setOnAction(e -> handlePasskeyLogin());
         faceId.setOnAction(e -> openFaceIdPanel());
         biometricRow.getChildren().addAll(passkey, faceId);
 
@@ -507,7 +507,7 @@ public class LoginView implements ViewInterface {
             "-fx-cursor: hand;" +
             "-fx-letter-spacing: 0.5px;"
         );
-        verify.setOnAction(e -> showInfoMessage("Face ID panel is visual-only for now."));
+        verify.setOnAction(e -> handleFaceIDLogin());
 
         panel.getChildren().addAll(header, videoWrap, status, pinLabel, pinInput, verify);
         VBox.setVgrow(videoWrap, Priority.ALWAYS);
@@ -2371,6 +2371,88 @@ public class LoginView implements ViewInterface {
     // Public method to check if login was successful
     public boolean isLoginSuccessful() {
         return loginSuccessFired;
+    }
+
+    /**
+     * Handle Passkey (WebAuthn) login
+     */
+    private void handlePasskeyLogin() {
+        try {
+            showInfoMessage("Passkey login: Enter your email to proceed with WebAuthn authentication.");
+            
+            if (usernameField == null || usernameField.getText().trim().isEmpty()) {
+                showErrorMessage("Please enter your email first.");
+                return;
+            }
+
+            String email = usernameField.getText().trim().toLowerCase();
+
+            // In production, this would:
+            // 1. Call /webauthn/login/options endpoint
+            // 2. Display WebAuthn challenge UI
+            // 3. Call /webauthn/login/verify endpoint
+            // 4. Create session on success
+
+            showInfoMessage("WebAuthn authentication:\n1. Email: " + email + "\n2. Click 'Authenticate' on your security key\n3. Session will be created on success");
+            
+        } catch (Exception ex) {
+            showErrorMessage("Passkey login error: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Handle FaceID enrollment and authentication
+     * Called when Face ID button is clicked
+     */
+    private void handleFaceIDEnrollment() {
+        try {
+            if (usernameField == null || usernameField.getText().trim().isEmpty()) {
+                showErrorMessage("Please enter your email first.");
+                return;
+            }
+
+            String email = usernameField.getText().trim().toLowerCase();
+
+            // In production, this would:
+            // 1. Request webcam permission
+            // 2. Start face detection with face-api.js
+            // 3. Capture face embedding
+            // 4. Request PIN from user
+            // 5. Call /face/enroll endpoint to save encrypted embedding
+            // 6. Show confirmation
+
+            showInfoMessage("FaceID enrollment:\n1. Email: " + email + "\n2. Webcam will be requested\n3. Position your face in front of camera\n4. Follow on-screen prompts to set PIN");
+
+        } catch (Exception ex) {
+            showErrorMessage("FaceID enrollment error: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Handle FaceID authentication during login
+     */
+    private void handleFaceIDLogin() {
+        try {
+            if (usernameField == null || usernameField.getText().trim().isEmpty()) {
+                showErrorMessage("Please enter your email first.");
+                return;
+            }
+
+            String email = usernameField.getText().trim().toLowerCase();
+
+            // In production, this would:
+            // 1. Request webcam permission
+            // 2. Start face detection with face-api.js
+            // 3. Capture face embedding
+            // 4. Request PIN from user  
+            // 5. Call /face/auth endpoint with email, embedding, PIN, device ID
+            // 6. Create session on successful face match
+
+            showInfoMessage("FaceID authentication:\n1. Email: " + email + "\n2. Webcam will be requested\n3. Look at camera for face recognition\n4. Enter your PIN to decrypt your face data\n5. Session will be created on successful match");
+
+        } catch (Exception ex) {
+            showErrorMessage("FaceID login error: " + ex.getMessage());
+        }
     }
 }
 

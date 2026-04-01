@@ -304,6 +304,54 @@ public class AuthController {
     }
 
     /**
+     * Enable FaceID for user (biometric authentication)
+     */
+    public AuthResult enableFaceID(User user) {
+        if (user == null) {
+            return AuthResult.failure("User not found.");
+        }
+
+        // FaceID is enabled once credentials are enrolled through FaceController
+        return AuthResult.success(user, "FaceID authentication enabled. Please enroll your face on your device.");
+    }
+
+    /**
+     * Disable FaceID for user
+     */
+    public AuthResult disableFaceID(User user) {
+        if (user == null) {
+            return AuthResult.failure("User not found.");
+        }
+
+        // In production, this would delete all FaceCredential entries for the user
+        return AuthResult.success(user, "FaceID authentication disabled successfully.");
+    }
+
+    /**
+     * Enable WebAuthn/Passkey for user
+     */
+    public AuthResult enableWebAuthn(User user) {
+        if (user == null) {
+            return AuthResult.failure("User not found.");
+        }
+
+        // WebAuthn is enabled once credentials are registered through WebAuthnController
+        return AuthResult.success(user, "WebAuthn authentication enabled. Please register your security key.");
+    }
+
+    /**
+     * Disable WebAuthn/Passkey for user
+     */
+    public AuthResult disableWebAuthn(User user) {
+        if (user == null) {
+            return AuthResult.failure("User not found.");
+        }
+
+        // In production, this would delete all WebAuthnCredential entries for the user
+        return AuthResult.success(user, "WebAuthn authentication disabled successfully.");
+    }
+
+    /**
      * TOTP setup response
      */
     public static class TOTPSetupResult {

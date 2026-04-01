@@ -593,7 +593,7 @@ public class ProfileView implements ViewInterface {
         backBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
         backBtn.setPrefSize(30, 30);
         
-        Text titleText = text("Two-Factor Authentication", 14, true, "#ffffff");
+        Text titleText = text("Two-Factor Authentication & Biometrics", 14, true, "#ffffff");
         topBar.getChildren().addAll(backBtn, titleText);
         
         // 2FA Toggle
@@ -621,8 +621,26 @@ public class ProfileView implements ViewInterface {
         Text totpTitle = text("Authenticator App", 11, true, "rgba(255,255,255,0.7)");
         Text totpDesc = text("Use an authenticator app like Google Authenticator.", 10, false, "rgba(255,255,255,0.5)");
         totpOpt.getChildren().addAll(totpTitle, totpDesc);
+
+        // FaceID Option
+        VBox faceIDOpt = new VBox(8);
+        faceIDOpt.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
+        Text faceIDTitle = text("Face ID", 11, true, "rgba(255,255,255,0.7)");
+        Text faceIDDesc = text("Login using facial recognition with a PIN-protected enrollment.", 10, false, "rgba(255,255,255,0.5)");
+        faceIDOpt.getChildren().addAll(faceIDTitle, faceIDDesc);
+
+        // WebAuthn/Passkey Option
+        VBox webauthOpt = new VBox(8);
+        webauthOpt.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
+        Text webauthTitle = text("WebAuthn / Passkey", 11, true, "rgba(255,255,255,0.7)");
+        Text webauthDesc = text("Passwordless login with security keys, Windows Hello, or Touch ID.", 10, false, "rgba(255,255,255,0.5)");
+        webauthOpt.getChildren().addAll(webauthTitle, webauthDesc);
         
-        panel.getChildren().addAll(topBar, toggleBox, emailOpt, totpOpt);
+        panel.getChildren().addAll(topBar, new Text(""), toggleBox, new Text(""), 
+            text("2FA Methods", 12, true, "rgba(255,255,255,0.7)"),
+            emailOpt, totpOpt,
+            new Text(""), text("Biometric & Passwordless", 12, true, "rgba(255,255,255,0.7)"),
+            faceIDOpt, webauthOpt);
         return panel;
     }
 
