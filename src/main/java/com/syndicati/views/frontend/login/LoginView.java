@@ -17,6 +17,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
+import javafx.scene.Parent;
+import javafx.scene.Node;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.components.shared.ImageBackground;
@@ -102,6 +104,7 @@ public class LoginView implements ViewInterface {
         
         // Create the sign up container
         signUpContainer = createSignUpContainer();
+        signUpContainer.setMaxHeight(Region.USE_PREF_SIZE);
         
         // Create the forgot password container
         forgotPasswordContainer = createForgotPasswordContainer();
@@ -632,11 +635,10 @@ public class LoginView implements ViewInterface {
     
     private VBox createSignUpContainer() {
         VBox container = new VBox();
-        container.setSpacing(14);
+        container.setSpacing(10);
         container.setAlignment(Pos.CENTER);
-        container.setPadding(new Insets(34, 34, 30, 34));
+        container.setPadding(new Insets(24, 34, 24, 34));
         container.setMaxWidth(700);
-        container.setMaxHeight(620);
         
         ThemeManager themeManager = ThemeManager.getInstance();
         container.setStyle(authSurfaceStyle(themeManager));
@@ -652,44 +654,57 @@ public class LoginView implements ViewInterface {
         glassShadow.setOffsetY(10);
         container.setEffect(glassShadow);
         
-        // App title
+        // ===== HEADER =====
         Text title = new Text("Create Account");
-        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 32));
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 28));
         title.setFill(createAccentGradientPaint());
         title.setTextAlignment(TextAlignment.CENTER);
         
-        // Subtitle
         Text subtitle = new Text("Join us today");
         subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
         subtitle.setFill(themeManager.isDarkMode() ? Color.web("#b3b8e0") : Color.web("#475569"));
         subtitle.setTextAlignment(TextAlignment.CENTER);
 
-        VBox headerWrap = new VBox(6, title, subtitle);
+        VBox headerWrap = new VBox(4, title, subtitle);
         headerWrap.setAlignment(Pos.CENTER);
         
-        // Sign up fields
-        VBox firstNameContainer = createInputField("", "First Name");
-        VBox lastNameContainer = createInputField("", "Last Name");
-        VBox emailContainer = createInputField("", "Email Address");
-        VBox usernameSignUpContainer = createInputField("", "Username");
-        VBox passwordSignUpContainer = createInputField("", "Password");
-        VBox confirmPasswordContainer = createInputField("", "Confirm Password");
-
-        signUpFirstNameField = (TextField) firstNameContainer.getChildren().get(1);
-        signUpLastNameField = (TextField) lastNameContainer.getChildren().get(1);
-        signUpEmailField = (TextField) emailContainer.getChildren().get(1);
-        signUpUsernameField = (TextField) usernameSignUpContainer.getChildren().get(1);
-        signUpPasswordField = (PasswordField) passwordSignUpContainer.getChildren().get(1);
-        signUpConfirmPasswordField = (PasswordField) confirmPasswordContainer.getChildren().get(1);
-
-        HBox rowOne = createFormRow(firstNameContainer, lastNameContainer);
-        HBox rowTwo = createFormRow(emailContainer, usernameSignUpContainer);
-        HBox rowThree = createFormRow(passwordSignUpContainer, confirmPasswordContainer);
+        // ===== FORM FIELDS WITH VALIDATION =====
+        VBox firstNameContainer = createInputFieldWithValidation("First Name", "firstName");
+        VBox lastNameContainer = createInputFieldWithValidation("Last Name", "lastName");
+        VBox emailContainer = createInputFieldWithValidation("Email Address", "email");
         
-        // Sign up button
+        signUpFirstNameField = (TextField) firstNameContainer.lookup("TextField");
+        signUpLastNameField = (TextField) lastNameContainer.lookup("TextField");
+        signUpEmailField = (TextField) emailContainer.lookup("TextField");
+        
+        // Setup validation listeners
+        setupNameValidation(signUpFirstNameField, firstNameContainer, "firstName");
+        setupNameValidation(signUpLastNameField, lastNameContainer, "lastName");
+        setupEmailValidation(signUpEmailField, emailContainer);
+        
+        // ===== PASSWORD FIELD WITH VALIDATION DISPLAY =====
+        VBox passwordFieldUI = createPasswordFieldWithValidation();
+        signUpPasswordField = (PasswordField) getNodeByStyle(passwordFieldUI, "-fx-is-password: true;");
+        if (signUpPasswordField == null) {
+            // Fallback: find first PasswordField
+            for (javafx.scene.Node n : passwordFieldUI.lookupAll("PasswordField")) {
+                signUpPasswordField = (PasswordField)n;
+                break;
+            }
+        }
+        
+        // ===== CONFIRM PASSWORD FIELD =====
+        VBox confirmPasswordContainer = createPasswordInputField("Confirm Password");
+        signUpConfirmPasswordField = (PasswordField) getPasswordFieldFromContainer(confirmPasswordContainer);
+        
+        HBox rowOne = createFormRow(firstNameContainer, lastNameContainer);
+        HBox rowTwo = createFormRow(emailContainer, new VBox()); // Empty space
+        rowTwo.getChildren().get(1).setStyle("-fx-min-width: 0; -fx-pref-width: 0;");
+        
+        // ===== SIGN UP BUTTON =====
         Button signUpSubmitButton = createSignUpSubmitButton();
         
-        // Back to login link
+        // ===== BACK TO LOGIN LINK =====
         Hyperlink backToLogin = new Hyperlink("Already have an account? Sign In");
         backToLogin.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
         backToLogin.setTextFill(Color.web(themeManager.getAccentHex()));
@@ -701,11 +716,199 @@ public class LoginView implements ViewInterface {
             headerWrap,
             rowOne,
             rowTwo,
-            rowThree,
-            signUpSubmitButton, backToLogin
+            passwordFieldUI,
+            confirmPasswordContainer,
+            signUpSubmitButton,
+            backToLogin
         );
         
         return container;
+    }
+    
+    private VBox createPasswordFieldWithValidation() {
+        VBox mainContainer = new VBox(10);
+        mainContainer.setStyle("-fx-padding: 0;");
+        
+        // Label
+        Text label = new Text("Password");
+        label.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        label.setFill(Color.web(ThemeManager.getInstance().isDarkMode() ? "#f8fafc" : "#0f172a"));
+        
+        // Password field with eye toggle
+        HBox passwordFieldContainer = new HBox(8);
+        passwordFieldContainer.setAlignment(Pos.CENTER_LEFT);
+        
+        PasswordField pwField = new PasswordField();
+        pwField.setPromptText("Create a strong password");
+        pwField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        pwField.setPrefHeight(46);
+        pwField.setMaxWidth(Double.MAX_VALUE);
+        applyAuthInputStyle(pwField, false);
+        pwField.focusedProperty().addListener((obs, oldVal, newVal) -> applyAuthInputStyle(pwField, newVal));
+        HBox.setHgrow(pwField, Priority.ALWAYS);
+        
+        // Eye toggle button
+        Button eyeToggle = createPasswordToggleButton(pwField);
+        eyeToggle.setPrefSize(40, 40);
+        eyeToggle.setStyle("-fx-background-color: transparent; -fx-text-fill: " + ThemeManager.getInstance().getAccentHex() + "; -fx-font-size: 16;");
+        
+        passwordFieldContainer.getChildren().addAll(pwField, eyeToggle);
+        
+        // Password requirements display  
+        VBox requirementsBox = createPasswordRequirementsDisplay(pwField);
+        
+        mainContainer.getChildren().addAll(label, passwordFieldContainer, requirementsBox);
+        
+        return mainContainer;
+    }
+    
+    private VBox createPasswordRequirementsDisplay(PasswordField pwField) {
+        VBox requirementsBox = new VBox(8);
+        requirementsBox.setStyle("-fx-padding: 12; -fx-background-color: rgba(255,255,255,0.03); -fx-border-radius: 8; -fx-background-radius: 8;");
+        
+        // Length requirement
+        HBox lengthReq = createRequirementRow("✓", "8+ characters");
+        lengthReq.setId("req-length");
+        lengthReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
+        
+        // Uppercase requirement
+        HBox uppercaseReq = createRequirementRow("✓", "Uppercase letter");
+        uppercaseReq.setId("req-uppercase");
+        uppercaseReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
+        
+        // Special character requirement
+        HBox specialReq = createRequirementRow("✓", "Special character");
+        specialReq.setId("req-special");
+        specialReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
+        
+        requirementsBox.getChildren().addAll(lengthReq, uppercaseReq, specialReq);
+        
+        // Add listener to update validation display
+        pwField.textProperty().addListener((obs, oldVal, newVal) -> {
+            updatePasswordRequirements(requirementsBox, newVal);
+        });
+        
+        return requirementsBox;
+    }
+    
+    private void updatePasswordRequirements(VBox requirementsBox, String password) {
+        boolean hasLength = password != null && password.length() >= 8;
+        boolean hasUppercase = password != null && password.matches(".*[A-Z].*");
+        boolean hasSpecial = password != null && password.matches(".*[!@#$%^&*(),.?\\\":{}|<>].*");
+        
+        updateRequirementStyle((HBox) requirementsBox.lookup("#req-length"), hasLength);
+        updateRequirementStyle((HBox) requirementsBox.lookup("#req-uppercase"), hasUppercase);
+        updateRequirementStyle((HBox) requirementsBox.lookup("#req-special"), hasSpecial);
+    }
+    
+    private void updateRequirementStyle(HBox reqBox, boolean met) {
+        if (reqBox != null) {
+            ThemeManager tm = ThemeManager.getInstance();
+            String color = met ? tm.getAccentHex() : "rgba(255,255,255,0.5)";
+            reqBox.setStyle("-fx-text-fill: " + color + ";");
+            // Update checkmark icon color
+            for (javafx.scene.Node node : reqBox.getChildren()) {
+                if (node instanceof Text) {
+                    ((Text)node).setFill(Color.web(color));
+                }
+            }
+        }
+    }
+    
+    private HBox createRequirementRow(String icon, String text) {
+        HBox row = new HBox(6);
+        row.setAlignment(Pos.CENTER_LEFT);
+        
+        Text iconText = new Text(icon);
+        iconText.setFont(Font.font(10));
+        iconText.setFill(Color.web("rgba(255,255,255,0.5)"));
+        
+        Text labelText = new Text(text);
+        labelText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        labelText.setFill(Color.web("rgba(255,255,255,0.6)"));
+        
+        row.getChildren().addAll(iconText, labelText);
+        return row;
+    }
+    
+    private Button createPasswordToggleButton(PasswordField pwField) {
+        Button btn = new Button("👁");
+        btn.setOnAction(e -> {
+            String currentText = pwField.getText();
+            TextField tempField = new TextField(currentText);
+            tempField.setPrefHeight(pwField.getPrefHeight());
+            tempField.setMaxWidth(Double.MAX_VALUE);
+            
+            // Toggle between PasswordField and TextField
+            Parent parent = pwField.getParent();
+            if (parent instanceof HBox) {
+                HBox container = (HBox) parent;
+                int index = container.getChildren().indexOf(pwField);
+                if (pwField.isVisible()) {
+                    // Show as text
+                    container.getChildren().set(index, tempField);
+                    applyAuthInputStyle(tempField, true);
+                    tempField.requestFocus();
+                } else {
+                    // Show as password
+                    container.getChildren().set(index, pwField);
+                    pwField.requestFocus();
+                }
+            }
+        });
+        return btn;
+    }
+    
+    private VBox createPasswordInputField(String label) {
+        VBox container = new VBox();
+        container.setSpacing(8);
+        container.setAlignment(Pos.CENTER_LEFT);
+        container.setMaxWidth(Double.MAX_VALUE);
+        
+        // Label
+        Text labelText = new Text(label);
+        labelText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        labelText.setFill(Color.web(ThemeManager.getInstance().isDarkMode() ? "#f8fafc" : "#0f172a"));
+        
+        // Password field with eye toggle
+        HBox passwordContainer = new HBox(8);
+        passwordContainer.setAlignment(Pos.CENTER_LEFT);
+        
+        PasswordField pwField = new PasswordField();
+        pwField.setPromptText(label);
+        pwField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        pwField.setPrefHeight(46);
+        pwField.setMaxWidth(Double.MAX_VALUE);
+        applyAuthInputStyle(pwField, false);
+        pwField.focusedProperty().addListener((obs, oldVal, newVal) -> applyAuthInputStyle(pwField, newVal));
+        HBox.setHgrow(pwField, Priority.ALWAYS);
+        
+        // Eye toggle
+        Button eyeToggle = createPasswordToggleButton(pwField);
+        eyeToggle.setPrefSize(40, 40);
+        eyeToggle.setStyle("-fx-background-color: transparent; -fx-text-fill: " + ThemeManager.getInstance().getAccentHex() + "; -fx-font-size: 16;");
+        
+        passwordContainer.getChildren().addAll(pwField, eyeToggle);
+        
+        container.getChildren().addAll(labelText, passwordContainer);
+        
+        return container;
+    }
+    
+    private javafx.scene.Node getNodeByStyle(javafx.scene.Parent parent, String stylePattern) {
+        for (javafx.scene.Node node : parent.lookupAll("*")) {
+            if (node instanceof PasswordField) {
+                return node;
+            }
+        }
+        return null;
+    }
+    
+    private PasswordField getPasswordFieldFromContainer(VBox container) {
+        for (javafx.scene.Node node : container.lookupAll("PasswordField")) {
+            return (PasswordField)node;
+        }
+        return null;
     }
     
     private VBox createForgotPasswordContainer() {
@@ -872,6 +1075,120 @@ public class LoginView implements ViewInterface {
         container.getChildren().addAll(labelContainer, inputField);
         
         return container;
+    }
+    
+    private VBox createInputFieldWithValidation(String placeholder, String fieldType) {
+        VBox container = new VBox();
+        container.setSpacing(4);
+        container.setAlignment(Pos.CENTER_LEFT);
+        container.setMaxWidth(Double.MAX_VALUE);
+        
+        // Label
+        Text label = new Text(placeholder);
+        label.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        label.setFill(Color.web(ThemeManager.getInstance().isDarkMode() ? "#f8fafc" : "#0f172a"));
+        
+        // Input field
+        TextField inputField = new TextField();
+        inputField.setPromptText(placeholder);
+        inputField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        inputField.setPrefHeight(46);
+        inputField.setMaxWidth(Double.MAX_VALUE);
+        applyAuthInputStyle(inputField, false);
+        inputField.focusedProperty().addListener((obs, oldVal, newVal) -> applyAuthInputStyle(inputField, newVal));
+        
+        // Validation message container
+        Text validationMessage = new Text("");
+        validationMessage.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        validationMessage.setFill(Color.web("#ff3b30")); // Error red by default
+        validationMessage.setVisible(false);
+        validationMessage.setManaged(false);
+        validationMessage.setId("validation-" + fieldType);
+        
+        container.getChildren().addAll(label, inputField, validationMessage);
+        
+        return container;
+    }
+    
+    private void setupNameValidation(TextField field, VBox container, String fieldType) {
+        Text validationMsg = (Text) container.lookup("#validation-" + fieldType);
+        
+        field.textProperty().addListener((obs, oldVal, newVal) -> {
+            String trimmed = newVal.trim();
+            boolean valid = true;
+            String message = "";
+            
+            if (trimmed.isEmpty()) {
+                valid = false;
+                message = fieldType.equals("firstName") ? "First name is required" : "Last name is required";
+            } else if (trimmed.length() < 2) {
+                valid = false;
+                message = "Must be at least 2 characters";
+            } else if (!trimmed.matches("^[a-zA-ZÀ-ÿ\\s-]+$")) {
+                valid = false;
+                message = "Only letters, spaces and hyphens allowed";
+            }
+            
+            // Update validation message
+            if (valid && !trimmed.isEmpty()) {
+                validationMsg.setVisible(false);
+                validationMsg.setManaged(false);
+                validationMsg.setFill(Color.web(ThemeManager.getInstance().getAccentHex()));
+                validationMsg.setText("✓");
+            } else if (!trimmed.isEmpty()) {
+                validationMsg.setVisible(true);
+                validationMsg.setManaged(true);
+                validationMsg.setFill(Color.web("#ff3b30"));
+                validationMsg.setText(message);
+            } else {
+                validationMsg.setVisible(false);
+                validationMsg.setManaged(false);
+            }
+        });
+    }
+    
+    private void setupEmailValidation(TextField field, VBox container) {
+        Text validationMsg = (Text) container.lookup("#validation-email");
+        
+        field.textProperty().addListener((obs, oldVal, newVal) -> {
+            String trimmed = newVal.trim().toLowerCase();
+            boolean valid = true;
+            String message = "";
+            
+            if (trimmed.isEmpty()) {
+                valid = false;
+                message = "Email is required";
+            } else if (!trimmed.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+                valid = false;
+                message = "Invalid email format";
+            }
+            
+            // Check if email already exists (basic check)
+            if (valid && !trimmed.isEmpty()) {
+                java.util.Optional<com.syndicati.models.entities.User> existing = 
+                    new com.syndicati.models.services.UserService().findByEmail(trimmed);
+                if (existing.isPresent()) {
+                    valid = false;
+                    message = "Email already registered";
+                }
+            }
+            
+            // Update validation message
+            if (valid && !trimmed.isEmpty()) {
+                validationMsg.setVisible(true);
+                validationMsg.setManaged(true);
+                validationMsg.setFill(Color.web(ThemeManager.getInstance().getAccentHex()));
+                validationMsg.setText("✓");
+            } else if (!trimmed.isEmpty()) {
+                validationMsg.setVisible(true);
+                validationMsg.setManaged(true);
+                validationMsg.setFill(Color.web("#ff3b30"));
+                validationMsg.setText(message);
+            } else {
+                validationMsg.setVisible(false);
+                validationMsg.setManaged(false);
+            }
+        });
     }
     
     private Button createLoginButton() {
