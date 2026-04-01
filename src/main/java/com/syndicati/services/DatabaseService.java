@@ -1,5 +1,10 @@
 package com.syndicati.services;
 
+import com.syndicati.utils.config.EnvConfig;
+
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -17,10 +22,11 @@ public class DatabaseService {
     private int connectionTimeout;
     
     private DatabaseService() {
-        // Initialize with pidev database
-        this.dbUrl = "jdbc:mysql://localhost:3306/pidev";
-        this.dbUser = "root";
-        this.dbPassword = ""; // Empty password works for MySQL connection
+        // Initialize from DATABASE_URL when available.
+        DbConfig cfg = parseDatabaseConfig(EnvConfig.get("DATABASE_URL"));
+        this.dbUrl = cfg.jdbcUrl;
+        this.dbUser = cfg.username;
+        this.dbPassword = cfg.password;
         this.connectionTimeout = 5000; // 5 seconds - longer timeout for debugging
     }
     
@@ -61,10 +67,11 @@ public class DatabaseService {
             props.setProperty("useSSL", "false");
             props.setProperty("allowPublicKeyRetrieval", "true");
             props.setProperty("serverTimezone", "UTC");
+            props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
             
             try (Connection connection = DriverManager.getConnection(dbUrl, props)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("âœ… Database connection successful to pidev database!");
+                    System.out.println("âœ… Database connection successful!");
                     return true;
                 }
             }
@@ -94,11 +101,11 @@ public class DatabaseService {
     private boolean testConnectionWithoutDatabase() {
         System.out.println("--- Testing connection to MySQL server (no database) ---");
         try {
-            String serverUrl = "jdbc:mysql://localhost:3306/";
+            String serverUrl = "jdbc:mysql://" + extractHostPort(dbUrl) + "/";
             try (Connection connection = DriverManager.getConnection(serverUrl, dbUser, dbPassword)) {
                 if (connection != null && !connection.isClosed()) {
                     System.out.println("âœ… MySQL server connection successful!");
-                    System.out.println("   Server is running, but pidev database might not exist or be accessible");
+                    System.out.println("   Server is running, but configured database might not exist or be accessible");
                     return false; // Still return false since we need the specific database
                 }
             }
@@ -110,65 +117,7 @@ public class DatabaseService {
     }
     
     private boolean testCommonConfigurations() {
-        System.out.println("--- Testing common MySQL configurations ---");
-        
-        // Test different ports and configurations
-        String[] testConfigs = {
-            "jdbc:mysql://localhost:3306/pidev",
-            "jdbc:mysql://127.0.0.1:3306/pidev",
-            "jdbc:mysql://localhost:3307/pidev", // Common alternative port
-            "jdbc:mysql://localhost:3306/pidev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
-            "jdbc:mysql://localhost:3306/pidev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8"
-        };
-        
-        for (String testUrl : testConfigs) {
-            System.out.println("   Testing: " + testUrl);
-            try {
-                Properties props = new Properties();
-                props.setProperty("user", dbUser);
-                props.setProperty("password", dbPassword);
-                props.setProperty("connectTimeout", "3000");
-                props.setProperty("socketTimeout", "3000");
-                
-                try (Connection connection = DriverManager.getConnection(testUrl, props)) {
-                    if (connection != null && !connection.isClosed()) {
-                        System.out.println("âœ… SUCCESS with URL: " + testUrl);
-                        // Update our working URL
-                        this.dbUrl = testUrl;
-                        return true;
-                    }
-                }
-            } catch (SQLException e) {
-                System.out.println("   âŒ Failed: " + e.getMessage());
-            }
-        }
-        
-        // Test with different user/password combinations
-        System.out.println("--- Testing different authentication ---");
-        String[][] authTests = {
-            {"root", ""},
-            {"root", "root"},
-            {"root", "password"},
-            {"root", "123456"},
-            {"", ""}
-        };
-        
-        for (String[] auth : authTests) {
-            System.out.println("   Testing user: '" + auth[0] + "', password: '" + (auth[1].isEmpty() ? "[empty]" : "[set]") + "'");
-            try {
-                try (Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/pidev", auth[0], auth[1])) {
-                    if (connection != null && !connection.isClosed()) {
-                        System.out.println("âœ… SUCCESS with user: " + auth[0]);
-                        this.dbUser = auth[0];
-                        this.dbPassword = auth[1];
-                        return true;
-                    }
-                }
-            } catch (SQLException e) {
-                System.out.println("   âŒ Failed: " + e.getMessage());
-            }
-        }
-        
+        System.out.println("--- Using configured DATABASE_URL only (no schema fallback) ---");
         return false;
     }
     
@@ -184,6 +133,7 @@ public class DatabaseService {
             props.setProperty("connectTimeout", String.valueOf(connectionTimeout));
             props.setProperty("socketTimeout", String.valueOf(connectionTimeout));
             props.setProperty("autoReconnect", "true");
+            props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
             
             return DriverManager.getConnection(dbUrl, props);
         } catch (SQLException e) {
@@ -231,6 +181,82 @@ public class DatabaseService {
     
     public void setConnectionTimeout(int connectionTimeout) {
         this.connectionTimeout = connectionTimeout;
+    }
+
+    private static DbConfig parseDatabaseConfig(String databaseUrl) {
+        String fallbackJdbc = "jdbc:mysql://127.0.0.1:3306/syndicati?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&zeroDateTimeBehavior=CONVERT_TO_NULL";
+        if (databaseUrl == null || databaseUrl.isBlank()) {
+            return new DbConfig(fallbackJdbc, "root", "");
+        }
+
+        try {
+            URI uri = URI.create(databaseUrl);
+            String userInfo = uri.getUserInfo();
+            String username = "root";
+            String password = "";
+
+            if (userInfo != null && !userInfo.isBlank()) {
+                String[] parts = userInfo.split(":", 2);
+                username = decode(parts[0]);
+                if (parts.length > 1) {
+                    password = decode(parts[1]);
+                }
+            }
+
+            String host = uri.getHost() == null ? "127.0.0.1" : uri.getHost();
+            int port = uri.getPort() > 0 ? uri.getPort() : 3306;
+            String path = uri.getPath() == null ? "/syndicati" : uri.getPath();
+            String dbName = path.startsWith("/") ? path.substring(1) : path;
+            if (dbName.isBlank()) {
+                dbName = "syndicati";
+            }
+
+            String query = uri.getQuery();
+            StringBuilder jdbc = new StringBuilder("jdbc:mysql://")
+                .append(host)
+                .append(":")
+                .append(port)
+                .append("/")
+                .append(dbName);
+
+            if (query != null && !query.isBlank()) {
+                jdbc.append("?").append(query);
+                if (!query.contains("zeroDateTimeBehavior=")) {
+                    jdbc.append("&zeroDateTimeBehavior=CONVERT_TO_NULL");
+                }
+            } else {
+                jdbc.append("?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&zeroDateTimeBehavior=CONVERT_TO_NULL");
+            }
+
+            return new DbConfig(jdbc.toString(), username, password);
+        } catch (Exception ex) {
+            return new DbConfig(fallbackJdbc, "root", "");
+        }
+    }
+
+    private static String decode(String value) {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8);
+    }
+
+    private String extractHostPort(String jdbcUrl) {
+        String cleaned = jdbcUrl.replace("jdbc:mysql://", "");
+        int slashIndex = cleaned.indexOf('/');
+        if (slashIndex > 0) {
+            return cleaned.substring(0, slashIndex);
+        }
+        return "127.0.0.1:3306";
+    }
+
+    private static class DbConfig {
+        private final String jdbcUrl;
+        private final String username;
+        private final String password;
+
+        private DbConfig(String jdbcUrl, String username, String password) {
+            this.jdbcUrl = jdbcUrl;
+            this.username = username;
+            this.password = password;
+        }
     }
 }
 

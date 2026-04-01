@@ -1,18 +1,18 @@
 package com.syndicati.utils.navigation;
 
 import javafx.scene.layout.Pane;
-import com.syndicati.views.home.LandingPageView;
-import com.syndicati.views.services.ServicesView;
-import com.syndicati.views.about.AboutView;
-import com.syndicati.views.profile.ProfileView;
-import com.syndicati.views.dashboard.DashboardView;
-import com.syndicati.views.services.ServiceDetailView;
-import com.syndicati.views.about.AboutDetailView;
-import com.syndicati.views.settings.SettingsView;
-import com.syndicati.views.services.ResidencePageView;
-import com.syndicati.views.services.ForumPageView;
-import com.syndicati.views.services.SyndicatPageView;
-import com.syndicati.views.services.EvenementPageView;
+import com.syndicati.views.frontend.home.LandingPageView;
+import com.syndicati.views.frontend.services.ServicesView;
+import com.syndicati.views.frontend.about.AboutView;
+import com.syndicati.views.frontend.profile.ProfileView;
+import com.syndicati.views.backend.dashboard.DashboardView;
+import com.syndicati.views.frontend.services.ServiceDetailView;
+import com.syndicati.views.frontend.about.AboutDetailView;
+import com.syndicati.views.frontend.settings.SettingsView;
+import com.syndicati.views.frontend.services.ResidencePageView;
+import com.syndicati.views.frontend.services.ForumPageView;
+import com.syndicati.views.frontend.services.SyndicatPageView;
+import com.syndicati.views.frontend.services.EvenementPageView;
 
 /**
  * Navigation Manager - Handles page navigation and sub-menu management

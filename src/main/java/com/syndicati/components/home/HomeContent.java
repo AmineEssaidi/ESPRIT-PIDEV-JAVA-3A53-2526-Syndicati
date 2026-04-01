@@ -190,9 +190,9 @@ public class HomeContent {
         card.setMaxWidth(Double.MAX_VALUE);
         card.setPadding(new Insets(12));
         card.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.05);" +
+            "-fx-background-color: " + cardSurface() + ";" +
             "-fx-background-radius: 24px;" +
-            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-color: " + cardBorder() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 24px;"
         );
@@ -435,9 +435,9 @@ public class HomeContent {
         card.setPadding(new Insets(28));
         card.setMaxWidth(Double.MAX_VALUE);
         card.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.02);" +
+            "-fx-background-color: " + cardSurfaceSoft() + ";" +
             "-fx-background-radius: 36px;" +
-            "-fx-border-color: " + theme.toRgba(theme.getAccentHex(), 0.15) + ";" +
+            "-fx-border-color: " + cardBorder() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 36px;"
         );
@@ -691,10 +691,10 @@ public class HomeContent {
         btn.setFont(Font.font(boldFont(), FontWeight.BOLD, 14));
         btn.setFocusTraversable(false);
         btn.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.05);" +
+            "-fx-background-color: " + secondaryButtonBg() + ";" +
             "-fx-text-fill: " + theme.getTextColor() + ";" +
             "-fx-background-radius: 20px;" +
-            "-fx-border-color: " + theme.toRgba(theme.getAccentHex(), 0.22) + ";" +
+            "-fx-border-color: " + secondaryButtonBorder() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 20px;" +
             "-fx-padding: 16 30 16 30;" +
@@ -733,6 +733,26 @@ public class HomeContent {
             "-fx-border-color: transparent;" +
             "-fx-border-width: 0;" +
             "-fx-border-radius: " + radius + "px;";
+    }
+
+    private String cardSurface() {
+        return theme.isDarkMode() ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.95)";
+    }
+
+    private String cardSurfaceSoft() {
+        return theme.isDarkMode() ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.92)";
+    }
+
+    private String cardBorder() {
+        return theme.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.14)";
+    }
+
+    private String secondaryButtonBg() {
+        return theme.isDarkMode() ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.92)";
+    }
+
+    private String secondaryButtonBorder() {
+        return theme.isDarkMode() ? theme.toRgba(theme.getAccentHex(), 0.22) : "rgba(15,23,42,0.20)";
     }
 
     private void addHoverLift(Region node, double translateY, double scale) {

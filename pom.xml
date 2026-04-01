@@ -59,6 +59,20 @@
             <artifactId>okhttp</artifactId>
             <version>4.9.0</version>
         </dependency>
+
+        <!-- Password hashing/verification (compatible with Symfony bcrypt hashes) -->
+        <dependency>
+            <groupId>org.mindrot</groupId>
+            <artifactId>jbcrypt</artifactId>
+            <version>0.4</version>
+        </dependency>
+
+        <!-- SMTP mail sending -->
+        <dependency>
+            <groupId>com.sun.mail</groupId>
+            <artifactId>jakarta.mail</artifactId>
+            <version>2.0.1</version>
+        </dependency>
         
         <!-- Testing -->
         <dependency>

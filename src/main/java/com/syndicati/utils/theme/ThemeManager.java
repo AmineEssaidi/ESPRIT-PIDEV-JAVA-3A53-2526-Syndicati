@@ -202,7 +202,9 @@ public class ThemeManager {
 
     // â”€â”€ Change listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void addAccentChangeListener(Runnable listener) {
-        accentChangeListeners.add(listener);
+        if (listener != null && !accentChangeListeners.contains(listener)) {
+            accentChangeListeners.add(listener);
+        }
     }
 
     public void removeAccentChangeListener(Runnable listener) {
@@ -210,7 +212,14 @@ public class ThemeManager {
     }
 
     private void notifyAccentListeners() {
-        accentChangeListeners.forEach(Runnable::run);
+        List<Runnable> snapshot = new ArrayList<>(accentChangeListeners);
+        for (Runnable listener : snapshot) {
+            try {
+                listener.run();
+            } catch (Exception ex) {
+                System.err.println("ThemeManager listener error: " + ex.getMessage());
+            }
+        }
     }
     
     public BooleanProperty isDarkModeProperty() {
