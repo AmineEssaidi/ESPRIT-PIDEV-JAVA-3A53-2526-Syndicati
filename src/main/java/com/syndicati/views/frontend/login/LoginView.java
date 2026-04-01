@@ -1523,12 +1523,20 @@ public class LoginView implements ViewInterface {
     }
     
     private void handleSignUp() {
-        String firstName = signUpFirstNameField == null ? "" : signUpFirstNameField.getText();
-        String lastName = signUpLastNameField == null ? "" : signUpLastNameField.getText();
-        String email = signUpEmailField == null ? "" : signUpEmailField.getText();
+        String firstName = signUpFirstNameField == null ? "" : signUpFirstNameField.getText().trim();
+        String lastName = signUpLastNameField == null ? "" : signUpLastNameField.getText().trim();
+        String email = signUpEmailField == null ? "" : signUpEmailField.getText().trim().toLowerCase();
         String password = signUpPasswordField == null ? "" : signUpPasswordField.getText();
         String confirmPassword = signUpConfirmPasswordField == null ? "" : signUpConfirmPasswordField.getText();
 
+        // Perform client-side validation
+        java.util.List<String> validationErrors = validateSignUpForm(firstName, lastName, email, password, confirmPassword);
+        if (!validationErrors.isEmpty()) {
+            showValidationErrorPopup(validationErrors);
+            return;
+        }
+
+        // All validations passed, proceed with signup
         AuthController.AuthResult result = authController.signUp(firstName, lastName, email, password, confirmPassword);
         if (!result.isSuccess()) {
             showErrorMessage(result.getMessage());
@@ -1566,6 +1574,191 @@ public class LoginView implements ViewInterface {
         }
 
         switchToLogin();
+    }
+    
+    private java.util.List<String> validateSignUpForm(String firstName, String lastName, String email, String password, String confirmPassword) {
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        
+        // First Name validation
+        if (firstName.isEmpty()) {
+            errors.add("First name is required");
+        } else if (firstName.length() < 2) {
+            errors.add("First name must be at least 2 characters");
+        } else if (!firstName.matches("^[a-zA-ZÀ-ÿ\\s-]+$")) {
+            errors.add("First name can only contain letters, spaces and hyphens");
+        }
+        
+        // Last Name validation
+        if (lastName.isEmpty()) {
+            errors.add("Last name is required");
+        } else if (lastName.length() < 2) {
+            errors.add("Last name must be at least 2 characters");
+        } else if (!lastName.matches("^[a-zA-ZÀ-ÿ\\s-]+$")) {
+            errors.add("Last name can only contain letters, spaces and hyphens");
+        }
+        
+        // Email validation
+        if (email.isEmpty()) {
+            errors.add("Email address is required");
+        } else if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            errors.add("Please enter a valid email address");
+        } else {
+            // Check for duplicate email
+            java.util.Optional<com.syndicati.models.entities.User> existing = 
+                new com.syndicati.models.services.UserService().findByEmail(email);
+            if (existing.isPresent()) {
+                errors.add("Email is already registered");
+            }
+        }
+        
+        // Password validation
+        if (password.isEmpty()) {
+            errors.add("Password is required");
+        } else if (password.length() < 8) {
+            errors.add("Password must be at least 8 characters");
+        } else {
+            if (!password.matches(".*[A-Z].*")) {
+                errors.add("Password must contain at least one uppercase letter");
+            }
+            if (!password.matches(".*[!@#$%^&*(),.?\":{}|<>].*")) {
+                errors.add("Password must contain at least one special character");
+            }
+        }
+        
+        // Confirm password validation
+        if (confirmPassword.isEmpty()) {
+            errors.add("Confirm password is required");
+        } else if (!password.equals(confirmPassword)) {
+            errors.add("Password confirmation does not match");
+        }
+        
+        return errors;
+    }
+    
+    private void showValidationErrorPopup(java.util.List<String> errors) {
+        // Create popup overlay
+        StackPane popupOverlay = new StackPane();
+        popupOverlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.5);");
+        popupOverlay.setPrefSize(root.getWidth(), root.getHeight());
+        
+        // Create popup card with glassmorphism effect
+        VBox popupCard = new VBox(12);
+        popupCard.setStyle(
+            "-fx-background-color: rgba(10, 10, 10, 0.85);" +
+            "-fx-background-radius: 16px;" +
+            "-fx-border-color: " + ThemeManager.getInstance().toRgba(ThemeManager.getInstance().getAccentHex(), 0.3) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 16px;" +
+            "-fx-padding: 20px;"
+        );
+        popupCard.setPrefWidth(400);
+        popupCard.setMaxWidth(400);
+        popupCard.setMinWidth(400);
+        popupCard.setMaxHeight(Region.USE_PREF_SIZE);
+        popupCard.setAlignment(Pos.TOP_CENTER);
+        
+        // Add glassmorphism shadow
+        DropShadow shadow = new DropShadow();
+        shadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        shadow.setColor(Color.color(0, 0, 0, 0.4));
+        shadow.setRadius(20);
+        shadow.setOffsetY(8);
+        popupCard.setEffect(shadow);
+        
+        // Title
+        Text title = new Text("Missing Information");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 18));
+        title.setFill(Color.web("#ff3b30"));
+        
+        // Errors list
+        VBox errorsList = new VBox(8);
+        errorsList.setStyle("-fx-padding: 4px 0;");
+        errorsList.setMaxHeight(Region.USE_PREF_SIZE);
+        
+        for (String error : errors) {
+            HBox errorItem = new HBox(10);
+            errorItem.setAlignment(Pos.TOP_LEFT);
+            errorItem.setStyle("-fx-padding: 0;");
+            
+            Text bullet = new Text("✕");
+            bullet.setFont(Font.font(14));
+            bullet.setFill(Color.web("#ff3b30"));
+            
+            Text errorText = new Text(error);
+            errorText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
+            errorText.setFill(Color.web("#cbd5e1"));
+            errorText.setWrappingWidth(330);
+            
+            errorItem.getChildren().addAll(bullet, errorText);
+            errorsList.getChildren().add(errorItem);
+        }
+        
+        // Dismiss button
+        Button dismissButton = new Button("Got it");
+        dismissButton.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        dismissButton.setPrefHeight(38);
+        dismissButton.setMaxWidth(Double.MAX_VALUE);
+        dismissButton.setStyle(
+            "-fx-background-color: " + ThemeManager.getInstance().getAccentHex() + ";" +
+            "-fx-background-radius: 8px;" +
+            "-fx-text-fill: white;" +
+            "-fx-cursor: hand;" +
+            "-fx-font-weight: bold;"
+        );
+        
+        dismissButton.setOnMouseEntered(e -> dismissButton.setStyle(
+            "-fx-background-color: " + ThemeManager.getInstance().toRgba(
+                ThemeManager.getInstance().getAccentHex(), 0.85) + ";" +
+            "-fx-background-radius: 8px;" +
+            "-fx-text-fill: white;" +
+            "-fx-cursor: hand;" +
+            "-fx-font-weight: bold;"
+        ));
+        
+        dismissButton.setOnMouseExited(e -> dismissButton.setStyle(
+            "-fx-background-color: " + ThemeManager.getInstance().getAccentHex() + ";" +
+            "-fx-background-radius: 8px;" +
+            "-fx-text-fill: white;" +
+            "-fx-cursor: hand;" +
+            "-fx-font-weight: bold;"
+        ));
+        
+        // Add all content to card
+        popupCard.getChildren().addAll(
+            title,
+            errorsList,
+            dismissButton
+        );
+        
+        // Center the popup card in overlay
+        popupOverlay.getChildren().add(popupCard);
+        StackPane.setAlignment(popupCard, Pos.CENTER);
+        
+        // Add overlay to root
+        root.getChildren().add(popupOverlay);
+        
+        // Fade in animation
+        javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(200), popupOverlay);
+        fadeIn.setFromValue(0);
+        fadeIn.setToValue(1);
+        
+        // Scale animation for popup card
+        javafx.animation.ScaleTransition scaleIn = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(200), popupCard);
+        scaleIn.setFromX(0.85);
+        scaleIn.setFromY(0.85);
+        scaleIn.setToX(1.0);
+        scaleIn.setToY(1.0);
+        
+        // Dismiss button click handler
+        dismissButton.setOnAction(e -> {
+            javafx.animation.FadeTransition fadeOut = new javafx.animation.FadeTransition(javafx.util.Duration.millis(150), popupOverlay);
+            fadeOut.setFromValue(1);
+            fadeOut.setToValue(0);
+            fadeOut.setOnFinished(ev -> root.getChildren().remove(popupOverlay));
+            fadeOut.play();
+        });
+        
+        new javafx.animation.ParallelTransition(fadeIn, scaleIn).play();
     }
     
     private void handleForgotPassword() {
