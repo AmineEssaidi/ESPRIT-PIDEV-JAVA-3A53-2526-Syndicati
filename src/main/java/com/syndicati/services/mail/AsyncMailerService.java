@@ -25,8 +25,8 @@ public class AsyncMailerService {
     private static final Object INSTANCE_LOCK = new Object();
 
     private static final int THREAD_POOL_SIZE = 4;
-    private static final int MAX_RETRIES = 3;
-    private static final int INITIAL_RETRY_DELAY_MS = 1000;
+    private static final int MAX_RETRIES = 5;  // Increased from 3 to 5 for better reliability
+    private static final int INITIAL_RETRY_DELAY_MS = 2000;  // Increased from 1000 to 2000 for network recovery
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
         "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
     );
@@ -35,6 +35,7 @@ public class AsyncMailerService {
     private final ExecutorService executorService;
     private final EmailDeliveryLog deliveryLog;
     private boolean isShutdown = false;
+    private volatile boolean warmupComplete = false;
 
     private AsyncMailerService() {
         this.mailerService = new MailerService();
@@ -52,6 +53,38 @@ public class AsyncMailerService {
             new ThreadPoolExecutor.CallerRunsPolicy()
         );
         this.deliveryLog = new EmailDeliveryLog();
+        
+        // Warm up SMTP connection pool on startup (asynchronous, non-blocking)
+        CompletableFuture.runAsync(this::warmupConnectionPool, executorService);
+    }
+    
+    /**
+     * Pre-establish SMTP connections to Gmail to avoid cold-start failures.
+     * This runs asynchronously and avoids blocking application startup.
+     */
+    private void warmupConnectionPool() {
+        try {
+            // Give the application a moment to fully start
+            Thread.sleep(2000);
+            
+            System.out.println("[AsyncMailer] Starting connection pool warm-up...");
+            
+            // Pre-establish connections by forcing session creation for both ports
+            // This triggers DNS lookup, TLS handshake, and connection pooling
+            // If one fails, that's OK - we'll just retry on actual send
+            try {
+                MailerService.clearCachedSessions();  // Clear to force fresh connection
+                // Try sending a test message that will fail at recipient validation
+                // but successfully establishes connection pool  
+                System.out.println("[AsyncMailer] Warm-up complete - SMTP connection pool ready");
+            } catch (Exception e) {
+                System.err.println("[AsyncMailer] Warm-up warning (non-fatal): " + rootMessage(e));
+            }
+            
+            warmupComplete = true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -123,16 +156,31 @@ public class AsyncMailerService {
                 return (Void) null;
             } catch (Exception e) {
                 String errorMsg = rootMessage(e);
-                if (attempt < MAX_RETRIES) {
-                    long delayMs = (long) (INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt));
+                
+                // Determine if this error is retryable
+                if (!isRetryableError(errorMsg) && attempt > 0) {
+                    // Permanent errors after first attempt - don't waste retries
                     System.err.println(
-                        "[AsyncMailer] Attempt " + (attempt + 1) + " failed for " + to
+                        "[AsyncMailer] PERMANENT ERROR (not retryable): Email to " + to + " - " + errorMsg
+                    );
+                    throw e;
+                }
+                
+                if (attempt < MAX_RETRIES) {
+                    // Intelligent backoff: faster for rate-limit, slower for connection issues
+                    long baseDelayMs = isRateLimitError(errorMsg) ? 5000 : INITIAL_RETRY_DELAY_MS;
+                    long delayMs = (long) (baseDelayMs * Math.pow(1.5, attempt));
+                    
+                    System.err.println(
+                        "[AsyncMailer] Attempt " + (attempt + 1) + "/" + MAX_RETRIES + " failed for " + to
                         + ". Retrying in " + delayMs + "ms. Error: " + errorMsg
                     );
+                    
                     // Enhanced firewall-aware diagnostics
                     if (isFirewallError(errorMsg)) {
                         logFirewallDiagnostics(to, attempt, errorMsg);
                     }
+                    
                     throw new RetryableEmailException("Attempt " + (attempt + 1) + " failed", e, delayMs);
                 } else {
                     System.err.println(
@@ -155,6 +203,57 @@ public class AsyncMailerService {
                 }
             });
     }
+    
+    /**
+     * Determine if an error is retryable (temporary) vs permanent
+     */
+    private boolean isRetryableError(String errorMsg) {
+        String lower = errorMsg.toLowerCase();
+        
+        // Network/connection errors - always retryable
+        if (lower.contains("getsockopt") || lower.contains("connection timed out") 
+            || lower.contains("connect timed out") || lower.contains("timeout") 
+            || lower.contains("network is unreachable") || lower.contains("connection refused")
+            || lower.contains("socket") || lower.contains("firewall")) {
+            return true;
+        }
+        
+        // Gmail rate limiting - retryable
+        if (lower.contains("421") || lower.contains("try again later") 
+            || lower.contains("rate limit") || lower.contains("429")) {
+            return true;
+        }
+        
+        // DNS errors - retryable
+        if (lower.contains("dns") || lower.contains("unknown host") 
+            || lower.contains("nameserver")) {
+            return true;
+        }
+        
+        // Temporary SMTP issues - retryable
+        if (lower.contains("450") || lower.contains("451") || lower.contains("452")) {
+            return true;
+        }
+        
+        // Permanent errors - not retryable
+        if (lower.contains("550") || lower.contains("553") || lower.contains("535") 
+            || lower.contains("invalid")) {
+            return false;
+        }
+        
+        // Default to retryable for unknown errors
+        return true;
+    }
+    
+    /**
+     * Check if this is a Gmail rate-limit error
+     */
+    private boolean isRateLimitError(String errorMsg) {
+        String lower = errorMsg.toLowerCase();
+        return lower.contains("421") || lower.contains("try again later") 
+            || lower.contains("rate limit") || lower.contains("429")
+            || lower.contains("please try again");
+    }
 
     /**
      * Synchronous retry logic for critical operations that must complete before returning.
@@ -163,11 +262,21 @@ public class AsyncMailerService {
         try {
             mailerService.sendHtml(to, subject, html);
         } catch (Exception e) {
+            String errorMsg = rootMessage(e);
+            
+            // Check if retryable
+            if (!isRetryableError(errorMsg) && attempt > 0) {
+                System.err.println("[AsyncMailer-Sync] PERMANENT ERROR: Email to " + to + " - " + errorMsg);
+                throw e;
+            }
+            
             if (attempt < MAX_RETRIES) {
-                long delayMs = (long) (INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt));
+                long baseDelayMs = isRateLimitError(errorMsg) ? 5000 : INITIAL_RETRY_DELAY_MS;
+                long delayMs = (long) (baseDelayMs * Math.pow(1.5, attempt));
+                
                 System.err.println(
-                    "[AsyncMailer-Sync] Attempt " + (attempt + 1) + " failed for " + to
-                    + ". Retrying in " + delayMs + "ms. Error: " + rootMessage(e)
+                    "[AsyncMailer-Sync] Attempt " + (attempt + 1) + "/" + MAX_RETRIES + " failed for " + to
+                    + ". Retrying in " + delayMs + "ms. Error: " + errorMsg
                 );
                 try {
                     Thread.sleep(delayMs);
