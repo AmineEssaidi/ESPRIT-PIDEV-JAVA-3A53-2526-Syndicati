@@ -2,10 +2,12 @@ package com.syndicati.controllers.biometric;
 
 import com.syndicati.models.entities.biometric.FaceCredential;
 import com.syndicati.models.entities.User;
+import com.syndicati.models.repositories.FaceCredentialRepository;
 import com.syndicati.services.security.FaceEncryptionService;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.models.services.UserService;
 
+import java.net.InetAddress;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,14 +23,15 @@ import java.util.Optional;
 public class FaceController {
 
     private static final double DISTANCE_THRESHOLD = 0.5;
+    private String cachedDeviceId;
     private final FaceEncryptionService encryptionService;
     private final UserService userService;
-    private final List<FaceCredential> faceCredentialStorage; // In-memory storage (replace with DB)
+    private final FaceCredentialRepository faceCredentialRepository;
 
     public FaceController() {
         this.encryptionService = new FaceEncryptionService();
         this.userService = new UserService();
-        this.faceCredentialStorage = new ArrayList<>();
+        this.faceCredentialRepository = new FaceCredentialRepository();
     }
 
     /**
@@ -43,9 +46,11 @@ public class FaceController {
         Map<String, Object> response = new HashMap<>();
 
         try {
+            String resolvedDeviceId = normalizeDeviceId(deviceId);
+
             // Validate request
-            if (embedding == null || pin == null || deviceId == null) {
-                response.put("error", "Missing required data: embedding, pin, deviceId");
+            if (embedding == null || pin == null) {
+                response.put("error", "Missing required data: embedding, pin");
                 return response;
             }
 
@@ -71,18 +76,23 @@ public class FaceController {
             byte[] encryptedData = encryptionService.encrypt(embeddingJson, key);
 
             // Check if device already has a credential
-            FaceCredential credential = findActiveForUserAndDevice(currentUser.getIdUser(), deviceId);
-
-            if (credential == null) {
+            Optional<FaceCredential> existingOpt = faceCredentialRepository.findActiveByUserAndDevice(currentUser.getIdUser(), resolvedDeviceId);
+            
+            FaceCredential credential;
+            if (existingOpt.isPresent()) {
+                credential = existingOpt.get();
+            } else {
                 credential = new FaceCredential();
                 credential.setUserId(currentUser.getIdUser());
-                credential.setDeviceId(deviceId);
-                faceCredentialStorage.add(credential);
+                credential.setDeviceId(resolvedDeviceId);
             }
 
             credential.setEncryptedFaceid(encryptedData);
             credential.setUpdatedAt(LocalDateTime.now());
             credential.setFlag("active");
+            
+            // Save to persistent database
+            faceCredentialRepository.save(credential);
 
             response.put("status", "ok");
             response.put("message", "Face enrolled successfully");
@@ -107,9 +117,11 @@ public class FaceController {
         Map<String, Object> response = new HashMap<>();
 
         try {
+            String resolvedDeviceId = normalizeDeviceId(deviceId);
+
             // Validate request
-            if (email == null || embedding == null || pin == null || deviceId == null) {
-                response.put("error", "Missing required data: email, embedding, pin, deviceId");
+            if (email == null || embedding == null || pin == null) {
+                response.put("error", "Missing required data: email, embedding, pin");
                 return response;
             }
 
@@ -133,7 +145,7 @@ public class FaceController {
             }
 
             // Find enrolled credential for this device
-            FaceCredential credential = findActiveForUserAndDevice(user.getIdUser(), deviceId);
+            FaceCredential credential = findActiveForUserAndDevice(user.getIdUser(), resolvedDeviceId);
             if (credential == null || credential.getEncryptedFaceid() == null) {
                 response.put("error", "No FaceID enrolled for this device");
                 return response;
@@ -186,12 +198,8 @@ public class FaceController {
      * In production, this would query the database
      */
     private FaceCredential findActiveForUserAndDevice(Integer userId, String deviceId) {
-        return faceCredentialStorage.stream()
-            .filter(cred -> cred.getUserId().equals(userId) 
-                && cred.getDeviceId().equals(deviceId) 
-                && cred.isActive())
-            .findFirst()
-            .orElse(null);
+        Optional<FaceCredential> credentialOpt = faceCredentialRepository.findActiveByUserAndDevice(userId, deviceId);
+        return credentialOpt.orElse(null);
     }
 
     /**
@@ -200,13 +208,16 @@ public class FaceController {
     public Map<String, Object> disableFace(Integer userId, String deviceId) {
         Map<String, Object> response = new HashMap<>();
 
-        FaceCredential credential = findActiveForUserAndDevice(userId, deviceId);
+        FaceCredential credential = findActiveForUserAndDevice(userId, normalizeDeviceId(deviceId));
         if (credential == null) {
             response.put("error", "Credential not found");
             return response;
         }
 
         credential.setFlag("inactive");
+        credential.setUpdatedAt(LocalDateTime.now());
+        faceCredentialRepository.save(credential);
+        
         response.put("status", "ok");
         response.put("message", "FaceID disabled successfully");
         return response;
@@ -217,17 +228,16 @@ public class FaceController {
      */
     public List<Map<String, Object>> listUserFaceCredentials(Integer userId) {
         List<Map<String, Object>> list = new ArrayList<>();
+        List<FaceCredential> credentials = faceCredentialRepository.findAllActiveByUser(userId);
 
-        for (FaceCredential cred : faceCredentialStorage) {
-            if (cred.getUserId().equals(userId)) {
-                Map<String, Object> item = new HashMap<>();
-                item.put("id", cred.getIdFacecred());
-                item.put("deviceId", cred.getDeviceId());
-                item.put("flag", cred.getFlag());
-                item.put("createdAt", cred.getCreatedAt());
-                item.put("lastUsedAt", cred.getLastUsedAt());
-                list.add(item);
-            }
+        for (FaceCredential cred : credentials) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", cred.getIdFacecred());
+            item.put("deviceId", cred.getDeviceId());
+            item.put("flag", cred.getFlag());
+            item.put("createdAt", cred.getCreatedAt());
+            item.put("lastUsedAt", cred.getLastUsedAt());
+            list.add(item);
         }
 
         return list;
@@ -257,5 +267,82 @@ public class FaceController {
             result[i] = Double.parseDouble(parts[i].trim());
         }
         return result;
+    }
+
+    /**
+     * Check if a user already has face enrollment for a specific device
+     * @param userId User ID
+     * @param deviceId Device ID
+     * @return true if enrollment exists and is active
+     */
+    public boolean hasActiveFaceEnrollment(Integer userId, String deviceId) {
+        FaceCredential credential = findActiveForUserAndDevice(userId, normalizeDeviceId(deviceId));
+        return credential != null && "active".equals(credential.getFlag());
+    }
+    
+    /**
+     * Check if a user has any active face enrollment regardless of device.
+     */
+    public boolean hasAnyActiveFaceEnrollment(Integer userId) {
+        Optional<FaceCredential> credential = faceCredentialRepository.findAnyActiveByUser(userId);
+        return credential.isPresent() && "active".equalsIgnoreCase(credential.get().getFlag());
+    }
+
+    /**
+     * Get enrollment details for a user and device
+     * @param userId User ID
+     * @param deviceId Device ID
+     * @return Map with enrollment details or empty map if not found
+     */
+    public Map<String, Object> getFaceEnrollmentDetails(Integer userId, String deviceId) {
+        Map<String, Object> details = new HashMap<>();
+        FaceCredential credential = findActiveForUserAndDevice(userId, normalizeDeviceId(deviceId));
+        
+        if (credential != null && "active".equals(credential.getFlag())) {
+            details.put("enrolled", true);
+            details.put("deviceId", credential.getDeviceId());
+            details.put("createdAt", credential.getCreatedAt());
+            details.put("lastUsedAt", credential.getLastUsedAt());
+        } else {
+            details.put("enrolled", false);
+        }
+        
+        return details;
+    }
+
+    public String resolveCurrentDeviceId() {
+        if (cachedDeviceId != null && !cachedDeviceId.isBlank()) {
+            return cachedDeviceId;
+        }
+
+        String host = null;
+        try {
+            host = InetAddress.getLocalHost().getHostName();
+        } catch (Exception ignored) {
+            // Fallback to environment variables below.
+        }
+
+        if (host == null || host.isBlank()) {
+            host = System.getenv("COMPUTERNAME");
+        }
+        if (host == null || host.isBlank()) {
+            host = System.getenv("HOSTNAME");
+        }
+        if (host == null || host.isBlank()) {
+            host = "unknown-host";
+        }
+
+        String os = System.getProperty("os.name", "unknown-os");
+        String user = System.getProperty("user.name", "user");
+
+        cachedDeviceId = (os + "-" + host + "-" + user).replaceAll("[^a-zA-Z0-9._-]", "_");
+        return cachedDeviceId;
+    }
+
+    private String normalizeDeviceId(String deviceId) {
+        if (deviceId == null || deviceId.trim().isEmpty()) {
+            return resolveCurrentDeviceId();
+        }
+        return deviceId.trim();
     }
 }

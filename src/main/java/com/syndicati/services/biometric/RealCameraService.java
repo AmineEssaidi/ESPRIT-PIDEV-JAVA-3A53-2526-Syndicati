@@ -429,13 +429,18 @@ public class RealCameraService {
      * Detect 3D face mesh using InsightFace (468-point 3D landmarks with anti-spoofing)
      */
     private Image detectWithInsightFace() {
-        if (insightFaceService == null || currentFrame == null) {
+        if (insightFaceService == null) {
+            return null;
+        }
+
+        BufferedImage frameSnapshot = currentFrame;
+        if (frameSnapshot == null) {
             return null;
         }
         
         try {
             // Process frame with InsightFace
-            InsightFaceService.FaceMesh mesh = insightFaceService.processFaceFrame(currentFrame, true);
+            InsightFaceService.FaceMesh mesh = insightFaceService.processFaceFrame(frameSnapshot, true);
             
             if (mesh == null || !mesh.detected) {
                 return null;
@@ -443,22 +448,22 @@ public class RealCameraService {
             
             // Create graphics context for drawing
             BufferedImage display = new BufferedImage(
-                currentFrame.getWidth(), 
-                currentFrame.getHeight(), 
+                frameSnapshot.getWidth(), 
+                frameSnapshot.getHeight(), 
                 BufferedImage.TYPE_INT_RGB
             );
             
             java.awt.Graphics2D g2d = display.createGraphics();
-            g2d.drawImage(currentFrame, 0, 0, null);
+            g2d.drawImage(frameSnapshot, 0, 0, null);
             g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, 
                 java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
             
             // Draw 3D face mesh
-            InsightFaceService.drawFaceMesh(g2d, mesh, currentFrame.getWidth(), currentFrame.getHeight());
+            InsightFaceService.drawFaceMesh(g2d, mesh, frameSnapshot.getWidth(), frameSnapshot.getHeight());
             
             // Draw anti-spoofing status
             if (mesh.spoofing != null) {
-                drawSpoofingStatus(g2d, mesh.spoofing, currentFrame.getWidth());
+                drawSpoofingStatus(g2d, mesh.spoofing, frameSnapshot.getWidth());
             }
             
             g2d.dispose();
