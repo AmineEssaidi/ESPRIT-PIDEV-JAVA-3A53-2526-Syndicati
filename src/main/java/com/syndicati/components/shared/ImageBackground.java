@@ -8,6 +8,7 @@ import javafx.geometry.Pos;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
+import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
 /**
@@ -21,6 +22,9 @@ public class ImageBackground {
     private MediaPlayer loginPlayer;
     private Image fallbackImage;
     private boolean isVideoMode = true;
+    private boolean loginVideoAttached = false;
+    private boolean loginVideoWarmupComplete = false;
+    private boolean loginVideoWarmupScheduled = false;
     
     public ImageBackground() {
         this.root = new StackPane();
@@ -74,6 +78,12 @@ public class ImageBackground {
             loginPlayer.setCycleCount(MediaPlayer.INDEFINITE);
             loginPlayer.setMute(true);
             loginPlayer.setAutoPlay(false);
+            loginPlayer.setOnError(() -> {
+                System.err.println("Media error: " + loginPlayer.getError());
+                updateImageBackground();
+            });
+            backgroundMediaView.setMediaPlayer(loginPlayer);
+            loginVideoAttached = true;
             System.out.println("Login video loaded successfully");
         } catch (Exception e) {
             System.err.println("Failed to load login.mp4: " + e.getMessage());
@@ -125,7 +135,10 @@ public class ImageBackground {
         System.out.println("Setting login mode");
         if (isVideoMode && loginPlayer != null) {
             try {
-                updateImageBackground();
+                if (!loginVideoAttached) {
+                    backgroundMediaView.setMediaPlayer(loginPlayer);
+                    loginVideoAttached = true;
+                }
                 System.out.println("Preparing login video");
                 playWhenReady(loginPlayer);
             } catch (Exception e) {
@@ -143,38 +156,46 @@ public class ImageBackground {
             updateImageBackground();
             return;
         }
-
         try {
-            player.seek(Duration.ZERO);
-            player.stop();
-        } catch (Exception e) {
-            System.err.println("Error resetting player: " + e.getMessage());
-        }
-
-        Runnable startPlayback = () -> {
-            try {
+            if (backgroundMediaView.getMediaPlayer() != player) {
                 backgroundMediaView.setMediaPlayer(player);
+            }
+
+            MediaPlayer.Status status = player.getStatus();
+            if (status != MediaPlayer.Status.PLAYING) {
+                player.play();
+            }
+
+            if (loginVideoWarmupComplete) {
                 backgroundMediaView.setVisible(true);
                 backgroundImageView.setVisible(false);
-                player.play();
                 System.out.println("Video playback started successfully");
-            } catch (Exception ex) {
-                System.err.println("Failed to start playback: " + ex.getMessage());
-                updateImageBackground();
+                return;
             }
-        };
 
-        player.setOnError(() -> {
-            System.err.println("Media error: " + player.getError());
+            // Keep the fallback image visible while the media decoder warms up.
+            backgroundMediaView.setVisible(false);
+            backgroundImageView.setVisible(true);
+
+            if (!loginVideoWarmupScheduled) {
+                loginVideoWarmupScheduled = true;
+                PauseTransition warmupDelay = new PauseTransition(Duration.seconds(1.5));
+                warmupDelay.setOnFinished(event -> {
+                    try {
+                        backgroundMediaView.setVisible(true);
+                        backgroundImageView.setVisible(false);
+                        loginVideoWarmupComplete = true;
+                        System.out.println("Video playback warmed up and revealed successfully");
+                    } catch (Exception ex) {
+                        System.err.println("Failed to reveal warmed video: " + ex.getMessage());
+                        updateImageBackground();
+                    }
+                });
+                warmupDelay.play();
+            }
+        } catch (Exception ex) {
+            System.err.println("Failed to start playback: " + ex.getMessage());
             updateImageBackground();
-        });
-        player.setOnReady(startPlayback);
-
-        MediaPlayer.Status status = player.getStatus();
-        if (status == MediaPlayer.Status.READY
-            || status == MediaPlayer.Status.PAUSED
-            || status == MediaPlayer.Status.STOPPED) {
-            startPlayback.run();
         }
     }
     
@@ -198,6 +219,9 @@ public class ImageBackground {
                 backgroundImageView.setImage(null);
                 backgroundImageView.setVisible(false);
             }
+            loginVideoAttached = false;
+            loginVideoWarmupComplete = false;
+            loginVideoWarmupScheduled = false;
             System.out.println("Video resources cleaned up successfully");
         } catch (Exception e) {
             System.err.println("Error during media cleanup: " + e.getMessage());

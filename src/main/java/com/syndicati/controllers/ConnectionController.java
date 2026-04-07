@@ -7,6 +7,7 @@ import javafx.beans.property.StringProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.application.Platform;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -20,12 +21,14 @@ public class ConnectionController {
     private final DatabaseService databaseService;
     private final BooleanProperty isConnected = new SimpleBooleanProperty(false);
     private final StringProperty connectionStatus = new SimpleStringProperty("Offline");
+    private final ExecutorService connectionCheckExecutor;
     private ScheduledExecutorService scheduler;
     private boolean monitoringStarted = false;
     private boolean isCurrentlyConnected = false;
     
     private ConnectionController() {
         this.databaseService = DatabaseService.getInstance();
+        this.connectionCheckExecutor = Executors.newVirtualThreadPerTaskExecutor();
         
         // Force initial offline state
         isConnected.set(false);
@@ -79,10 +82,10 @@ public class ConnectionController {
         System.out.println("Starting database connection monitoring...");
         // Create a daemon thread pool so it won't prevent JVM shutdown
         this.scheduler = Executors.newScheduledThreadPool(1, r -> {
-            Thread thread = new Thread(r);
-            thread.setDaemon(true); // Mark as daemon thread
-            thread.setName("DB-Connection-Monitor");
-            return thread;
+            return Thread.ofPlatform()
+                .daemon(true)
+                .name("DB-Connection-Monitor")
+                .unstarted(r);
         });
         this.monitoringStarted = true;
         startConnectionMonitoring();
@@ -102,7 +105,7 @@ public class ConnectionController {
                 System.out.println("Error checking database connection: " + e.getMessage());
                 return false;
             }
-        }).thenAccept(connected -> {
+        }, connectionCheckExecutor).thenAccept(connected -> {
             Platform.runLater(() -> {
                 updateConnectionStatus(connected);
                 // Schedule next check based on new status
@@ -203,6 +206,10 @@ public class ConnectionController {
                 Thread.currentThread().interrupt();
             }
             monitoringStarted = false;
+        }
+
+        if (!connectionCheckExecutor.isShutdown()) {
+            connectionCheckExecutor.shutdownNow();
         }
     }
 }

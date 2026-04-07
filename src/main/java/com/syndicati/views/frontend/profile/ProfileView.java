@@ -1196,7 +1196,7 @@ public class ProfileView implements ViewInterface {
      * Simulate face capture progress (for demo purposes)
      */
     private void simulateFaceIDCapture(ProgressBar progressBar, Text progressText, String pin, String device, Runnable onComplete) {
-        Thread captureThread = new Thread(() -> {
+        Thread.ofVirtual().name("ProfileView-FaceCapture-Sim").start(() -> {
             for (int i = 0; i <= 20; i++) {
                 final int frame = i;
                 javafx.application.Platform.runLater(() -> {
@@ -1216,8 +1216,6 @@ public class ProfileView implements ViewInterface {
                 onComplete.run();
             }
         });
-        captureThread.setDaemon(true);
-        captureThread.start();
     }
 
     /**
@@ -1225,7 +1223,7 @@ public class ProfileView implements ViewInterface {
      */
     private void realFaceIDCapture(ProgressBar progressBar, Text progressText, String pin, String device, 
                                     javafx.scene.image.ImageView faceIdCameraView, Button verifyBtn, Runnable onComplete) {
-        Thread captureThread = new Thread(() -> {
+        Thread.ofVirtual().name("ProfileView-FaceCapture-Real").start(() -> {
             try {
                 // Initialize camera service if not already done
                 if (cameraService == null) {
@@ -1410,8 +1408,6 @@ public class ProfileView implements ViewInterface {
                 });
             }
         });
-        captureThread.setDaemon(true);
-        captureThread.start();
     }
 
     /**

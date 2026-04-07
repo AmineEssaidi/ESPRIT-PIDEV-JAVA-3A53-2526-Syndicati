@@ -58,12 +58,16 @@ public class MainApplication extends Application {
         connectionManager.startMonitoring();
         
         // Add JVM shutdown hook as backup
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
-            com.syndicati.services.mail.AsyncMailerService.shutdown();
-            connectionManager.shutdown();
-            System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
-        }, "Syndicati-ShutdownHook"));
+        Runtime.getRuntime().addShutdownHook(
+            Thread.ofPlatform()
+                .name("Syndicati-ShutdownHook")
+                .unstarted(() -> {
+                    System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
+                    com.syndicati.services.mail.AsyncMailerService.shutdown();
+                    connectionManager.shutdown();
+                    System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
+                })
+        );
         
         // Configure the stage. Use solid black scene fill to avoid desktop bleed-through.
         primaryStage.setTitle("Syndicati - Login");
@@ -98,7 +102,7 @@ public class MainApplication extends Application {
             System.out.println("[SUCCESS] All services stopped");
             
             // Force exit JVM after a short delay to ensure cleanup
-            new Thread(() -> {
+            Thread.ofVirtual().name("Syndicati-DelayedExit").start(() -> {
                 try {
                     Thread.sleep(500);
                 } catch (InterruptedException e) {
@@ -106,7 +110,7 @@ public class MainApplication extends Application {
                 }
                 System.out.println("[SHUTDOWN] Forcing JVM exit...");
                 System.exit(0);
-            }).start();
+            });
         });
         
         System.out.println("[SUCCESS] Syndicati started!");

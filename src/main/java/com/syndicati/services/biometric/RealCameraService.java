@@ -21,15 +21,25 @@ import java.util.List;
  * Provides stable, cross-platform webcam access with face detection overlays
  */
 public class RealCameraService {
+    private static final long CAPTURE_STATUS_INTERVAL_MS = 3000L;
+    private static final long FACE_POSITION_LOG_INTERVAL_MS = 1500L;
+    private static final long NO_FACE_LOG_INTERVAL_MS = 5000L;
     
     private Webcam webcam;
     private boolean isRunning = false;
     private Thread captureThread;
     private BufferedImage currentFrame;
     private List<BufferedImage> capturedFrames;
+    private long frameSequence = 0L;
+    private long lastRenderedSequence = -1L;
+    private Image lastRenderedImage;
+    private BufferedImage insightDisplayBuffer;
+    private BufferedImage basicDisplayBuffer;
     private int faceDetectCounter = 0;
     private int loggingThrottle = 0;  // Throttle face detection logs (log every 30 frames = 1/sec at 30fps)
     private java.awt.Rectangle lastLoggedFacePosition = null;  // Track last logged position
+    private long lastFacePositionLogTime = 0L;
+    private long lastNoFaceLogTime = 0L;
     
     // Eye position smoothing buffers (for stable, non-jittery detection)
     private int[][] eyePositionHistory = new int[5][2];  // Keep last 5 frames of eye positions
@@ -301,13 +311,14 @@ public class RealCameraService {
                         if (frame != null) {
                             synchronized (this) {
                                 currentFrame = frame;
+                                frameSequence++;
                             }
                             frameCount++;
                             errorCount = 0;
                             
                             // Print status every second
                             long now = System.currentTimeMillis();
-                            if (now - lastPrintTime > 1000) {
+                            if (now - lastPrintTime > CAPTURE_STATUS_INTERVAL_MS) {
                                 System.out.println("RealCameraService: " + frameCount + " frames captured");
                                 lastPrintTime = now;
                             }
@@ -365,6 +376,10 @@ public class RealCameraService {
         if (currentFrame == null) {
             return null;
         }
+
+        if (lastRenderedImage != null && lastRenderedSequence == frameSequence) {
+            return lastRenderedImage;
+        }
         
         try {
             // First priority: Try InsightFace for 3D face mesh with anti-spoofing
@@ -377,7 +392,7 @@ public class RealCameraService {
                 try {
                     Image insightFaceImage = detectWithInsightFace();
                     if (insightFaceImage != null) {
-                        return insightFaceImage;
+                        return cacheRenderedImage(insightFaceImage);
                     }
                 } catch (Exception ex) {
                     System.err.println("RealCameraService: InsightFace detection failed: " + ex.getMessage());
@@ -388,7 +403,7 @@ public class RealCameraService {
             try {
                 Image detectedImage = detectBasic();
                 if (detectedImage != null) {
-                    return detectedImage;
+                    return cacheRenderedImage(detectedImage);
                 }
             } catch (Exception ex) {
                 System.err.println("RealCameraService: Error in basic detection: " + ex.getMessage());
@@ -402,7 +417,10 @@ public class RealCameraService {
                 
                 if (landmarkDetectionAvailable) {
                     try {
-                        return detectWithLandmarks();
+                        Image landmarkImage = detectWithLandmarks();
+                        if (landmarkImage != null) {
+                            return cacheRenderedImage(landmarkImage);
+                        }
                     } catch (Exception ex) {
                         System.err.println("RealCameraService: Landmark detection failed: " + ex.getMessage());
                         landmarkDetectionAvailable = false;
@@ -418,7 +436,7 @@ public class RealCameraService {
         
         // Final fallback: return raw frame
         try {
-            return SwingFXUtils.toFXImage(currentFrame, null);
+            return cacheRenderedImage(SwingFXUtils.toFXImage(currentFrame, null));
         } catch (Exception ex) {
             System.err.println("RealCameraService: All frame display methods failed");
             return null;
@@ -446,12 +464,17 @@ public class RealCameraService {
                 return null;
             }
             
-            // Create graphics context for drawing
-            BufferedImage display = new BufferedImage(
-                frameSnapshot.getWidth(), 
-                frameSnapshot.getHeight(), 
-                BufferedImage.TYPE_INT_RGB
-            );
+            // Reuse a persistent drawing buffer to reduce allocation churn.
+            if (insightDisplayBuffer == null
+                || insightDisplayBuffer.getWidth() != frameSnapshot.getWidth()
+                || insightDisplayBuffer.getHeight() != frameSnapshot.getHeight()) {
+                insightDisplayBuffer = new BufferedImage(
+                    frameSnapshot.getWidth(),
+                    frameSnapshot.getHeight(),
+                    BufferedImage.TYPE_INT_RGB
+                );
+            }
+            BufferedImage display = insightDisplayBuffer;
             
             java.awt.Graphics2D g2d = display.createGraphics();
             g2d.drawImage(frameSnapshot, 0, 0, null);
@@ -573,12 +596,17 @@ public class RealCameraService {
         }
         
         try {
-            // Create a copy for drawing overlays
-            BufferedImage display = new BufferedImage(
-                currentFrame.getWidth(), 
-                currentFrame.getHeight(), 
-                BufferedImage.TYPE_INT_RGB
-            );
+            // Reuse a persistent drawing buffer to reduce allocation churn.
+            if (basicDisplayBuffer == null
+                || basicDisplayBuffer.getWidth() != currentFrame.getWidth()
+                || basicDisplayBuffer.getHeight() != currentFrame.getHeight()) {
+                basicDisplayBuffer = new BufferedImage(
+                    currentFrame.getWidth(),
+                    currentFrame.getHeight(),
+                    BufferedImage.TYPE_INT_RGB
+                );
+            }
+            BufferedImage display = basicDisplayBuffer;
             
             // Copy current frame
             java.awt.Graphics2D g2d = display.createGraphics();
@@ -599,13 +627,15 @@ public class RealCameraService {
                 boxWidth = detectedFace.width;
                 boxHeight = detectedFace.height;
                 faceDetected = true;
+                long now = System.currentTimeMillis();
                 // Throttle logging: only log if face position changed or every 30 frames
                 if (lastLoggedFacePosition == null || 
                     Math.abs(lastLoggedFacePosition.x - centerX) > 50 || 
                     Math.abs(lastLoggedFacePosition.y - centerY) > 50 ||
-                    loggingThrottle == 0) {
+                    (loggingThrottle == 0 && (now - lastFacePositionLogTime) > FACE_POSITION_LOG_INTERVAL_MS)) {
                     System.out.println("RealCameraService: Face detected at (" + centerX + "," + centerY + ") size:" + boxWidth + "x" + boxHeight);
                     lastLoggedFacePosition = new java.awt.Rectangle(centerX, centerY, boxWidth, boxHeight);
+                    lastFacePositionLogTime = now;
                 }
             } else {
                 // Fallback: detect using color and luminance
@@ -616,13 +646,15 @@ public class RealCameraService {
                     boxWidth = colorDetectedFace.width;
                     boxHeight = colorDetectedFace.height;
                     faceDetected = true;
+                    long now = System.currentTimeMillis();
                     // Throttle logging: only log if position changed or every 30 frames
                     if (lastLoggedFacePosition == null || 
                         Math.abs(lastLoggedFacePosition.x - centerX) > 50 || 
                         Math.abs(lastLoggedFacePosition.y - centerY) > 50 ||
-                        loggingThrottle == 0) {
+                        (loggingThrottle == 0 && (now - lastFacePositionLogTime) > FACE_POSITION_LOG_INTERVAL_MS)) {
                         System.out.println("RealCameraService: Face detected by color at (" + centerX + "," + centerY + ")");
                         lastLoggedFacePosition = new java.awt.Rectangle(centerX, centerY, boxWidth, boxHeight);
+                        lastFacePositionLogTime = now;
                     }
                 } else {
                     // No face detected - use center as last resort
@@ -630,9 +662,11 @@ public class RealCameraService {
                     centerY = display.getHeight() / 2;
                     boxWidth = 180;
                     boxHeight = 220;
-                    // Only log no-face once per second to avoid spam
-                    if (loggingThrottle == 0) {
+                    // Log no-face state infrequently to avoid UI jank from console I/O.
+                    long now = System.currentTimeMillis();
+                    if (loggingThrottle == 0 && (now - lastNoFaceLogTime) > NO_FACE_LOG_INTERVAL_MS) {
                         System.out.println("RealCameraService: No face detected, using screen center");
+                        lastNoFaceLogTime = now;
                     }
                 }
             }
@@ -1585,7 +1619,18 @@ public class RealCameraService {
         }
         
         currentFrame = null;
+        frameSequence = 0L;
+        lastRenderedSequence = -1L;
+        lastRenderedImage = null;
+        insightDisplayBuffer = null;
+        basicDisplayBuffer = null;
         clearCapturedFrames();
+    }
+
+    private Image cacheRenderedImage(Image image) {
+        lastRenderedImage = image;
+        lastRenderedSequence = frameSequence;
+        return image;
     }
 
     /**

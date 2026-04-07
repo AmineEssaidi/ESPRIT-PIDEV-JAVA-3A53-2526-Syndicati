@@ -2446,7 +2446,7 @@ public class LoginView implements ViewInterface {
             }
 
             // Simulate WebAuthn authentication flow
-            Thread authThread = new Thread(() -> {
+            Thread.ofVirtual().name("LoginView-Passkey-Auth").start(() -> {
                 try {
                     // In production, would call:
                     // 1. POST /webauthn/login/options with email
@@ -2491,8 +2491,6 @@ public class LoginView implements ViewInterface {
                     });
                 }
             });
-            authThread.setDaemon(true);
-            authThread.start();
             
         } catch (Exception ex) {
             showErrorMessage("Passkey login error: " + ex.getMessage());
@@ -2540,7 +2538,7 @@ public class LoginView implements ViewInterface {
             }
 
             // Start capturing in background thread
-            Thread captureThread = new Thread(() -> {
+            Thread.ofVirtual().name("LoginView-FaceID-Capture").start(() -> {
                 try {
                     System.out.println("LoginView: Starting camera capture...");
                     
@@ -2572,14 +2570,13 @@ public class LoginView implements ViewInterface {
                         cameraUpdateTimer = new AnimationTimer() {
                             @Override
                             public void handle(long now) {
-                                javafx.scene.image.Image frame = cameraService.getCurrentFrameWithDetection();
+                                javafx.scene.image.Image frame = cameraService.getCurrentFrame();
                                 if (frame != null && faceIdVideoView != null) {
                                     faceIdVideoView.setImage(frame);
                                 }
                             }
                         };
                         cameraUpdateTimer.start();
-                        System.out.println("LoginView: Camera preview started");
                     });
 
                     javafx.application.Platform.runLater(() -> {
@@ -2753,8 +2750,6 @@ public class LoginView implements ViewInterface {
                     });
                 }
             });
-            captureThread.setDaemon(true);
-            captureThread.start();
 
         } catch (Exception ex) {
             showErrorMessage("FaceID login error: " + ex.getMessage());
