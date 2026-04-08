@@ -92,6 +92,44 @@ public class OnboardingRepository {
         return Optional.empty();
     }
 
+    public Optional<Integer> create(Onboarding onboarding) {
+        String sql = "INSERT INTO onboarding (user_id, step, completed, selected_locale, selected_theme, selected_preferences, suggestions, started_at, completed_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return Optional.empty();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+                ps.setInt(1, onboarding.getUserId());
+                ps.setInt(2, onboarding.getStep());
+                ps.setBoolean(3, onboarding.isCompleted());
+                ps.setString(4, onboarding.getSelectedLocale());
+                ps.setString(5, onboarding.getSelectedTheme());
+                ps.setString(6, onboarding.getSelectedPreferencesJson());
+                ps.setString(7, onboarding.getSuggestions());
+                ps.setTimestamp(8, toTimestamp(onboarding.getStartedAt()));
+                ps.setTimestamp(9, toTimestamp(onboarding.getCompletedAt()));
+                ps.setTimestamp(10, toTimestamp(onboarding.getUpdatedAt()));
+
+                int affected = ps.executeUpdate();
+                if (affected <= 0) {
+                    return Optional.empty();
+                }
+
+                try (ResultSet keys = ps.getGeneratedKeys()) {
+                    if (keys.next()) {
+                        return Optional.of(keys.getInt(1));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("OnboardingRepository.create error: " + e.getMessage());
+        }
+
+        return Optional.empty();
+    }
+
     public boolean update(Onboarding onboarding) {
         String sql = "UPDATE onboarding SET user_id = ?, step = ?, completed = ?, selected_locale = ?, selected_theme = ?, selected_preferences = ?, suggestions = ?, started_at = ?, completed_at = ?, updated_at = ? WHERE id_onboarding = ?";
 

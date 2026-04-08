@@ -3,8 +3,10 @@ package com.syndicati.views.frontend.profile;
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.entities.Profile;
+import com.syndicati.models.entities.Onboarding;
 import com.syndicati.models.entities.User;
 import com.syndicati.models.services.ProfileService;
+import com.syndicati.models.services.OnboardingService;
 import com.syndicati.models.services.UserService;
 import com.syndicati.services.ProfileImageService;
 import com.syndicati.services.biometric.RealCameraService;
@@ -12,6 +14,8 @@ import com.syndicati.controllers.biometric.FaceController;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.views.frontend.home.OnboardingOverlayView;
+import javafx.application.Platform;
 import javafx.animation.FadeTransition;
 import javafx.animation.KeyFrame;
 import javafx.animation.ScaleTransition;
@@ -58,6 +62,9 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
+import java.util.Optional;
+
+import org.json.JSONObject;
 
 /**
  * Profile page replica based on templates/frontend/profile/profile.html.twig.
@@ -71,6 +78,7 @@ public class ProfileView implements ViewInterface {
     private final ThemeManager tm;
     private final SessionManager sessionManager;
     private final UserService userService;
+    private final OnboardingService onboardingService;
     private final ProfileService profileService;
     private final FaceController faceController;
 
@@ -79,9 +87,11 @@ public class ProfileView implements ViewInterface {
 
     private final Map<String, VBox> mainPages = new LinkedHashMap<>();
     private final Map<String, Button> mainNavButtons = new LinkedHashMap<>();
+    private String currentMainPageName = "overview";
 
     private final Map<String, VBox> detailTabs = new LinkedHashMap<>();
     private final Map<String, Button> detailTabButtons = new LinkedHashMap<>();
+    private String currentDetailTabName = "account";
     
     // Biometric enrollment panel state
     private VBox faceIDEnrollmentPanel;
@@ -98,6 +108,7 @@ public class ProfileView implements ViewInterface {
         this.tm = ThemeManager.getInstance();
         this.sessionManager = SessionManager.getInstance();
         this.userService = new UserService();
+        this.onboardingService = new OnboardingService();
         this.profileService = new ProfileService();
         this.faceController = new FaceController();
         this.root = new VBox();
@@ -162,6 +173,7 @@ public class ProfileView implements ViewInterface {
     }
 
     private void setMainPage(String key) {
+        currentMainPageName = key;
         mainPages.forEach((name, pane) -> {
             boolean active = name.equals(key);
             pane.setVisible(active);
@@ -1803,6 +1815,7 @@ public class ProfileView implements ViewInterface {
     }
 
     private void setDetailTab(String key) {
+        currentDetailTabName = key;
         detailTabs.forEach((name, pane) -> {
             boolean active = name.equals(key);
             pane.setVisible(active);
@@ -1837,26 +1850,90 @@ public class ProfileView implements ViewInterface {
             infoLine("Phone", displayPhone())
         );
 
+        Map<String, String> onboardingSummary = loadOnboardingSummary();
+
         VBox onboarding = cardShell();
         onboarding.setPadding(new Insets(22));
+
+        HBox onboardingHeader = new HBox();
+        onboardingHeader.setAlignment(Pos.CENTER_LEFT);
+        onboardingHeader.setSpacing(12);
+        VBox headerLeft = new VBox(4);
+        headerLeft.setAlignment(Pos.TOP_LEFT);
+        headerLeft.getChildren().addAll(
+            text("Your onboarding choices", 22, true, "#ffffff"),
+            text("Review and edit the choices you made during onboarding.", 13, false, textSoft())
+        );
+        HBox.setHgrow(headerLeft, Priority.ALWAYS);
+
+        Button editOnboardingBtn = new Button("✎ Modify");
+        editOnboardingBtn.setStyle(
+            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
+            "-fx-text-fill: " + tm.getAccentHex() + ";" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-radius: 12px;" +
+            "-fx-padding: 10 16 10 16;" +
+            "-fx-font-weight: 700;" +
+            "-fx-font-size: 12px;"
+        );
+        editOnboardingBtn.setCursor(javafx.scene.Cursor.HAND);
+        editOnboardingBtn.setOnAction(e -> showOnboardingOverlay());
+        editOnboardingBtn.setOnMouseEntered(e -> editOnboardingBtn.setStyle(
+            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: transparent;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-radius: 12px;" +
+            "-fx-padding: 10 16 10 16;" +
+            "-fx-font-weight: 700;" +
+            "-fx-font-size: 12px;"
+        ));
+        editOnboardingBtn.setOnMouseExited(e -> editOnboardingBtn.setStyle(
+            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
+            "-fx-text-fill: " + tm.getAccentHex() + ";" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-radius: 12px;" +
+            "-fx-padding: 10 16 10 16;" +
+            "-fx-font-weight: 700;" +
+            "-fx-font-size: 12px;"
+        ));
+
+        onboardingHeader.getChildren().addAll(headerLeft, editOnboardingBtn);
+
         GridPane prefGrid = new GridPane();
         prefGrid.setHgap(10);
         prefGrid.setVgap(10);
-        ColumnConstraints pc = new ColumnConstraints();
-        pc.setPercentWidth(33.33);
-        prefGrid.getColumnConstraints().addAll(pc, pc, pc);
-        prefGrid.add(pillCard("Language", "English"), 0, 0);
-        prefGrid.add(pillCard("Theme", "Dark"), 1, 0);
-        prefGrid.add(pillCard("Status", "Completed"), 2, 0);
-        prefGrid.add(pillCard("Notification", "Instant"), 0, 1);
-        prefGrid.add(pillCard("Property Type", "Apartment"), 1, 1);
-        prefGrid.add(pillCard("Contact", "Phone"), 2, 1);
+        for (int i = 0; i < 4; i++) {
+            ColumnConstraints column = new ColumnConstraints();
+            column.setPercentWidth(25);
+            prefGrid.getColumnConstraints().add(column);
+        }
+
+        prefGrid.add(pillCard("Language", onboardingSummary.get("Language")), 0, 0);
+        prefGrid.add(pillCard("Theme", onboardingSummary.get("Theme")), 1, 0);
+        prefGrid.add(pillCard("Notification", onboardingSummary.get("Notification")), 2, 0);
+        prefGrid.add(pillCard("Frequency", onboardingSummary.get("Frequency")), 3, 0);
+        prefGrid.add(pillCard("Property", onboardingSummary.get("Property")), 0, 1);
+        prefGrid.add(pillCard("Occupancy", onboardingSummary.get("Occupancy")), 1, 1);
+        prefGrid.add(pillCard("Parking", onboardingSummary.get("Parking")), 2, 1);
+        prefGrid.add(pillCard("Meeting", onboardingSummary.get("Meeting")), 3, 1);
+        prefGrid.add(pillCard("Delivery", onboardingSummary.get("Delivery")), 0, 2);
+        prefGrid.add(pillCard("Contact", onboardingSummary.get("Contact")), 1, 2);
+        prefGrid.add(pillCard("Maintenance", onboardingSummary.get("Maintenance")), 2, 2);
+        prefGrid.add(pillCard("Community", onboardingSummary.get("Community")), 3, 2);
+        prefGrid.add(pillCard("Payment", onboardingSummary.get("Payment")), 0, 3);
+        prefGrid.add(pillCard("Noise", onboardingSummary.get("Noise")), 1, 3);
+        prefGrid.add(pillCard("Pets", onboardingSummary.get("Pets")), 2, 3);
+        prefGrid.add(pillCard("Accessibility", onboardingSummary.get("Accessibility")), 3, 3);
 
         onboarding.getChildren().addAll(
-            text("Your onboarding choices", 22, true, "#ffffff"),
-            text("Update language, theme and profile preferences.", 13, false, textSoft()),
+            onboardingHeader,
             prefGrid,
-            text("Suggestions: Keep notifications instant for urgent building updates.", 13, false, textMuted())
+            pillCard("Suggestions", onboardingSummary.get("Suggestions"))
         );
 
         tab.getChildren().addAll(account, onboarding);
@@ -2284,6 +2361,300 @@ public class ProfileView implements ViewInterface {
         ));
         t.setFill(Color.web(color));
         return t;
+    }
+
+    private void showOnboardingOverlay() {
+        User sessionUser = sessionManager.getCurrentUser();
+        if (sessionUser == null) {
+            Alert err = new Alert(AlertType.ERROR);
+            err.setTitle("Error");
+            err.setContentText("User session not found");
+            err.showAndWait();
+            return;
+        }
+
+        if (root.getScene() == null || !(root.getScene().getRoot() instanceof StackPane sceneRoot)) {
+            Alert err = new Alert(AlertType.ERROR);
+            err.setTitle("Error");
+            err.setContentText("Unable to open onboarding editor right now.");
+            err.showAndWait();
+            return;
+        }
+
+        Runnable onComplete = () -> {
+            sceneRoot.getChildren().removeIf(node -> node instanceof StackPane && node.getId() != null && node.getId().equals("profile-onboarding-overlay"));
+            refreshOnboardingCard();
+        };
+
+        OnboardingOverlayView overlayView = new OnboardingOverlayView(sessionUser, onComplete, true);
+        if (!overlayView.shouldShow()) {
+            Alert info = new Alert(AlertType.INFORMATION);
+            info.setTitle("Onboarding");
+            info.setHeaderText(null);
+            info.setContentText("No onboarding record is available for this account.");
+            info.showAndWait();
+            return;
+        }
+
+        StackPane overlayRoot = overlayView.getRoot();
+        overlayRoot.setId("profile-onboarding-overlay");
+        overlayRoot.setPickOnBounds(true);
+        overlayRoot.prefWidthProperty().bind(sceneRoot.widthProperty());
+        overlayRoot.prefHeightProperty().bind(sceneRoot.heightProperty());
+        overlayRoot.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        sceneRoot.getChildren().add(overlayRoot);
+        StackPane.setAlignment(overlayRoot, Pos.CENTER);
+    }
+
+    private void refreshOnboardingCard() {
+        Platform.runLater(() -> {
+            String activeMainPage = currentMainPageName;
+            String activeDetailTab = currentDetailTabName;
+
+            root.getChildren().clear();
+            mainPages.clear();
+            mainNavButtons.clear();
+            detailTabs.clear();
+            detailTabButtons.clear();
+            build();
+
+            setMainPage(activeMainPage);
+            if ("activity".equals(activeMainPage) && detailTabs.containsKey(activeDetailTab)) {
+                setDetailTab(activeDetailTab);
+            }
+        });
+    }
+
+    private Map<String, String> loadOnboardingSummary() {
+        LinkedHashMap<String, String> summary = new LinkedHashMap<>();
+        summary.put("Language", labelForLanguage("fr"));
+        summary.put("Theme", labelForTheme("dark"));
+        summary.put("Notification", labelForNotificationChannel("EMAIL"));
+        summary.put("Frequency", labelForNotificationFrequency("DAILY_DIGEST"));
+        summary.put("Property", labelForPropertyType("APARTMENT"));
+        summary.put("Occupancy", labelForOccupancyStatus("OWNER_OCCUPIED"));
+        summary.put("Parking", labelForParkingType("NONE"));
+        summary.put("Meeting", labelForMeetingParticipation("HYBRID"));
+        summary.put("Delivery", labelForDocumentDelivery("DIGITAL"));
+        summary.put("Contact", labelForContactPreference("EMAIL"));
+        summary.put("Maintenance", labelForMaintenancePriority("FLEXIBLE"));
+        summary.put("Community", labelForCommunityEngagement("MODERATE"));
+        summary.put("Payment", labelForPaymentMethod("ONLINE"));
+        summary.put("Noise", labelForNoiseSensitivity("MODERATE"));
+        summary.put("Pets", labelForPetsStatus("NO_PETS"));
+        summary.put("Accessibility", labelForAccessibilityNeeds("NONE"));
+        summary.put("Suggestions", "No suggestions yet");
+
+        User sessionUser = sessionManager.getCurrentUser();
+        if (sessionUser == null || sessionUser.getIdUser() == null || sessionUser.getIdUser() <= 0) {
+            return summary;
+        }
+
+        Optional<Onboarding> onboardingOpt = onboardingService.findOneByUserId(sessionUser.getIdUser());
+        if (onboardingOpt.isEmpty()) {
+            return summary;
+        }
+
+        Onboarding onboarding = onboardingOpt.get();
+        JSONObject prefs = parsePreferences(onboarding.getSelectedPreferencesJson());
+
+        summary.put("Language", labelForLanguage(preferredLocaleValue(onboarding, prefs)));
+        summary.put("Theme", labelForTheme(preferredThemeValue(onboarding, prefs)));
+        summary.put("Notification", labelForNotificationChannel(prefs.optString("notification_channel", "EMAIL")));
+        summary.put("Frequency", labelForNotificationFrequency(prefs.optString("notification_frequency", "DAILY_DIGEST")));
+        summary.put("Property", labelForPropertyType(prefs.optString("property_type", "APARTMENT")));
+        summary.put("Occupancy", labelForOccupancyStatus(prefs.optString("occupancy_status", "OWNER_OCCUPIED")));
+        summary.put("Parking", labelForParkingType(prefs.optString("parking_type", "NONE")));
+        summary.put("Meeting", labelForMeetingParticipation(prefs.optString("meeting_participation", "HYBRID")));
+        summary.put("Delivery", labelForDocumentDelivery(prefs.optString("document_delivery", "DIGITAL")));
+        summary.put("Contact", labelForContactPreference(prefs.optString("contact_preference", "EMAIL")));
+        summary.put("Maintenance", labelForMaintenancePriority(prefs.optString("maintenance_priority", "FLEXIBLE")));
+        summary.put("Community", labelForCommunityEngagement(prefs.optString("community_engagement", "MODERATE")));
+        summary.put("Payment", labelForPaymentMethod(prefs.optString("payment_method_preference", "ONLINE")));
+        summary.put("Noise", labelForNoiseSensitivity(prefs.optString("noise_sensitivity", "MODERATE")));
+        summary.put("Pets", labelForPetsStatus(prefs.optString("pets_status", "NO_PETS")));
+        summary.put("Accessibility", labelForAccessibilityNeeds(prefs.optString("accessibility_needs", "NONE")));
+        summary.put("Suggestions", onboarding.getSuggestions() == null || onboarding.getSuggestions().isBlank()
+            ? "No suggestions yet"
+            : onboarding.getSuggestions());
+
+        return summary;
+    }
+
+    private JSONObject parsePreferences(String json) {
+        if (json == null || json.isBlank()) {
+            return new JSONObject();
+        }
+        try {
+            return new JSONObject(json);
+        } catch (Exception ex) {
+            return new JSONObject();
+        }
+    }
+
+    private String preferredLocaleValue(Onboarding onboarding, JSONObject prefs) {
+        if (onboarding.getSelectedLocale() != null && !onboarding.getSelectedLocale().isBlank()) {
+            return switch (onboarding.getSelectedLocale().toLowerCase()) {
+                case "en" -> "EN";
+                case "ar" -> "AR";
+                case "fr_ar" -> "FR_AR";
+                default -> "FR";
+            };
+        }
+        return prefs.optString("language_preference", "FR");
+    }
+
+    private String preferredThemeValue(Onboarding onboarding, JSONObject prefs) {
+        if (onboarding.getSelectedTheme() != null && !onboarding.getSelectedTheme().isBlank()) {
+            return onboarding.getSelectedTheme().equalsIgnoreCase("light") ? "LIGHT" : "DARK";
+        }
+        return prefs.optString("theme_preference", "DARK");
+    }
+
+    private String labelForLanguage(String value) {
+        return switch (value) {
+            case "EN" -> "English";
+            case "AR" -> "Arabic";
+            case "FR_AR" -> "Bilingual FR/AR";
+            default -> "French";
+        };
+    }
+
+    private String labelForTheme(String value) {
+        return "LIGHT".equalsIgnoreCase(value) ? "Light" : "Dark";
+    }
+
+    private String labelForNotificationChannel(String value) {
+        return switch (value) {
+            case "SMS" -> "SMS";
+            case "IN_APP" -> "In-app";
+            case "ALL" -> "All";
+            case "NONE" -> "None";
+            default -> "Email";
+        };
+    }
+
+    private String labelForNotificationFrequency(String value) {
+        return switch (value) {
+            case "INSTANT" -> "Instant";
+            case "WEEKLY_DIGEST" -> "Weekly digest";
+            case "MONTHLY" -> "Monthly";
+            case "IMPORTANT_ONLY" -> "Important only";
+            default -> "Daily digest";
+        };
+    }
+
+    private String labelForPropertyType(String value) {
+        return switch (value) {
+            case "STUDIO" -> "Studio";
+            case "DUPLEX" -> "Duplex";
+            default -> "Apartment";
+        };
+    }
+
+    private String labelForOccupancyStatus(String value) {
+        return switch (value) {
+            case "OWNER_RENTING" -> "Owner renting";
+            case "TENANT" -> "Tenant";
+            case "TEMPORARY" -> "Temporary";
+            default -> "Owner occupied";
+        };
+    }
+
+    private String labelForParkingType(String value) {
+        return switch (value) {
+            case "OUTDOOR" -> "Outdoor";
+            case "COVERED" -> "Covered";
+            case "UNDERGROUND" -> "Underground";
+            case "MULTIPLE" -> "Multiple";
+            default -> "None";
+        };
+    }
+
+    private String labelForMeetingParticipation(String value) {
+        return switch (value) {
+            case "IN_PERSON" -> "In person";
+            case "ONLINE" -> "Online";
+            case "PROXY_ONLY" -> "Proxy only";
+            default -> "Hybrid";
+        };
+    }
+
+    private String labelForDocumentDelivery(String value) {
+        return switch (value) {
+            case "PAPER" -> "Paper";
+            case "BOTH" -> "Both";
+            case "ECO_FRIENDLY" -> "Eco friendly";
+            default -> "Digital";
+        };
+    }
+
+    private String labelForContactPreference(String value) {
+        return switch (value) {
+            case "PHONE" -> "Phone";
+            case "WHATSAPP" -> "WhatsApp";
+            case "IN_PERSON" -> "In person";
+            case "NO_CONTACT" -> "Emergency only";
+            default -> "Email";
+        };
+    }
+
+    private String labelForMaintenancePriority(String value) {
+        return switch (value) {
+            case "URGENT_ONLY" -> "Urgent only";
+            case "PREVENTIVE" -> "Preventive";
+            case "SCHEDULED" -> "Scheduled";
+            default -> "Flexible";
+        };
+    }
+
+    private String labelForCommunityEngagement(String value) {
+        return switch (value) {
+            case "VERY_ACTIVE" -> "Very active";
+            case "ACTIVE" -> "Active";
+            case "OBSERVER" -> "Observer";
+            case "MINIMAL" -> "Minimal";
+            default -> "Moderate";
+        };
+    }
+
+    private String labelForPaymentMethod(String value) {
+        return switch (value) {
+            case "BANK_TRANSFER" -> "Bank transfer";
+            case "CASH" -> "Cash";
+            case "CHECK" -> "Check";
+            case "AUTO_DEBIT" -> "Auto debit";
+            default -> "Online";
+        };
+    }
+
+    private String labelForNoiseSensitivity(String value) {
+        return switch (value) {
+            case "HIGH" -> "High";
+            case "LOW" -> "Low";
+            case "NOT_CONCERNED" -> "Not concerned";
+            default -> "Moderate";
+        };
+    }
+
+    private String labelForPetsStatus(String value) {
+        return switch (value) {
+            case "CAT" -> "Cat";
+            case "DOG" -> "Dog";
+            case "MULTIPLE" -> "Multiple";
+            case "OTHER" -> "Other";
+            default -> "No pets";
+        };
+    }
+
+    private String labelForAccessibilityNeeds(String value) {
+        return switch (value) {
+            case "ELEVATOR_REQUIRED" -> "Elevator required";
+            case "WHEELCHAIR" -> "Wheelchair";
+            case "VISUAL_IMPAIRMENT" -> "Visual impairment";
+            case "OTHER" -> "Other";
+            default -> "None";
+        };
     }
 
     @Override

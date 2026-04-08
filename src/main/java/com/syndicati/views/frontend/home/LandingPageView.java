@@ -9,11 +9,14 @@ import javafx.geometry.Pos;
 import com.syndicati.components.shared.DynamicHeader;
 import com.syndicati.components.shared.DynamicFooter;
 import com.syndicati.components.home.HomeContent;
+import com.syndicati.models.entities.User;
  
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
+import com.syndicati.utils.session.SessionManager;
 import com.syndicati.views.backend.dashboard.DashboardView;
+import javafx.application.Platform;
 
 /**
  * Landing Page View - Main container with dynamic island header and footer
@@ -29,6 +32,7 @@ public class LandingPageView implements ViewInterface {
     private HomeContent homeContent;
     private VBox contentRow; // Stored so we can swap it out for dashboard mode
     private String currentPageName = "home";
+    private OnboardingOverlayView onboardingOverlayView;
     
     
     
@@ -54,6 +58,8 @@ public class LandingPageView implements ViewInterface {
             applyThemeStyling();
             footer.refreshTheme();
         });
+
+        Platform.runLater(this::showOnboardingIfNeeded);
     }
     
     private void setupLayout() {
@@ -180,6 +186,8 @@ public class LandingPageView implements ViewInterface {
         mainContent.getChildren().clear();
         homeContent = new HomeContent();
         mainContent.getChildren().add(homeContent.getRoot());
+
+        Platform.runLater(this::showOnboardingIfNeeded);
     }
     
     public void navigateToDashboard() {
@@ -300,6 +308,34 @@ public class LandingPageView implements ViewInterface {
 
         if (mainContent != null && darkPanel.getChildren().contains(contentRow)) {
             mainContent.getChildren().setAll(navigation.getPage(currentPageName));
+        }
+    }
+
+    private void showOnboardingIfNeeded() {
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser == null || currentUser.getIdUser() == null) {
+            return;
+        }
+
+        if (onboardingOverlayView != null && onboardingOverlayView.shouldShow()) {
+            if (!root.getChildren().contains(onboardingOverlayView.getRoot())) {
+                root.getChildren().add(onboardingOverlayView.getRoot());
+            }
+            onboardingOverlayView.getRoot().toFront();
+            return;
+        }
+
+        onboardingOverlayView = new OnboardingOverlayView(currentUser, () -> {
+            if (onboardingOverlayView != null && onboardingOverlayView.getRoot() != null) {
+                root.getChildren().remove(onboardingOverlayView.getRoot());
+            }
+        });
+
+        if (onboardingOverlayView.shouldShow()) {
+            if (!root.getChildren().contains(onboardingOverlayView.getRoot())) {
+                root.getChildren().add(onboardingOverlayView.getRoot());
+            }
+            onboardingOverlayView.getRoot().toFront();
         }
     }
     

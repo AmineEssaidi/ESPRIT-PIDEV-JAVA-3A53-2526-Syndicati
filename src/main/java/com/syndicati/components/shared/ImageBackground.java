@@ -8,13 +8,13 @@ import javafx.geometry.Pos;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
-import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
 /**
  * Video Background Component - Login video only with image fallback
  */
 public class ImageBackground {
+    private static final double LOGIN_VIDEO_WARMUP_SECONDS = 2.5;
     
     private final StackPane root;
     private MediaView backgroundMediaView;
@@ -24,7 +24,6 @@ public class ImageBackground {
     private boolean isVideoMode = true;
     private boolean loginVideoAttached = false;
     private boolean loginVideoWarmupComplete = false;
-    private boolean loginVideoWarmupScheduled = false;
     
     public ImageBackground() {
         this.root = new StackPane();
@@ -81,6 +80,11 @@ public class ImageBackground {
             loginPlayer.setOnError(() -> {
                 System.err.println("Media error: " + loginPlayer.getError());
                 updateImageBackground();
+            });
+            loginPlayer.currentTimeProperty().addListener((obs, oldTime, newTime) -> {
+                if (newTime != null && newTime.toSeconds() >= LOGIN_VIDEO_WARMUP_SECONDS) {
+                    revealWarmedVideo();
+                }
             });
             backgroundMediaView.setMediaPlayer(loginPlayer);
             loginVideoAttached = true;
@@ -177,24 +181,28 @@ public class ImageBackground {
             backgroundMediaView.setVisible(false);
             backgroundImageView.setVisible(true);
 
-            if (!loginVideoWarmupScheduled) {
-                loginVideoWarmupScheduled = true;
-                PauseTransition warmupDelay = new PauseTransition(Duration.seconds(1.5));
-                warmupDelay.setOnFinished(event -> {
-                    try {
-                        backgroundMediaView.setVisible(true);
-                        backgroundImageView.setVisible(false);
-                        loginVideoWarmupComplete = true;
-                        System.out.println("Video playback warmed up and revealed successfully");
-                    } catch (Exception ex) {
-                        System.err.println("Failed to reveal warmed video: " + ex.getMessage());
-                        updateImageBackground();
-                    }
-                });
-                warmupDelay.play();
+            // Fast machines may already be past warmup; reveal immediately in that case.
+            if (player.getCurrentTime() != null && player.getCurrentTime().toSeconds() >= LOGIN_VIDEO_WARMUP_SECONDS) {
+                revealWarmedVideo();
             }
         } catch (Exception ex) {
             System.err.println("Failed to start playback: " + ex.getMessage());
+            updateImageBackground();
+        }
+    }
+
+    private void revealWarmedVideo() {
+        if (loginVideoWarmupComplete) {
+            return;
+        }
+
+        try {
+            backgroundMediaView.setVisible(true);
+            backgroundImageView.setVisible(false);
+            loginVideoWarmupComplete = true;
+            System.out.println("Video playback warmed up and revealed successfully");
+        } catch (Exception ex) {
+            System.err.println("Failed to reveal warmed video: " + ex.getMessage());
             updateImageBackground();
         }
     }
@@ -221,7 +229,6 @@ public class ImageBackground {
             }
             loginVideoAttached = false;
             loginVideoWarmupComplete = false;
-            loginVideoWarmupScheduled = false;
             System.out.println("Video resources cleaned up successfully");
         } catch (Exception e) {
             System.err.println("Error during media cleanup: " + e.getMessage());
