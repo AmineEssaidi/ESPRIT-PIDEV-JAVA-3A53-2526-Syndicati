@@ -1,6 +1,6 @@
 package com.syndicati.controllers;
 
-import com.syndicati.services.DatabaseService;
+import com.syndicati.utils.DatabaseService;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.StringProperty;

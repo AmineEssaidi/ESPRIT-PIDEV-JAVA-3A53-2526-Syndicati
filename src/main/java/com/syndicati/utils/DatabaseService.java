@@ -1,4 +1,4 @@
-package com.pidev.services;
+package com.syndicati.utils;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -18,7 +18,7 @@ public class DatabaseService {
     
     private DatabaseService() {
         // Initialize with pidev database
-        this.dbUrl = "jdbc:mysql://localhost:3306/pidev";
+        this.dbUrl = "jdbc:mysql://localhost:3306/syndicati";
         this.dbUser = "root";
         this.dbPassword = ""; // Empty password works for MySQL connection
         this.connectionTimeout = 5000; // 5 seconds - longer timeout for debugging
@@ -64,12 +64,12 @@ public class DatabaseService {
             
             try (Connection connection = DriverManager.getConnection(dbUrl, props)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("✅ Database connection successful to pidev database!");
+                    System.out.println("âœ… Database connection successful to pidev database!");
                     return true;
                 }
             }
         } catch (SQLException e) {
-            System.out.println("❌ Connection with properties failed: " + e.getMessage());
+            System.out.println("âŒ Connection with properties failed: " + e.getMessage());
             System.out.println("   Error Code: " + e.getErrorCode());
             System.out.println("   SQL State: " + e.getSQLState());
         }
@@ -81,12 +81,12 @@ public class DatabaseService {
         try {
             try (Connection connection = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("✅ Simple database connection successful!");
+                    System.out.println("âœ… Simple database connection successful!");
                     return true;
                 }
             }
         } catch (SQLException e) {
-            System.out.println("❌ Simple connection failed: " + e.getMessage());
+            System.out.println("âŒ Simple connection failed: " + e.getMessage());
         }
         return false;
     }
@@ -97,13 +97,13 @@ public class DatabaseService {
             String serverUrl = "jdbc:mysql://localhost:3306/";
             try (Connection connection = DriverManager.getConnection(serverUrl, dbUser, dbPassword)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("✅ MySQL server connection successful!");
+                    System.out.println("âœ… MySQL server connection successful!");
                     System.out.println("   Server is running, but pidev database might not exist or be accessible");
                     return false; // Still return false since we need the specific database
                 }
             }
         } catch (SQLException e) {
-            System.out.println("❌ MySQL server connection failed: " + e.getMessage());
+            System.out.println("âŒ MySQL server connection failed: " + e.getMessage());
             System.out.println("   This suggests MySQL server is not running or not accessible");
         }
         return false;
@@ -132,14 +132,14 @@ public class DatabaseService {
                 
                 try (Connection connection = DriverManager.getConnection(testUrl, props)) {
                     if (connection != null && !connection.isClosed()) {
-                        System.out.println("✅ SUCCESS with URL: " + testUrl);
+                        System.out.println("âœ… SUCCESS with URL: " + testUrl);
                         // Update our working URL
                         this.dbUrl = testUrl;
                         return true;
                     }
                 }
             } catch (SQLException e) {
-                System.out.println("   ❌ Failed: " + e.getMessage());
+                System.out.println("   âŒ Failed: " + e.getMessage());
             }
         }
         
@@ -158,14 +158,14 @@ public class DatabaseService {
             try {
                 try (Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/pidev", auth[0], auth[1])) {
                     if (connection != null && !connection.isClosed()) {
-                        System.out.println("✅ SUCCESS with user: " + auth[0]);
+                        System.out.println("âœ… SUCCESS with user: " + auth[0]);
                         this.dbUser = auth[0];
                         this.dbPassword = auth[1];
                         return true;
                     }
                 }
             } catch (SQLException e) {
-                System.out.println("   ❌ Failed: " + e.getMessage());
+                System.out.println("   âŒ Failed: " + e.getMessage());
             }
         }
         
@@ -233,3 +233,4 @@ public class DatabaseService {
         this.connectionTimeout = connectionTimeout;
     }
 }
+
