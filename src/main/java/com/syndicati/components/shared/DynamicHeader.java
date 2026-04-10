@@ -6,6 +6,7 @@ import com.syndicati.models.entities.User;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.session.SessionManager;
+import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.models.services.ProfileService;
 import javafx.animation.PauseTransition;
@@ -537,13 +538,16 @@ public class DynamicHeader {
         sep1.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
         Button profile = profileRow("👤  Profile", "profile");
-        Button dashboard = profileRow("📊  Dashboard", "dashboard");
         Button settings = profileRow("⚙  Settings", "settings");
 
         VBox rows = new VBox();
         rows.setPadding(new Insets(8));
         rows.setSpacing(6);
-        rows.getChildren().addAll(profile, dashboard, settings);
+        rows.getChildren().add(profile);
+        if (AccessControlService.canAccessAdminArea()) {
+            rows.getChildren().add(profileRow("📊  Dashboard", "dashboard"));
+        }
+        rows.getChildren().add(settings);
 
         Region sep2 = new Region();
         sep2.setPrefHeight(1);

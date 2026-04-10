@@ -5,9 +5,13 @@ import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.entities.Profile;
 import com.syndicati.models.entities.Onboarding;
 import com.syndicati.models.entities.User;
+import com.syndicati.models.entities.UserRelationship;
+import com.syndicati.models.entities.UserStanding;
 import com.syndicati.models.services.ProfileService;
 import com.syndicati.models.services.OnboardingService;
+import com.syndicati.models.services.UserRelationshipService;
 import com.syndicati.models.services.UserService;
+import com.syndicati.models.services.UserStandingService;
 import com.syndicati.services.ProfileImageService;
 import com.syndicati.services.biometric.RealCameraService;
 import com.syndicati.controllers.biometric.FaceController;
@@ -21,8 +25,10 @@ import javafx.animation.KeyFrame;
 import javafx.animation.ScaleTransition;
 import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Alert;
@@ -31,6 +37,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Separator;
 import javafx.scene.Scene;
+import javafx.scene.Node;
 import javafx.scene.image.Image;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.RowConstraints;
@@ -49,6 +56,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.Duration;
@@ -80,10 +88,21 @@ public class ProfileView implements ViewInterface {
     private final UserService userService;
     private final OnboardingService onboardingService;
     private final ProfileService profileService;
+    private final UserStandingService standingService;
+    private final UserRelationshipService relationshipService;
     private final FaceController faceController;
 
     private User currentUser;
     private Profile currentProfile;
+    private UserStanding currentStanding;
+    private List<User> currentCircleFriends = new ArrayList<>();
+    private List<UserRelationship> currentPendingRelationships = new ArrayList<>();
+    private GridPane currentCircleFriendsGrid;
+    private VBox currentCirclePendingPane;
+    private VBox currentCircleSearchResultsBox;
+    private TextField currentCircleSearchField;
+    private Text currentCircleFriendCountText;
+    private Text currentCirclePendingCountText;
 
     private final Map<String, VBox> mainPages = new LinkedHashMap<>();
     private final Map<String, Button> mainNavButtons = new LinkedHashMap<>();
@@ -110,6 +129,8 @@ public class ProfileView implements ViewInterface {
         this.userService = new UserService();
         this.onboardingService = new OnboardingService();
         this.profileService = new ProfileService();
+        this.standingService = new UserStandingService();
+        this.relationshipService = new UserRelationshipService();
         this.faceController = new FaceController();
         this.root = new VBox();
         build();
@@ -1703,10 +1724,22 @@ public class ProfileView implements ViewInterface {
         VBox card = cardShell();
         card.setPadding(new Insets(22));
 
+        UserStanding standing = currentStanding;
+        if (standing == null) {
+            standing = standingService.findOrCreateByUserId(currentUser != null && currentUser.getIdUser() != null ? currentUser.getIdUser() : 0);
+        }
+
+        int levelValue = Math.max(1, standing.getLevel());
+        int pointsValue = Math.max(0, standing.getPoints());
+        int xpToNextLevel = pointsValue % 100;
+        String standingLabel = standing.getStandingLabel() == null ? "NORMAL" : standing.getStandingLabel().toUpperCase();
+        double fillWidth = Math.max(16, (xpToNextLevel / 100.0) * 240.0);
+        String trackColor = standingTrackColor(standingLabel);
+
         HBox header = new HBox(16);
         header.setAlignment(Pos.CENTER_LEFT);
 
-        VBox level = new VBox(0, text("7", 28, true, "#ffffff"), text("LVL", 10, true, tm.getAccentHex()));
+        VBox level = new VBox(0, text(String.valueOf(levelValue), 28, true, "#ffffff"), text("LVL", 10, true, tm.getAccentHex()));
         level.setAlignment(Pos.CENTER);
         level.setMinSize(72, 72);
         level.setStyle(shell(16, surfaceSoft(), 0.16));
@@ -1714,24 +1747,24 @@ public class ProfileView implements ViewInterface {
         VBox title = new VBox(4, text("RESIDENT STANDING", 18, true, "#ffffff"), text("Your status within the Horizon community", 12, false, textMuted()));
         HBox.setHgrow(title, Priority.ALWAYS);
 
-        VBox points = new VBox(2, text("420", 24, true, "#ffffff"), text("SYNDIC PTS", 10, true, "rgba(255,255,255,0.50)"));
+        VBox points = new VBox(2, text(String.valueOf(pointsValue), 24, true, "#ffffff"), text("SYNDIC PTS", 10, true, "rgba(255,255,255,0.50)"));
         points.setAlignment(Pos.CENTER_RIGHT);
 
         header.getChildren().addAll(level, title, points);
 
         HBox standingBar = new HBox(12,
             standingPoint("All good", true),
-            standingPoint("Limited", true),
-            standingPoint("At risk", false),
-            standingPoint("Suspended", false)
+            standingPoint("Limited", isStandingWarnedOrBeyond(standingLabel)),
+            standingPoint("At risk", isStandingSuspendedOrBeyond(standingLabel)),
+            standingPoint("Suspended", "BANNED".equals(standingLabel))
         );
         standingBar.setAlignment(Pos.CENTER_LEFT);
 
         VBox xp = new VBox(8);
         HBox xpTop = new HBox();
         xpTop.setAlignment(Pos.CENTER_LEFT);
-        Text left = text("XP TOWARDS LEVEL 8", 11, true, textMuted());
-        Text right = text("20/100", 11, true, "#ffffff");
+        Text left = text("XP TOWARDS LEVEL " + (levelValue + 1), 11, true, textMuted());
+        Text right = text(xpToNextLevel + "/100", 11, true, "#ffffff");
         HBox.setHgrow(left, Priority.ALWAYS);
         xpTop.getChildren().addAll(left, right);
 
@@ -1740,9 +1773,9 @@ public class ProfileView implements ViewInterface {
         progressTrack.setMinHeight(8);
         progressTrack.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 999px;");
         StackPane fill = new StackPane();
-        fill.setPrefWidth(180);
+        fill.setPrefWidth(fillWidth);
         fill.setMinHeight(8);
-        fill.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-background-radius: 999px;");
+        fill.setStyle("-fx-background-color: " + trackColor + "; -fx-background-radius: 999px;");
         progressTrack.getChildren().add(fill);
 
         xp.getChildren().addAll(xpTop, progressTrack);
@@ -1755,24 +1788,81 @@ public class ProfileView implements ViewInterface {
         VBox card = cardShell();
         card.setPadding(new Insets(22));
 
-        HBox top = new HBox(10, text("CIRCLE", 18, true, "#ffffff"), badge("8 FRIENDS"), badge("2 PENDING"));
+        int friendCount = currentUser == null ? 0 : relationshipService.countFriends(currentUser);
+        int pendingCount = currentUser == null ? 0 : relationshipService.countPendingRequests(currentUser);
+
+        currentCircleFriendCountText = badge(friendCount + " FRIENDS");
+        currentCirclePendingCountText = badge(pendingCount + " PENDING");
+
+        HBox top = new HBox(10, text("CIRCLE", 18, true, "#ffffff"), currentCircleFriendCountText, currentCirclePendingCountText);
         top.setAlignment(Pos.CENTER_LEFT);
 
-        HBox switcher = new HBox(8, tabChip("Friends", true), tabChip("Pending", false));
+        HBox switcher = new HBox(8);
+        Button friendsTab = tabChip("Friends", true);
+        Button pendingTab = tabChip("Pending", false);
+        switcher.getChildren().addAll(friendsTab, pendingTab);
 
-        GridPane friends = new GridPane();
-        friends.setHgap(12);
-        friends.setVgap(12);
-        for (int i = 0; i < 8; i++) {
-            friends.add(friendCard("Friend " + (i + 1)), i % 4, i / 4);
-        }
+        VBox friendsPane = new VBox(12);
+        friendsPane.setPadding(new Insets(14));
+        friendsPane.setStyle(shell(18, surfaceSoft(), 0.16));
+        friendsPane.getChildren().add(text("Active connections", 13, true, "#ffffff"));
 
-        VBox search = new VBox(8);
+        currentCircleFriendsGrid = new GridPane();
+        currentCircleFriendsGrid.setHgap(12);
+        currentCircleFriendsGrid.setVgap(12);
+        populateFriendGrid(currentCircleFriendsGrid, currentCircleFriends);
+        friendsPane.getChildren().add(currentCircleFriendsGrid);
+
+        currentCirclePendingPane = new VBox(12);
+        currentCirclePendingPane.setPadding(new Insets(14));
+        currentCirclePendingPane.setStyle(shell(18, surfaceSoft(), 0.16));
+        populatePendingPane(currentCirclePendingPane, currentPendingRelationships);
+        currentCirclePendingPane.setVisible(false);
+        currentCirclePendingPane.setManaged(false);
+
+        friendsTab.setOnAction(e -> {
+            friendsPane.setVisible(true);
+            friendsPane.setManaged(true);
+            currentCirclePendingPane.setVisible(false);
+            currentCirclePendingPane.setManaged(false);
+            styleTabChip(friendsTab, true);
+            styleTabChip(pendingTab, false);
+        });
+
+        pendingTab.setOnAction(e -> {
+            friendsPane.setVisible(false);
+            friendsPane.setManaged(false);
+            currentCirclePendingPane.setVisible(true);
+            currentCirclePendingPane.setManaged(true);
+            styleTabChip(friendsTab, false);
+            styleTabChip(pendingTab, true);
+        });
+
+        VBox search = new VBox(10);
         search.setPadding(new Insets(14));
         search.setStyle(shell(18, surfaceSoft(), 0.16));
-        search.getChildren().addAll(text("Explore Community", 13, true, "#ffffff"), text("Search residents and send connection requests.", 12, false, textMuted()));
+        currentCircleSearchField = new TextField();
+        currentCircleSearchField.setPromptText("Search residents by name...");
+        currentCircleSearchField.setStyle("-fx-background-color: rgba(255,255,255,0.06); -fx-text-fill: #ffffff; -fx-background-radius: 14px; -fx-border-radius: 14px; -fx-border-color: rgba(255,255,255,0.08); -fx-padding: 10 12 10 12;");
+        Button searchBtn = new Button("Explore Community");
+        searchBtn.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: #ffffff; -fx-font-weight: 800; -fx-background-radius: 14px; -fx-padding: 10 16 10 16;");
+        currentCircleSearchResultsBox = new VBox(10);
 
-        card.getChildren().addAll(top, switcher, friends, search);
+        Runnable runSearch = () -> populateResidentSearchResults(currentCircleSearchResultsBox, currentCircleSearchField.getText());
+        searchBtn.setOnAction(e -> runSearch.run());
+        currentCircleSearchField.setOnAction(e -> runSearch.run());
+        currentCircleSearchField.textProperty().addListener((obs, oldValue, newValue) -> runSearch.run());
+
+        search.getChildren().addAll(
+            text("Explore Community", 13, true, "#ffffff"),
+            text("Search residents and send connection requests.", 12, false, textMuted()),
+            currentCircleSearchField,
+            searchBtn,
+            currentCircleSearchResultsBox
+        );
+        populateResidentSearchResults(currentCircleSearchResultsBox, "");
+
+        card.getChildren().addAll(top, switcher, friendsPane, currentCirclePendingPane, search);
         return card;
     }
 
@@ -2200,6 +2290,445 @@ public class ProfileView implements ViewInterface {
         return c;
     }
 
+    private VBox friendCard(User friend) {
+        VBox card = new VBox(8);
+        card.setAlignment(Pos.CENTER);
+        card.setCursor(javafx.scene.Cursor.HAND);
+        card.setOnMouseClicked(e -> {
+            if (friend != null) {
+                showFriendDetailsPopup(friend, card);
+            }
+        });
+
+        Profile friendProfile = friend == null ? null : profileService.findOneByUserId(friend.getIdUser()).orElse(null);
+        StackPane avatar = avatarBadge(friendProfile != null ? friendProfile.getAvatar() : null, displayInitial(friend), 30);
+        avatar.setMinSize(60, 60);
+        avatar.setMaxSize(60, 60);
+
+        card.getChildren().addAll(avatar, text(friend == null ? "Unknown" : valueOr(friend.getFirstName(), "Unknown"), 11, true, textMuted()));
+        return card;
+    }
+
+    private VBox pendingRequestRow(UserRelationship relationship) {
+        VBox row = new VBox(0);
+        row.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.07); -fx-border-width: 1px; -fx-background-radius: 14px; -fx-border-radius: 14px;");
+        row.setPadding(new Insets(12));
+
+        User sender = resolveSender(relationship);
+        Profile senderProfile = sender == null ? null : profileService.findOneByUserId(sender.getIdUser()).orElse(null);
+
+        HBox content = new HBox(12);
+        content.setAlignment(Pos.CENTER_LEFT);
+
+        StackPane avatar = avatarBadge(senderProfile != null ? senderProfile.getAvatar() : null, displayInitial(sender), 21);
+        avatar.setMinSize(42, 42);
+        avatar.setMaxSize(42, 42);
+
+        VBox textBox = new VBox(2);
+        textBox.getChildren().addAll(
+            text(sender == null ? "Unknown resident" : displayName(sender), 13, true, "#ffffff"),
+            text("Wants to connect", 10, false, textMuted())
+        );
+        HBox.setHgrow(textBox, Priority.ALWAYS);
+
+        Button accept = new Button("✓");
+        accept.setPrefSize(32, 32);
+        accept.setStyle("-fx-background-color: rgba(67,181,129,0.2); -fx-text-fill: #43b581; -fx-background-radius: 10px; -fx-font-weight: 900;");
+        accept.setOnAction(e -> {
+            if (currentUser != null && currentUser.getIdUser() != null && relationship.getId() != null) {
+                if (relationshipService.acceptRequest(relationship.getId(), currentUser.getIdUser())) {
+                    refreshCircleSection();
+                } else {
+                    showAlert("Circle", "Could not accept this request.");
+                }
+            }
+        });
+
+        Button decline = new Button("×");
+        decline.setPrefSize(32, 32);
+        decline.setStyle("-fx-background-color: rgba(240,71,71,0.15); -fx-text-fill: #f04747; -fx-background-radius: 10px; -fx-font-weight: 900;");
+        decline.setOnAction(e -> {
+            if (currentUser != null && currentUser.getIdUser() != null && relationship.getId() != null) {
+                if (relationshipService.declineRequest(relationship.getId(), currentUser.getIdUser())) {
+                    refreshCircleSection();
+                } else {
+                    showAlert("Circle", "Could not decline this request.");
+                }
+            }
+        });
+
+        HBox actions = new HBox(6, accept, decline);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        content.getChildren().addAll(avatar, textBox, actions);
+        row.getChildren().add(content);
+        return row;
+    }
+
+    private VBox searchResultRow(User candidate) {
+        VBox row = new VBox(0);
+        row.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.07); -fx-border-width: 1px; -fx-background-radius: 14px; -fx-border-radius: 14px;");
+        row.setPadding(new Insets(12));
+
+        Profile candidateProfile = profileService.findOneByUserId(candidate.getIdUser()).orElse(null);
+        String state = currentUser == null || currentUser.getIdUser() == null
+            ? "NONE"
+            : relationshipService.getRelationshipState(currentUser.getIdUser(), candidate.getIdUser());
+
+        HBox content = new HBox(12);
+        content.setAlignment(Pos.CENTER_LEFT);
+
+        StackPane avatar = avatarBadge(candidateProfile != null ? candidateProfile.getAvatar() : null, displayInitial(candidate), 21);
+        avatar.setMinSize(42, 42);
+        avatar.setMaxSize(42, 42);
+
+        VBox textBox = new VBox(2);
+        textBox.getChildren().addAll(
+            text(displayName(candidate), 13, true, "#ffffff"),
+            text(relationshipService.getRelationshipLabel(currentUser == null ? 0 : currentUser.getIdUser(), candidate.getIdUser()), 10, false, textMuted())
+        );
+        HBox.setHgrow(textBox, Priority.ALWAYS);
+
+        Button action = new Button();
+        action.setPrefHeight(32);
+        action.setStyle("-fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
+        if ("FRIENDS".equals(state)) {
+            action.setText("Friends");
+            action.setDisable(true);
+            action.setStyle("-fx-background-color: rgba(67,181,129,0.15); -fx-text-fill: #43b581; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
+        } else if ("PENDING".equals(state)) {
+            action.setText("Pending");
+            action.setDisable(true);
+            action.setStyle("-fx-background-color: rgba(250,166,26,0.15); -fx-text-fill: #faa61a; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
+        } else if ("BLOCKED".equals(state)) {
+            action.setText("Blocked");
+            action.setDisable(true);
+            action.setStyle("-fx-background-color: rgba(240,71,71,0.15); -fx-text-fill: #f04747; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
+        } else {
+            action.setText("Connect");
+            action.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: #ffffff; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
+            action.setOnAction(e -> {
+                if (currentUser != null && currentUser.getIdUser() != null && relationshipService.sendFriendRequest(currentUser.getIdUser(), candidate.getIdUser())) {
+                    refreshCircleSection();
+                } else {
+                    showAlert("Circle", "Could not send connection request.");
+                }
+            });
+        }
+
+        content.getChildren().addAll(avatar, textBox, action);
+        row.getChildren().add(content);
+        return row;
+    }
+
+    private StackPane avatarBadge(String avatarPath, String fallback, double radius) {
+        Circle circle = new Circle(radius);
+        circle.setFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.20)));
+
+        Text fallbackText = text(fallback, Math.max(12, (int) Math.round(radius)), true, "#ffffff");
+        fallbackText.setMouseTransparent(true);
+
+        if (avatarPath != null && !avatarPath.isBlank()) {
+            Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
+            if (img != null && !img.isError()) {
+                circle.setFill(new ImagePattern(img));
+                fallbackText.setVisible(false);
+            }
+        }
+
+        return new StackPane(circle, fallbackText);
+    }
+
+    private void populateFriendGrid(GridPane grid, List<User> friends) {
+        grid.getChildren().clear();
+        if (friends == null || friends.isEmpty()) {
+            VBox empty = new VBox(6);
+            empty.setAlignment(Pos.CENTER);
+            empty.getChildren().add(text("No active connections yet.", 12, true, textMuted()));
+            grid.add(empty, 0, 0);
+            return;
+        }
+
+        for (int i = 0; i < friends.size(); i++) {
+            grid.add(friendCard(friends.get(i)), i % 4, i / 4);
+        }
+    }
+
+    private void populatePendingPane(VBox pendingPane, List<UserRelationship> relationships) {
+        pendingPane.getChildren().clear();
+        pendingPane.getChildren().add(text("Pending requests", 13, true, "#ffffff"));
+
+        if (relationships == null || relationships.isEmpty()) {
+            VBox empty = new VBox(6);
+            empty.setPadding(new Insets(20, 0, 8, 0));
+            empty.setAlignment(Pos.CENTER);
+            empty.getChildren().add(text("No pending requests.", 12, true, textMuted()));
+            pendingPane.getChildren().add(empty);
+            return;
+        }
+
+        for (UserRelationship relationship : relationships) {
+            pendingPane.getChildren().add(pendingRequestRow(relationship));
+        }
+    }
+
+    private void populateResidentSearchResults(VBox resultsBox, String query) {
+        resultsBox.getChildren().clear();
+
+        if (currentUser == null || currentUser.getIdUser() == null) {
+            resultsBox.getChildren().add(text("Sign in to explore residents.", 11, false, textMuted()));
+            return;
+        }
+
+        if (query == null || query.trim().length() < 2) {
+            resultsBox.getChildren().add(text("Type at least 2 characters to search.", 11, false, textMuted()));
+            return;
+        }
+
+        List<User> results = userService.searchByName(query.trim(), currentUser.getIdUser(), 8);
+        if (results.isEmpty()) {
+            resultsBox.getChildren().add(text("No residents found.", 11, false, textMuted()));
+            return;
+        }
+
+        for (User candidate : results) {
+            if (candidate != null && candidate.getIdUser() != null && !candidate.getIdUser().equals(currentUser.getIdUser())) {
+                resultsBox.getChildren().add(searchResultRow(candidate));
+            }
+        }
+    }
+
+    private void refreshCircleSection() {
+        if (currentUser == null || currentUser.getIdUser() == null) {
+            return;
+        }
+
+        currentCircleFriends = relationshipService.findFriends(currentUser, 8);
+        currentPendingRelationships = relationshipService.findPendingRequestsFor(currentUser);
+
+        if (currentCircleFriendCountText != null) {
+            currentCircleFriendCountText.setText(currentCircleFriends.size() + " FRIENDS");
+        }
+        if (currentCirclePendingCountText != null) {
+            currentCirclePendingCountText.setText(currentPendingRelationships.size() + " PENDING");
+        }
+        if (currentCircleFriendsGrid != null) {
+            populateFriendGrid(currentCircleFriendsGrid, currentCircleFriends);
+        }
+        if (currentCirclePendingPane != null) {
+            populatePendingPane(currentCirclePendingPane, currentPendingRelationships);
+        }
+        if (currentCircleSearchResultsBox != null) {
+            populateResidentSearchResults(currentCircleSearchResultsBox, currentCircleSearchField == null ? "" : currentCircleSearchField.getText());
+        }
+    }
+
+    private void showFriendDetailsPopup(User friend, Node anchor) {
+        if (friend == null) {
+            return;
+        }
+
+        Profile friendProfile = profileService.findOneByUserId(friend.getIdUser()).orElse(null);
+        UserStanding friendStanding = standingService.findOrCreateByUserId(friend.getIdUser());
+        String relationshipLabel = currentUser == null || currentUser.getIdUser() == null
+            ? "Connect"
+            : relationshipService.getRelationshipLabel(currentUser.getIdUser(), friend.getIdUser());
+
+        Stage modal = new Stage(StageStyle.TRANSPARENT);
+        if (root.getScene() != null && root.getScene().getWindow() != null) {
+            modal.initOwner(root.getScene().getWindow());
+        }
+        modal.initModality(Modality.APPLICATION_MODAL);
+
+        VBox card = new VBox(12);
+        card.setPadding(new Insets(16));
+        card.setPrefWidth(340);
+        card.setStyle(
+            "-fx-background-color: " + surfaceCard() + ";" +
+            "-fx-background-radius: 16;" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.28) + ";" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 16;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.58), 20, 0.24, 0, 8);"
+        );
+
+        HBox header = new HBox(12);
+        header.setAlignment(Pos.CENTER_LEFT);
+        StackPane avatar = avatarBadge(friendProfile != null ? friendProfile.getAvatar() : null, displayInitial(friend), 32);
+        avatar.setMinSize(48, 48);
+        avatar.setMaxSize(48, 48);
+        VBox headerText = new VBox(3);
+        headerText.getChildren().addAll(
+            text(displayName(friend), 16, true, textDefault()),
+            text(valueOr(friend.getEmailUser(), ""), 11, false, textMuted())
+        );
+        header.getChildren().addAll(avatar, headerText);
+
+        HBox statRow = new HBox(8,
+            statPill("Standing", valueOr(friendStanding.getStandingLabel(), "NORMAL")),
+            statPill("Level", String.valueOf(friendStanding.getLevel())),
+            statPill("Points", String.valueOf(friendStanding.getPoints()))
+        );
+
+        VBox info = new VBox(8);
+        info.getChildren().addAll(
+            infoRow("Relationship", relationshipLabel),
+            infoRow("Joined", friend.getCreatedAt() == null ? "-" : PROFILE_DATE_FMT.format(friend.getCreatedAt()))
+        );
+
+        // Add phone if available
+        if (friend.getPhone() != null && !friend.getPhone().trim().isEmpty()) {
+            info.getChildren().add(infoRow("Phone", friend.getPhone()));
+        }
+
+        // Add bio/description if available
+        if (friendProfile != null && friendProfile.getDescriptionProfile() != null && 
+            !friendProfile.getDescriptionProfile().trim().isEmpty()) {
+            Text bioLabel = text("Bio", 11, true, textMuted());
+            Text bioContent = text(friendProfile.getDescriptionProfile(), 12, false, textDefault());
+            bioContent.setWrappingWidth(300);
+            VBox bioSection = new VBox(3);
+            bioSection.getChildren().addAll(bioLabel, bioContent);
+            info.getChildren().add(bioSection);
+        }
+
+        HBox actions = new HBox();
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        Button ok = new Button("OK");
+        ok.setStyle(
+            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+            "-fx-text-fill: #ffffff;" +
+            "-fx-font-weight: 800;" +
+            "-fx-padding: 8 20 8 20;" +
+            "-fx-background-radius: 10;" +
+            "-fx-cursor: hand;"
+        );
+        ok.setOnAction(e -> modal.close());
+        actions.getChildren().add(ok);
+
+        card.getChildren().addAll(header, statRow, info, actions);
+
+        StackPane overlay = new StackPane(card);
+        overlay.setStyle("-fx-background-color: transparent;");
+        StackPane.setAlignment(card, Pos.CENTER);
+
+        Scene scene = new Scene(overlay);
+        scene.setFill(Color.TRANSPARENT);
+        modal.setScene(scene);
+
+        // Position popup relative to anchor node
+        if (anchor != null) {
+            try {
+                Bounds anchorScreenBounds = anchor.localToScreen(anchor.getBoundsInLocal());
+                if (anchorScreenBounds != null) {
+                    // Measure actual popup size so the visual gap matches precisely.
+                    overlay.applyCss();
+                    overlay.layout();
+                    double popupWidth = Math.max(card.prefWidth(-1), card.getLayoutBounds().getWidth());
+                    double popupHeight = Math.max(card.prefHeight(-1), card.getLayoutBounds().getHeight());
+                    double x = anchorScreenBounds.getCenterX() - (popupWidth / 2);
+                    double y = anchorScreenBounds.getMinY() - popupHeight - 3; // Position above circle with 3px gap
+
+                    // Adjust if popup goes off-screen
+                    Rectangle2D screenBounds = Screen.getScreensForRectangle(
+                        anchorScreenBounds.getMinX(),
+                        anchorScreenBounds.getMinY(),
+                        anchorScreenBounds.getWidth(),
+                        anchorScreenBounds.getHeight()
+                    ).stream().findFirst().orElse(Screen.getPrimary()).getVisualBounds();
+
+                    if (x < screenBounds.getMinX() + 10) x = screenBounds.getMinX() + 10;
+                    if (x + popupWidth > screenBounds.getMaxX() - 10) x = screenBounds.getMaxX() - popupWidth - 10;
+                    if (y < screenBounds.getMinY() + 10) {
+                        // If there's no room above, place below instead
+                        y = anchorScreenBounds.getMaxY() + 3;
+                    }
+
+                    if (y + popupHeight > screenBounds.getMaxY() - 10) {
+                        y = screenBounds.getMaxY() - popupHeight - 10;
+                    }
+
+                    modal.setX(x);
+                    modal.setY(y);
+                }
+            } catch (Exception e) {
+                // Fallback to centered if positioning fails
+            }
+        }
+
+        modal.showAndWait();
+    }
+
+    private HBox infoRow(String label, String value) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        Text left = text(label, 12, true, textMuted());
+        Text right = text(value, 12, false, textDefault());
+        HBox.setHgrow(left, Priority.NEVER);
+        HBox.setHgrow(right, Priority.ALWAYS);
+        row.getChildren().addAll(left, right);
+        return row;
+    }
+
+    private void styleTabChip(Button button, boolean active) {
+        button.setStyle((active
+            ? "-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: #ffffff;"
+            : "-fx-background-color: " + surfaceSoft() + "; -fx-text-fill: " + textMuted() + ";")
+            + "-fx-font-weight: 800; -fx-background-radius: 12px; -fx-padding: 8 12 8 12;");
+    }
+
+    private String displayName(User user) {
+        if (user == null) {
+            return "Unknown resident";
+        }
+
+        String full = ((user.getFirstName() == null ? "" : user.getFirstName()) + " " + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        return full.isBlank() ? "Unknown resident" : full;
+    }
+
+    private String displayInitial(User user) {
+        if (user == null) {
+            return "U";
+        }
+
+        String source = valueOr(user.getFirstName(), valueOr(user.getLastName(), "U"));
+        return source.substring(0, 1).toUpperCase();
+    }
+
+    private User resolveSender(UserRelationship relationship) {
+        if (relationship == null || currentUser == null || currentUser.getIdUser() == null) {
+            return null;
+        }
+
+        Integer senderId;
+        if (relationship.getUserFirstId() != null && relationship.getUserFirstId().equals(currentUser.getIdUser())) {
+            senderId = relationship.getUserSecondId();
+        } else {
+            senderId = relationship.getUserFirstId();
+        }
+
+        if (senderId == null || senderId <= 0) {
+            return null;
+        }
+
+        return userService.findById(senderId).orElse(null);
+    }
+
+    private boolean isStandingWarnedOrBeyond(String standingLabel) {
+        return "WARNED".equals(standingLabel) || "SUSPENDED".equals(standingLabel) || "BANNED".equals(standingLabel);
+    }
+
+    private boolean isStandingSuspendedOrBeyond(String standingLabel) {
+        return "SUSPENDED".equals(standingLabel) || "BANNED".equals(standingLabel);
+    }
+
+    private String standingTrackColor(String standingLabel) {
+        return switch (standingLabel) {
+            case "WARNED" -> "#faa61a";
+            case "SUSPENDED", "BANNED" -> "#f04747";
+            default -> "#43b581";
+        };
+    }
+
     private VBox statPill(String label, String value) {
         VBox pill = new VBox(4, text(label, 11, true, textMuted()), text(value, 13, true, "#ffffff"));
         pill.setPadding(new Insets(10, 14, 10, 14));
@@ -2209,10 +2738,7 @@ public class ProfileView implements ViewInterface {
 
     private Button tabChip(String label, boolean active) {
         Button b = new Button(label);
-        b.setStyle((active
-            ? "-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white;"
-            : "-fx-background-color: " + surfaceSoft() + "; -fx-text-fill: " + textMuted() + ";")
-            + "-fx-font-weight: 800; -fx-background-radius: 12px; -fx-padding: 8 12 8 12;");
+        styleTabChip(b, active);
         return b;
     }
 
@@ -2229,6 +2755,9 @@ public class ProfileView implements ViewInterface {
     private void hydrateSessionData() {
         currentUser = sessionManager.getCurrentUser();
         currentProfile = sessionManager.getCurrentProfile();
+        currentStanding = null;
+        currentCircleFriends = new ArrayList<>();
+        currentPendingRelationships = new ArrayList<>();
 
         if (currentUser != null && currentUser.getIdUser() != null) {
             currentUser = userService.findById(currentUser.getIdUser()).orElse(currentUser);
@@ -2240,6 +2769,10 @@ public class ProfileView implements ViewInterface {
                     sessionManager.setCurrentProfile(currentProfile);
                 }
             }
+
+            currentStanding = standingService.findOrCreateByUserId(currentUser.getIdUser());
+            currentCircleFriends = relationshipService.findFriends(currentUser, 8);
+            currentPendingRelationships = relationshipService.findPendingRequestsFor(currentUser);
         }
     }
 
@@ -2407,6 +2940,10 @@ public class ProfileView implements ViewInterface {
     }
 
     private void refreshOnboardingCard() {
+        refreshProfileContent();
+    }
+
+    private void refreshProfileContent() {
         Platform.runLater(() -> {
             String activeMainPage = currentMainPageName;
             String activeDetailTab = currentDetailTabName;

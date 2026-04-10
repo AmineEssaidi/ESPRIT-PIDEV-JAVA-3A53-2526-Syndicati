@@ -9,6 +9,8 @@ import javafx.stage.StageStyle;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.scene.text.Font;
+import com.syndicati.utils.security.AccessControlService;
+import com.syndicati.views.frontend.home.AdminDestinationChoiceView;
 import com.syndicati.views.frontend.home.LandingPageView;
 import com.syndicati.views.frontend.login.LoginView;
 import com.syndicati.utils.theme.ThemeManager;
@@ -23,6 +25,7 @@ public class MainApplication extends Application {
     private static MainApplication instance;
     private Stage primaryStage;
     private LandingPageView landingPageView;
+    private AdminDestinationChoiceView adminDestinationChoiceView;
     private LoginView loginView;
     private boolean isLoggedIn = false;
     private javafx.animation.Timeline loginChecker; // Keep reference to stop it later
@@ -139,54 +142,80 @@ public class MainApplication extends Application {
     
     private void navigateToLandingPage() {
         if (isLoggedIn) return; // Prevent multiple navigations
-        
+
         isLoggedIn = true;
         System.out.println("ðŸ”“ Login successful! Navigating to landing page...");
-        
+
         // Store current window size and position before switching
         double currentWidth = primaryStage.getWidth();
         double currentHeight = primaryStage.getHeight();
         double currentX = primaryStage.getX();
         double currentY = primaryStage.getY();
         boolean wasMaximized = primaryStage.isMaximized();
-        
+
         // STOP the login monitoring animation FIRST
         if (loginChecker != null) {
             loginChecker.stop();
             loginChecker = null;
         }
-        
-        // Clean up login view FIRST to remove all backgrounds
-        loginView.cleanup();
-        loginView = null; // Clear reference to ensure garbage collection
-        
-        // Create the landing page view
-        landingPageView = new LandingPageView();
-        
-        // Set up navigation manager
-        NavigationManager navigationManager = NavigationManager.getInstance();
-        navigationManager.setViews(landingPageView);
-        
-        // Create completely new scene - don't set initial size, let it adapt to stage
-        Scene scene = new Scene(landingPageView.getRoot());
-        scene.setFill(Color.BLACK); // Keep non-transparent app background
-        scene.getStylesheets().clear(); // Clear any inherited styles
+
+        if (AccessControlService.canAccessAdminArea()) {
+            showAdminDestinationChoice(currentWidth, currentHeight, currentX, currentY, wasMaximized);
+            return;
+        }
+
+        showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
+        System.out.println("âœ… Successfully navigated to landing page!");
+    }
+
+    private void showAdminDestinationChoice(
+        double currentWidth,
+        double currentHeight,
+        double currentX,
+        double currentY,
+        boolean wasMaximized
+    ) {
+        if (loginView != null) {
+            loginView.cleanup();
+            loginView = null;
+        }
+
+        if (landingPageView != null) {
+            landingPageView.cleanup();
+            landingPageView = null;
+        }
+
+        adminDestinationChoiceView = new AdminDestinationChoiceView();
+        adminDestinationChoiceView.setOnChooseHome(() -> {
+            double w = primaryStage.getWidth();
+            double h = primaryStage.getHeight();
+            double x = primaryStage.getX();
+            double y = primaryStage.getY();
+            boolean max = primaryStage.isMaximized();
+            showLandingPage(w, h, x, y, max, false);
+        });
+        adminDestinationChoiceView.setOnChooseDashboard(() -> {
+            double w = primaryStage.getWidth();
+            double h = primaryStage.getHeight();
+            double x = primaryStage.getX();
+            double y = primaryStage.getY();
+            boolean max = primaryStage.isMaximized();
+            showLandingPage(w, h, x, y, max, true);
+        });
+
+        Scene scene = new Scene(adminDestinationChoiceView.getRoot());
+        scene.setFill(Color.BLACK);
+        scene.getStylesheets().clear();
         applyGlobalStyles(scene);
-        // Apply global font family to entire scene (use Light as default body font)
         if (scene.getRoot() != null) {
             appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
         }
-        
-        // Set minimum window size
+
         primaryStage.setMinWidth(1500);
         primaryStage.setMinHeight(900);
-        
         ThemeManager.getInstance().setScene(scene);
-        
-        // Set scene first, THEN restore size
         primaryStage.setScene(scene);
-        
-        // Restore window size and position before showing
+
         if (wasMaximized) {
             primaryStage.setMaximized(true);
         } else {
@@ -195,29 +224,83 @@ public class MainApplication extends Application {
             primaryStage.setX(currentX);
             primaryStage.setY(currentY);
         }
-        
-        primaryStage.setTitle("Syndicati - Dashboard");
-        
-        // Add corner resize functionality for landing page
+
+        primaryStage.setTitle("Syndicati - Choose Destination");
         addResizeHandlers(primaryStage, scene);
-        
-        // Apply rounded shape to new scene
         applyRoundedShape(scene);
-        
-        // Force refresh
         primaryStage.show();
-        
-        // Force multiple layout passes to ensure content is properly sized
+    }
+
+    private void showLandingPage(
+        double currentWidth,
+        double currentHeight,
+        double currentX,
+        double currentY,
+        boolean wasMaximized,
+        boolean goToDashboard
+    ) {
+        if (loginView != null) {
+            loginView.cleanup();
+            loginView = null;
+        }
+
+        if (adminDestinationChoiceView != null) {
+            adminDestinationChoiceView.cleanup();
+            adminDestinationChoiceView = null;
+        }
+
+        if (landingPageView != null) {
+            landingPageView.cleanup();
+            landingPageView = null;
+        }
+
+        landingPageView = new LandingPageView();
+
+        NavigationManager navigationManager = NavigationManager.getInstance();
+        navigationManager.setViews(landingPageView);
+
+        Scene scene = new Scene(landingPageView.getRoot());
+        scene.setFill(Color.BLACK); // Keep non-transparent app background
+        scene.getStylesheets().clear(); // Clear any inherited styles
+        applyGlobalStyles(scene);
+        if (scene.getRoot() != null) {
+            appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
+        }
+
+        primaryStage.setMinWidth(1500);
+        primaryStage.setMinHeight(900);
+
+        ThemeManager.getInstance().setScene(scene);
+        primaryStage.setScene(scene);
+
+        if (wasMaximized) {
+            primaryStage.setMaximized(true);
+        } else {
+            primaryStage.setWidth(currentWidth);
+            primaryStage.setHeight(currentHeight);
+            primaryStage.setX(currentX);
+            primaryStage.setY(currentY);
+        }
+
+        primaryStage.setTitle("Syndicati - Dashboard");
+
+        addResizeHandlers(primaryStage, scene);
+        applyRoundedShape(scene);
+        primaryStage.show();
+
         javafx.application.Platform.runLater(() -> {
             landingPageView.getRoot().layout();
             primaryStage.sizeToScene();
             javafx.application.Platform.runLater(() -> {
                 landingPageView.getRoot().layout();
                 primaryStage.sizeToScene();
+                if (goToDashboard) {
+                    landingPageView.enterDashboardMode();
+                } else {
+                    landingPageView.navigateToHome();
+                }
             });
         });
-        
-        System.out.println("âœ… Successfully navigated to landing page!");
     }
 
     private void loadCustomFonts() {

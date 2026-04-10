@@ -15,8 +15,10 @@ import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.session.SessionManager;
+import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.views.backend.dashboard.DashboardView;
 import javafx.application.Platform;
+import javafx.scene.control.Alert;
 
 /**
  * Landing Page View - Main container with dynamic island header and footer
@@ -174,6 +176,10 @@ public class LandingPageView implements ViewInterface {
     }
     
     public void navigateToProfile() {
+        if (!AccessControlService.canAccessProfile()) {
+            showAccessDenied("Please sign in to view your profile.");
+            return;
+        }
         currentPageName = "profile";
         // Clear existing content and show profile page
         mainContent.getChildren().clear();
@@ -196,6 +202,10 @@ public class LandingPageView implements ViewInterface {
 
     /** Swap out the normal header+content with the full admin dashboard layout. */
     public void enterDashboardMode() {
+        if (!AccessControlService.canAccessAdminArea()) {
+            showAccessDenied("Access denied. You do not have permission to access the admin area.");
+            return;
+        }
         currentPageName = "dashboard";
         DashboardView dv = NavigationManager.getInstance().getDashboardView();
         dv.setExitCallback(this::exitDashboardMode);
@@ -223,6 +233,14 @@ public class LandingPageView implements ViewInterface {
 
     public void navigateToPage(String pageName) {
         String normalizedPage = pageName == null ? "home" : pageName.toLowerCase();
+        if ("profile".equals(normalizedPage) && !AccessControlService.canAccessProfile()) {
+            showAccessDenied("Please sign in to view your profile.");
+            return;
+        }
+        if ("dashboard".equals(normalizedPage) && !AccessControlService.canAccessAdminArea()) {
+            showAccessDenied("Access denied. You do not have permission to access the admin area.");
+            return;
+        }
         currentPageName = normalizedPage;
         if ("home".equalsIgnoreCase(pageName)) {
             navigateToHome();
@@ -234,6 +252,14 @@ public class LandingPageView implements ViewInterface {
         }
         mainContent.getChildren().clear();
         mainContent.getChildren().add(NavigationManager.getInstance().getPage(pageName));
+    }
+
+    private void showAccessDenied(String message) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle("Access Denied");
+        alert.setHeaderText("Permission Required");
+        alert.setContentText(message);
+        alert.showAndWait();
     }
     
     private void applyThemeStyling() {

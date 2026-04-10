@@ -1982,6 +1982,9 @@ public class LoginView implements ViewInterface {
             adminUser.setFirstName("Admin");
             adminUser.setLastName("");
             adminUser.setEmailUser("admin@syndicati.tn");
+            adminUser.setRoleUser("ADMIN");
+            adminUser.setVerified(true);
+            adminUser.setDisabled(false);
             SessionManager.getInstance().setCurrentUser(adminUser);
             System.out.println("Login successful! Navigating to landing page...");
             if (onLoginSuccess != null) {

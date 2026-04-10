@@ -13,6 +13,8 @@ import com.syndicati.views.frontend.services.ResidencePageView;
 import com.syndicati.views.frontend.services.ForumPageView;
 import com.syndicati.views.frontend.services.SyndicatPageView;
 import com.syndicati.views.frontend.services.EvenementPageView;
+import com.syndicati.utils.security.AccessControlService;
+import javafx.scene.control.Alert;
 
 /**
  * Navigation Manager - Handles page navigation and sub-menu management
@@ -150,6 +152,18 @@ public class NavigationManager {
     
     public void navigateTo(String pageName) {
         System.out.println("Navigating to: " + pageName);
+        String normalizedPage = pageName == null ? "home" : pageName.toLowerCase();
+
+        if ("profile".equals(normalizedPage) && !AccessControlService.canAccessProfile()) {
+            showAccessDenied("Please sign in to view your profile.");
+            return;
+        }
+
+        if ("dashboard".equals(normalizedPage) && !AccessControlService.canAccessAdminArea()) {
+            showAccessDenied("Access denied. You do not have permission to access the admin area.");
+            return;
+        }
+
         if (landingPageView != null) {
             if ("home".equals(pageName)) {
                 landingPageView.navigateToHome();
@@ -157,6 +171,14 @@ public class NavigationManager {
                 landingPageView.navigateToPage(pageName);
             }
         }
+    }
+
+    private void showAccessDenied(String message) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle("Access Denied");
+        alert.setHeaderText("Permission Required");
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     /** Exposes the dashboard view so LandingPageView can set its exit callback. */
