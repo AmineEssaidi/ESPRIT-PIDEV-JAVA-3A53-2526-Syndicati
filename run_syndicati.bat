@@ -37,8 +37,8 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 
 REM Set Java environment
-set JAVA_HOME=c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21
-set PATH=c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;%PATH%
+if not defined JAVA_HOME set JAVA_HOME=c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-25
+set PATH=%JAVA_HOME%\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;%PATH%
 
 REM Launch app
 echo Starting Syndicati...

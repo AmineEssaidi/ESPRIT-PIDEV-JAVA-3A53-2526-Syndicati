@@ -56,7 +56,7 @@ When you start the app:
 ## Troubleshooting
 
 ### App doesn't start
-- Ensure Java 21 is installed: `java -version`
+- Ensure Java 25 is installed: `java -version`
 - Check Maven: `mvn -v`
 - Clear cache: `mvn clean compile`
 

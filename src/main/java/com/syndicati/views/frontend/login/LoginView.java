@@ -2573,7 +2573,7 @@ public class LoginView implements ViewInterface {
                         cameraUpdateTimer = new AnimationTimer() {
                             @Override
                             public void handle(long now) {
-                                javafx.scene.image.Image frame = cameraService.getCurrentFrame();
+                                javafx.scene.image.Image frame = cameraService.getCurrentFrameWithDetection();
                                 if (frame != null && faceIdVideoView != null) {
                                     faceIdVideoView.setImage(frame);
                                 }

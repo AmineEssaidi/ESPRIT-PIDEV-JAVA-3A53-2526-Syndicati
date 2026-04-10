@@ -17,18 +17,22 @@ if not exist "tools" mkdir "tools"
 REM ============================================================
 REM STEP 1: Check/Download Java
 REM ============================================================
-set "JAVA_DIR=%~dp0tools\jdk-21"
+if defined JAVA_HOME (
+    set "JAVA_DIR=%JAVA_HOME%"
+) else (
+    set "JAVA_DIR=%~dp0tools\jdk-25"
+)
 set "JAVA_EXE=%JAVA_DIR%\bin\java.exe"
 
 if exist "%JAVA_EXE%" (
     echo [OK] Java found locally
 ) else (
-    echo [INFO] Downloading Java 21... This may take a few minutes.
+    echo [INFO] Downloading Java 25... This may take a few minutes.
     echo.
     
     set "JAVA_ZIP=%~dp0tools\jdk.zip"
     
-    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.2%%2B13/OpenJDK21U-jdk_x64_windows_hotspot_21.0.2_13.zip' -OutFile '%~dp0tools\jdk.zip' -UseBasicParsing"
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri 'https://api.adoptium.net/v3/binary/latest/25/ga/windows/x64/jdk/hotspot/normal/eclipse' -OutFile '%~dp0tools\jdk.zip' -UseBasicParsing"
     
     if not exist "%~dp0tools\jdk.zip" (
         echo [ERROR] Failed to download Java!

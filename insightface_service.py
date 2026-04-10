@@ -25,13 +25,13 @@ logging.basicConfig(
 logger = logging.getLogger('InsightFace')
 
 # Import InsightFace
+INSIGHTFACE_AVAILABLE = True
 try:
     import insightface
     logger.info("✓ InsightFace library loaded")
 except ImportError:
-    logger.error("ERROR: insightface not installed")
-    logger.error("Install with: pip install insightface onnxruntime")
-    sys.exit(1)
+    INSIGHTFACE_AVAILABLE = False
+    logger.warning("InsightFace not installed. Falling back to OpenCV-only backend.")
 
 
 class FaceDetector:
@@ -40,31 +40,41 @@ class FaceDetector:
     def __init__(self):
         """Initialize InsightFace detector"""
         logger.info("Initializing InsightFace...")
+        self.app = None
+        self.face_cascade = None
         
-        try:
-            # Initialize with default model (buffalo_sc = small + fast)
-            self.app = insightface.app.FaceAnalysis(
-                name='buffalo_sc',
-                providers=['CPUProvider']
-            )
-            
-            # Prepare: downloads models if needed
-            self.app.prepare(ctx_id=-1, det_model='retinaface', rec_model='arcface')
-            
-            logger.info("✓ InsightFace initialized successfully")
-            logger.info("  Detection model: RetinaFace (fast & accurate)")
-            logger.info("  Recognition: ArcFace (embeddings)")
-            
-        except Exception as e:
-            logger.error(f"ERROR: {e}")
+        if INSIGHTFACE_AVAILABLE:
             try:
-                logger.info("Trying compatibility mode...")
-                self.app = insightface.app.FaceAnalysis()
-                self.app.prepare(ctx_id=-1)
-                logger.info("✓ InsightFace ready (compatibility mode)")
-            except Exception as e2:
-                logger.error(f"FATAL: {e2}")
-                sys.exit(1)
+                # Initialize with default model (buffalo_sc = small + fast)
+                self.app = insightface.app.FaceAnalysis(
+                    name='buffalo_sc',
+                    providers=['CPUProvider']
+                )
+
+                # Prepare: downloads models if needed
+                self.app.prepare(ctx_id=-1, det_model='retinaface', rec_model='arcface')
+
+                logger.info("✓ InsightFace initialized successfully")
+                logger.info("  Detection model: RetinaFace (fast & accurate)")
+                logger.info("  Recognition: ArcFace (embeddings)")
+                return
+
+            except Exception as e:
+                logger.error(f"ERROR: {e}")
+                try:
+                    logger.info("Trying compatibility mode...")
+                    self.app = insightface.app.FaceAnalysis()
+                    self.app.prepare(ctx_id=-1)
+                    logger.info("✓ InsightFace ready (compatibility mode)")
+                    return
+                except Exception as e2:
+                    logger.warning(f"InsightFace init failed, enabling fallback backend: {e2}")
+
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml')
+        if self.face_cascade.empty():
+            logger.error("FATAL: OpenCV face cascade is unavailable")
+            sys.exit(1)
+        logger.info("✓ OpenCV fallback backend initialized")
     
     def base64_to_image(self, b64: str) -> Optional[np.ndarray]:
         """Decode base64 to image"""
@@ -90,6 +100,43 @@ class FaceDetector:
         result = {'detected': False, 'faces': [], 'count': 0}
         
         try:
+            if self.app is None:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                gray = cv2.equalizeHist(gray)
+                faces = self.face_cascade.detectMultiScale(
+                    gray,
+                    scaleFactor=1.1,
+                    minNeighbors=5,
+                    minSize=(30, 30)
+                )
+
+                if len(faces) == 0:
+                    return result
+
+                result['detected'] = True
+                result['count'] = len(faces)
+
+                for i, (x, y, w, h) in enumerate(faces):
+                    face_data = {
+                        'id': i,
+                        'bbox': [int(x), int(y), int(x + w), int(y + h)],
+                        'x': int(x),
+                        'y': int(y),
+                        'width': int(w),
+                        'height': int(h),
+                        'confidence': 0.85,
+                        'landmarks': [
+                            {'x': float(x + w * 0.3), 'y': float(y + h * 0.35)},
+                            {'x': float(x + w * 0.7), 'y': float(y + h * 0.35)},
+                            {'x': float(x + w * 0.5), 'y': float(y + h * 0.55)},
+                            {'x': float(x + w * 0.35), 'y': float(y + h * 0.78)},
+                            {'x': float(x + w * 0.65), 'y': float(y + h * 0.78)}
+                        ]
+                    }
+                    result['faces'].append(face_data)
+
+                return result
+
             faces = self.app.get(frame)
             
             if len(faces) == 0:
@@ -143,6 +190,25 @@ class FaceDetector:
             return {'is_real': True, 'confidence': 0.5}
         
         try:
+            if self.app is None:
+                # Fallback mode: movement-based check only.
+                boxes = []
+                for frame in frames:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    detected = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                    if len(detected) > 0:
+                        boxes.append(detected[0])
+
+                if len(boxes) < 2:
+                    return {'is_real': False, 'confidence': 0.2}
+
+                movement = float(np.std([b[0] for b in boxes]))
+                return {
+                    'is_real': movement > 2.0,
+                    'confidence': float(min(movement / 12.0, 1.0)),
+                    'movement': movement
+                }
+
             detections = []
             for frame in frames:
                 faces = self.app.get(frame)

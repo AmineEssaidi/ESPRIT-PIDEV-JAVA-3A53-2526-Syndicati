@@ -15,6 +15,7 @@ import com.syndicati.services.InsightFaceService;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Real Camera Service using Webcam Capture Library
@@ -71,55 +72,28 @@ public class RealCameraService {
      * Start InsightFace service in background thread with retry logic
      */
     private void startInsightFaceAsync() {
-        insightFaceStartupThread = new Thread(() -> {
-            System.out.println("RealCameraService: Starting InsightFace service in background...");
-            int maxRetries = 3;
-            int retryCount = 0;
-            
-            while (retryCount < maxRetries && !useInsightFace) {
-                try {
-                    insightFaceService = new InsightFaceService();
-                    if (insightFaceService.initialize()) {
-                        useInsightFace = true;
-                        insightFaceReady = true;
-                        System.out.println("RealCameraService: ✓ InsightFace service ready - 3D face mesh ENABLED");
-                        return;
-                    } else {
-                        // initialize() returned false - count this as a failed attempt
-                        retryCount++;
-                        System.out.println("RealCameraService: InsightFace startup attempt " + retryCount + "/" + maxRetries + " failed (returned false)");
-                        if (retryCount < maxRetries) {
-                            try {
-                                Thread.sleep(1000);  // Wait 1s before retry
-                            } catch (InterruptedException ie) {
-                                Thread.currentThread().interrupt();
-                                break;
-                            }
-                        }
-                    }
-                } catch (Exception ex) {
-                    retryCount++;
-                    System.out.println("RealCameraService: InsightFace startup attempt " + retryCount + "/" + maxRetries + " failed (exception): " + ex.getMessage());
-                    if (retryCount < maxRetries) {
-                        try {
-                            Thread.sleep(1000);  // Wait 1s before retry
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            if (!useInsightFace) {
-                System.out.println("RealCameraService: ✗ InsightFace service failed to start after " + retryCount + " attempts - using Haar Cascade fallback");
-                insightFaceReady = true;  // Mark as ready even though it failed, so we proceed with fallback
-            }
-        }, "InsightFace-Startup");
+        if (insightFaceService != null && insightFaceService.isRunning()) {
+            return; // Already running
+        }
         
-        insightFaceStartupThread.setDaemon(true);
-        insightFaceStartupThread.setPriority(Thread.MIN_PRIORITY);  // Low priority to not block UI
-        insightFaceStartupThread.start();
+        CompletableFuture.runAsync(() -> {
+            System.out.println("RealCameraService: Initializing InsightFace service...");
+            insightFaceService = new InsightFaceService();
+            boolean started = insightFaceService.initialize();
+            
+            if (started) {
+                System.out.println("RealCameraService: ✓ InsightFace service started successfully.");
+                landmarkDetectionAvailable = true;
+                insightFaceReady = true;
+                useInsightFace = true;  // Enable InsightFace usage now that it's running
+            } else {
+                System.err.println("RealCameraService: ✗ InsightFace service failed to start. Trying fallback...");
+                insightFaceService = null; // Clear failed service
+                
+                // Fallback to basic Haar detector
+                initializeLandmarkDetection();
+            }
+        });
     }
     
     /**
@@ -389,9 +363,11 @@ public class RealCameraService {
             }
             
             if (useInsightFace && insightFaceService != null && insightFaceService.isRunning()) {
+                System.out.println("RealCameraService: Attempting InsightFace detection...");
                 try {
                     Image insightFaceImage = detectWithInsightFace();
                     if (insightFaceImage != null) {
+                        System.out.println("RealCameraService: ✓ InsightFace detection succeeded");
                         return cacheRenderedImage(insightFaceImage);
                     }
                 } catch (Exception ex) {
@@ -400,13 +376,16 @@ public class RealCameraService {
             }
             
             // Second priority: Try basic Graphics2D detection (always available)
+            System.out.println("RealCameraService: Using basic detection with facial landmarks...");
             try {
                 Image detectedImage = detectBasic();
                 if (detectedImage != null) {
+                    System.out.println("RealCameraService: ✓ Basic detection succeeded - landmarks should be visible");
                     return cacheRenderedImage(detectedImage);
                 }
             } catch (Exception ex) {
                 System.err.println("RealCameraService: Error in basic detection: " + ex.getMessage());
+                ex.printStackTrace();
             }
             
             // Third priority: Try OpenCV landmarks (optional, non-critical)
@@ -592,8 +571,11 @@ public class RealCameraService {
      */
     private Image detectBasic() {
         if (currentFrame == null) {
+            System.out.println("RealCameraService: detectBasic - currentFrame is null!");
             return null;
         }
+        
+        System.out.println("RealCameraService: detectBasic - starting detection");
         
         try {
             // Reuse a persistent drawing buffer to reduce allocation churn.
@@ -615,6 +597,7 @@ public class RealCameraService {
                 java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
             
             // Detect face using multiple strategies
+            System.out.println("RealCameraService: detectBasic - detecting face with cascade...");
             java.awt.Rectangle detectedFace = detectFaceWithCascade(currentFrame);
             
             int centerX, centerY, boxWidth, boxHeight;
@@ -698,7 +681,9 @@ public class RealCameraService {
             }
             
             // Draw 50+ mesh points adapted to actual facial features
+            System.out.println("RealCameraService: detectBasic - drawing facial mesh landmarks...");
             drawAdaptiveFacialMesh(g2d, centerX, centerY, boxWidth, boxHeight, eyePositions);
+            System.out.println("RealCameraService: detectBasic - mesh landmarks drawn complete");
             
             g2d.dispose();
             
@@ -708,6 +693,7 @@ public class RealCameraService {
                 System.err.println("RealCameraService: Failed to convert to FX Image");
                 return SwingFXUtils.toFXImage(currentFrame, null);
             }
+            System.out.println("RealCameraService: detectBasic - returning image with landmarks");
             return fxImage;
             
         } catch (Exception ex) {

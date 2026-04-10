@@ -223,12 +223,12 @@ function Build-Installer {
         
         # Step 1: Java
         UpdateStatus "Checking Java..." 5 "Java"
-        $javaDir = "$scriptPath\tools\jdk-21"
+        $javaDir = "$scriptPath\tools\jdk-25"
         $javaExe = "$javaDir\bin\java.exe"
         
         if (!(Test-Path $javaExe)) {
-            Log "Downloading Java 21... (this may take a few minutes)"
-            $javaUrl = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip"
+            Log "Downloading Java 25... (this may take a few minutes)"
+            $javaUrl = "https://api.adoptium.net/v3/binary/latest/25/ga/windows/x64/jdk/hotspot/normal/eclipse"
             Invoke-WebRequest -Uri $javaUrl -OutFile "$scriptPath\tools\jdk.zip" -UseBasicParsing
             
             Log "Extracting Java..."

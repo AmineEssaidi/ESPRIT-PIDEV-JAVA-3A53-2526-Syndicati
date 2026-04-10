@@ -3,7 +3,7 @@
 A comprehensive **pure JavaFX desktop application** featuring **multi-factor authentication** (Password, FaceID, WebAuthn/Passkey), **Two-Factor Authentication** (Email OTP and TOTP), user profile management, and advanced biometric security - all built with native Java code leveraging Spring Framework architecture.
 
 **Current Version**: 2.0.0 (Biometric & 2FA Ready)
-**Java Version**: JDK 21
+**Java Version**: JDK 25
 **Build Tool**: Maven 3.9.6
 
 ## 🎯 **Core Features**
@@ -532,9 +532,9 @@ Usage Flow:
 ## 🚀 **Getting Started**
 
 ### **Prerequisites**
-- **Java:** JDK 21 or higher
+- **Java:** JDK 25 or higher
 - **Maven:** 3.9.6 or higher
-- **JavaFX:** 21 (handled by Maven pom.xml)
+- **JavaFX:** 25 (handled by Maven pom.xml)
 - **IDEs:** IntelliJ IDEA (recommended), Eclipse, VS Code with Java extensions
 - **Database:** MySQL/MariaDB 8.0+ or PostgreSQL 12+
 - **SMTP Server:** For email OTP feature (Gmail, SendGrid, custom)
@@ -545,7 +545,7 @@ Usage Flow:
 <dependency>
     <groupId>org.openjfx</groupId>
     <artifactId>javafx-controls</artifactId>
-    <version>21</version>
+    <version>25</version>
 </dependency>
 
 <!-- Spring Framework (if using Spring Data JPA) -->
@@ -585,7 +585,7 @@ cd c:\Users\amine\OneDrive\Desktop\Syndicati_Java
 
 # Verify Java installation
 java -version
-# Should output: openjdk 21.0.2
+# Should output: openjdk 25.x
 
 # Verify Maven installation
 mvn -version
@@ -624,8 +624,8 @@ app.session.timeout=3600
 #### **3. Compile Project**
 ```bash
 # Set environment variables
-$env:JAVA_HOME='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21'
-$env:PATH='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;' + $env:PATH
+$env:JAVA_HOME='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-25'
+$env:PATH='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-25\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;' + $env:PATH
 
 # Compile (skip tests for faster build)
 .\tools\maven\bin\mvn.cmd -q -DskipTests compile
@@ -644,8 +644,8 @@ $env:PATH='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21\bin;c:\Us
 ### **Option 2: Command Line via Maven**
 ```bash
 # Set JAVA_HOME and PATH (as shown above)
-$env:JAVA_HOME='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21'
-$env:PATH='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-21\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;' + $env:PATH
+$env:JAVA_HOME='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-25'
+$env:PATH='c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-25\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;' + $env:PATH
 
 # Navigate to project
 cd 'c:\Users\amine\OneDrive\Desktop\Syndicati_Java'
