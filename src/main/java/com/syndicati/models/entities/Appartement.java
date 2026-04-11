@@ -1,9 +1,45 @@
-package com.syndicati.models;
+package com.syndicati.models.entities;
 
-public class Appartement extends Residence{
+public class Appartement extends Residence {
 
     int id_app, residence_id, id_user, parking, disponible, superficie, prix_location, prix_vente;
     String image_a, type_a, date_construction, appartement_info;
+
+    public Appartement(){}
+
+    public Appartement(int residence_id, int id_user, int parking, int disponible, String image_a
+    , String type_a, String appartement_info, int superficie, int prix_location, int prix_vente, String date_construction)
+    {
+        this.residence_id=residence_id;
+        this.id_user=id_user;
+        this.parking=parking;
+        this.disponible=disponible;
+        this.image_a=image_a;
+        this.type_a=type_a;
+        this.appartement_info=appartement_info;
+        this.superficie=superficie;
+        this.prix_location=prix_location;
+        this.prix_vente=getPrix_vente();
+        this.date_construction=date_construction;
+    }
+    public Appartement(int residence_id, int id_user, int parking, int disponible, String image_a
+            , String type_a, String appartement_info, int superficie, int prix_location, int prix_vente, String date_construction,
+                       int id_app)
+    {
+        this.residence_id=residence_id;
+        this.id_user=id_user;
+        this.parking=parking;
+        this.disponible=disponible;
+        this.image_a=image_a;
+        this.type_a=type_a;
+        this.appartement_info=appartement_info;
+        this.superficie=superficie;
+        this.prix_location=prix_location;
+        this.prix_vente=getPrix_vente();
+        this.date_construction=date_construction;
+        this.id_app=id_app;
+    }
+
 
     public String getAppartement_info() {
         return appartement_info;
@@ -104,6 +140,6 @@ public class Appartement extends Residence{
     @Override
     public String toString()
     {
-        return "\n Appartement: "+this.getType_a();
+        return "\n Appartement "+this.getType_a()+" Prix: "+ this.getPrix_location();
     }
 }

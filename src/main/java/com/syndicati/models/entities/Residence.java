@@ -1,4 +1,4 @@
-package com.syndicati.models;
+package com.syndicati.models.entities;
 
 public class Residence {
 

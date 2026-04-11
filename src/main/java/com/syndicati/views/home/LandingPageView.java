@@ -1,5 +1,6 @@
 package com.syndicati.views.home;
 
+import com.syndicati.views.backend.dashboard.DashboardView;
 import javafx.scene.layout.*;
 import javafx.beans.binding.Bindings;
 import javafx.scene.control.ScrollPane;
@@ -13,7 +14,6 @@ import com.syndicati.components.home.HomeContent;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
-import com.syndicati.views.dashboard.DashboardView;
 
 /**
  * Landing Page View - Main container with dynamic island header and footer
@@ -191,7 +191,7 @@ public class LandingPageView implements ViewInterface {
     /** Swap out the normal header+content with the full admin dashboard layout. */
     public void enterDashboardMode() {
         currentPageName = "dashboard";
-        DashboardView dv = NavigationManager.getInstance().getDashboardView();
+        com.syndicati.views.backend.dashboard.DashboardView dv = NavigationManager.getInstance().getDashboardView();
         dv.setExitCallback(this::exitDashboardMode);
         HBox adminRoot = dv.getRoot();
         adminRoot.setMaxWidth(Double.MAX_VALUE);

@@ -1,14 +1,14 @@
-package com.syndicati.services;
+package com.syndicati.models.services;
 
-import com.syndicati.models.Residence;
+import com.syndicati.models.entities.Residence;
+import com.syndicati.services.DatabaseService;
+import com.syndicati.models.services.IServiceSyndicati;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-
-import com.syndicati.utils.DatabaseService;
-
-public class ServiceResidence implements IServiceResidence <Residence> {
+public class ServiceResidence implements IServiceSyndicati<Residence> {
     private Connection connection;
     public ServiceResidence()
     {
@@ -16,7 +16,7 @@ public class ServiceResidence implements IServiceResidence <Residence> {
     }
 
     @Override
-    public void AjouterResidence(Residence Residence) throws SQLDataException
+    public void Ajouter(Residence Residence) throws SQLDataException
     {
         String req= "INSERT INTO RESIDENCE (nom_r, adresse, image_r, date_ajout, n_appartements, n_etages, n_blocs) VALUES ('"
                 + Residence.getNom_r() + "', '"
@@ -39,7 +39,7 @@ public class ServiceResidence implements IServiceResidence <Residence> {
     }
 
     @Override
-    public void ModifierResidence(Residence Residence) throws SQLDataException
+    public void Modifier(Residence Residence) throws SQLDataException
     {
         String requete="UPDATE RESIDENCE set nom_r = ? ,adresse= ? , image_r = ? , date_ajout = ?" +
                 ", n_appartements = ?, n_etages = ? , n_blocs = ? where id_residence= ? ";
@@ -64,7 +64,7 @@ public class ServiceResidence implements IServiceResidence <Residence> {
     }
 
     @Override
-    public void SupprimerResidence(Residence Residence) throws SQLDataException
+    public void Supprimer(Residence Residence) throws SQLDataException
     {
         String req= "DELETE FROM RESIDENCE WHERE id_residence ="+ Residence.getId_residence();
         try
@@ -78,7 +78,7 @@ public class ServiceResidence implements IServiceResidence <Residence> {
     }
 
     @Override
-    public List<Residence> RecupererResidence() throws SQLDataException
+    public List<Residence> Recuperer() throws SQLDataException
     {
         String requete="SELECT * FROM RESIDENCE";
         List<Residence> ResidenceList= null;
