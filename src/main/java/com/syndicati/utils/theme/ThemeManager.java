@@ -19,6 +19,7 @@ import javafx.util.Duration;
 import com.syndicati.utils.shared.AppPreferences;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Theme Manager - Handles dark and light theme switching
@@ -158,7 +159,7 @@ public class ThemeManager {
             int firstComma = accentGradient.indexOf(",");
             if (firstComma < 0) return accentGradient;
             String stops = accentGradient.substring(firstComma);
-            return String.format("linear-gradient(from %.1f%% %.1f%% to %.1f%% %.1f%%%s",
+            return String.format(Locale.ROOT, "linear-gradient(from %.1f%% %.1f%% to %.1f%% %.1f%%%s",
                 x1, y1, x2, y2, stops);
         } catch (Exception e) {
             return accentGradient;
@@ -340,7 +341,7 @@ public class ThemeManager {
                 // Dark mode needs a stronger accent alpha to match perceived intensity in light mode.
                 effectiveAlpha = Math.min(0.92, alpha * 1.30);
             }
-            return String.format("rgba(%d, %d, %d, %.2f)",
+                return String.format(Locale.ROOT, "rgba(%d, %d, %d, %.2f)",
                     (int)(c.getRed() * 255),
                     (int)(c.getGreen() * 255),
                     (int)(c.getBlue() * 255),
