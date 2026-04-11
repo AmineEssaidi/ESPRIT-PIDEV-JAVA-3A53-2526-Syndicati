@@ -13,7 +13,7 @@ import com.syndicati.components.home.HomeContent;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
-import com.syndicati.views.dashboard.DashboardView;
+import com.syndicati.views.backend.dashboard.DashboardView;
 
 /**
  * Landing Page View - Main container with dynamic island header and footer
