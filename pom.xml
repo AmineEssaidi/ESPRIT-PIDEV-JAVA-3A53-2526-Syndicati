@@ -189,9 +189,6 @@
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>com.syndicati.Launcher</mainClass>
-                    <jvmArgs>
-                        <jvmArg>--sun-misc-unsafe-memory-access=allow</jvmArg>
-                    </jvmArgs>
                 </configuration>
             </plugin>
             
