@@ -1,8 +1,13 @@
 package com.syndicati.components.shared;
 
 import com.syndicati.MainApplication;
+import com.syndicati.models.entities.Profile;
+import com.syndicati.models.entities.User;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.session.SessionManager;
+import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.models.services.ProfileService;
 import javafx.animation.PauseTransition;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -16,18 +21,22 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.ImagePattern;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Popup;
-import javafx.stage.Window;
 import javafx.util.Duration;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class DynamicHeader {
 
@@ -45,7 +54,7 @@ public class DynamicHeader {
     private final Map<String, Popup> tabDropdownPopups = new HashMap<>();
 
     private VBox notificationDropdown;
-    private Popup profilePopup;
+    private VBox profileDropdown;
     private Node profileAnchor;
     private Node notificationAnchor;
 
@@ -53,6 +62,9 @@ public class DynamicHeader {
     private PauseTransition closeProfileDelay;
     private PauseTransition closeNotificationDelay;
     private String activeTab = "home";
+
+    private Circle profileTriggerAvatarCircle;
+    private Label profileTriggerInitialLabel;
 
     public DynamicHeader() {
         this.root = new StackPane();
@@ -97,6 +109,10 @@ public class DynamicHeader {
         if (notificationDropdown != null) {
             root.getChildren().add(notificationDropdown);
             StackPane.setAlignment(notificationDropdown, Pos.TOP_LEFT);
+        }
+        if (profileDropdown != null) {
+            root.getChildren().add(profileDropdown);
+            StackPane.setAlignment(profileDropdown, Pos.TOP_LEFT);
         }
     }
 
@@ -353,6 +369,9 @@ public class DynamicHeader {
         notificationDropdown.setOnMouseExited(e -> scheduleCloseNotificationPopup());
 
         wrap.setOnMouseEntered(e -> {
+            if (profileDropdown != null && profileDropdown.isVisible()) {
+                return;
+            }
             cancelNotificationCloseDelay();
             showNotificationPopup();
         });
@@ -433,22 +452,34 @@ public class DynamicHeader {
         wrap.setAlignment(Pos.CENTER);
         wrap.setMinSize(42, 42);
 
-        Circle avatar = new Circle(13, Color.web(themeManager.getAccentHex()));
+        Circle avatar = new Circle(13);
+        Label initial = new Label(currentInitial());
+        initial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 11));
+        initial.setTextFill(Color.WHITE);
+
+        boolean hasAvatar = applyAvatarFill(avatar);
+        initial.setVisible(!hasAvatar);
+        initial.setManaged(!hasAvatar);
+
+        profileTriggerAvatarCircle = avatar;
+        profileTriggerInitialLabel = initial;
+
         Circle online = new Circle(4, Color.web("#22c55e"));
         StackPane.setAlignment(online, Pos.BOTTOM_RIGHT);
         StackPane.setMargin(online, new Insets(0, 2, 2, 0));
 
-        wrap.getChildren().addAll(avatar, online);
+        wrap.getChildren().addAll(avatar, initial, online);
         wrap.setStyle("-fx-cursor: hand;");
         profileAnchor = wrap;
 
-        profilePopup = buildProfilePopup();
+        profileDropdown = buildProfileDropdown();
+        profileDropdown.setVisible(false);
+        profileDropdown.setManaged(false);
+        profileDropdown.setMouseTransparent(true);
+        profileDropdown.toFront();
 
-        if (!profilePopup.getContent().isEmpty()) {
-            Node profileContent = profilePopup.getContent().get(0);
-            profileContent.setOnMouseEntered(e -> cancelProfileCloseDelay());
-            profileContent.setOnMouseExited(e -> scheduleCloseProfilePopup());
-        }
+        profileDropdown.setOnMouseEntered(e -> cancelProfileCloseDelay());
+        profileDropdown.setOnMouseExited(e -> scheduleCloseProfilePopup());
 
         wrap.setOnMouseEntered(e -> {
             cancelProfileCloseDelay();
@@ -457,49 +488,66 @@ public class DynamicHeader {
         wrap.setOnMouseExited(e -> scheduleCloseProfilePopup());
 
         wrap.setOnMouseClicked(e -> {
-            if (profilePopup.isShowing()) {
+            if (profileDropdown != null && profileDropdown.isVisible()) {
                 closeProfilePopup();
+                e.consume();
                 return;
             }
             showProfilePopup();
+            e.consume();
         });
 
         return wrap;
     }
 
-    private Popup buildProfilePopup() {
-        Popup popup = new Popup();
-        popup.setAutoHide(true);
-        popup.setHideOnEscape(true);
-
+    private VBox buildProfileDropdown() {
         VBox box = new VBox();
-        box.setPadding(new Insets(12));
-        box.setSpacing(6);
-        box.setPrefWidth(280);
+        box.setPadding(new Insets(0));
+        box.setSpacing(0);
+        box.setPrefWidth(300);
+        box.setMaxWidth(300);
+        box.setMinWidth(300);
+        box.setStyle(profileDropdownCardStyle());
 
         HBox head = new HBox();
         head.setAlignment(Pos.CENTER_LEFT);
         head.setSpacing(10);
-        Circle pic = new Circle(20, Color.web(themeManager.getAccentHex()));
+        head.setPadding(new Insets(18, 20, 14, 20));
+        Circle pic = new Circle(20);
+        boolean hasAvatar = applyAvatarFill(pic);
+        Label picInitial = new Label(currentInitial());
+        picInitial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        picInitial.setTextFill(Color.WHITE);
+        picInitial.setVisible(!hasAvatar);
+        picInitial.setManaged(!hasAvatar);
+        StackPane picWrap = new StackPane(pic, picInitial);
+        
         VBox info = new VBox();
-        Label name = new Label("Syndicati Member");
+        Label name = new Label(currentDisplayName());
         name.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-        Label mail = new Label("contact@syndicati.tn");
+        name.setTextFill(themeManager.isDarkMode() ? Color.web("#f3f4f6") : Color.web("#111827"));
+        Label mail = new Label(currentEmail());
         mail.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        mail.setTextFill(themeManager.isDarkMode() ? Color.web("#94a3b8") : Color.web("#64748b"));
         info.getChildren().addAll(name, mail);
-        head.getChildren().addAll(pic, info);
+        head.getChildren().addAll(picWrap, info);
 
         Region sep1 = new Region();
         sep1.setPrefHeight(1);
-        sep1.setStyle("-fx-background-color: rgba(255,255,255,0.12);");
+        sep1.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
         Button profile = profileRow("👤  Profile", "profile");
         Button dashboard = profileRow("📊  Dashboard", "dashboard");
         Button settings = profileRow("⚙  Settings", "settings");
 
+        VBox rows = new VBox();
+        rows.setPadding(new Insets(8));
+        rows.setSpacing(6);
+        rows.getChildren().addAll(profile, dashboard, settings);
+
         Region sep2 = new Region();
         sep2.setPrefHeight(1);
-        sep2.setStyle("-fx-background-color: rgba(255,255,255,0.12);");
+        sep2.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
         Button logout = new Button("⏻  Sign Out");
         logout.setMaxWidth(Double.MAX_VALUE);
@@ -512,9 +560,12 @@ public class DynamicHeader {
             MainApplication.getInstance().logout();
         });
 
-        box.getChildren().addAll(head, sep1, profile, dashboard, settings, sep2, logout);
-        popup.getContent().add(box);
-        return popup;
+        VBox bottom = new VBox(8);
+        bottom.setPadding(new Insets(8));
+        bottom.getChildren().add(logout);
+
+        box.getChildren().addAll(head, sep1, rows, sep2, bottom);
+        return box;
     }
 
     private Button profileRow(String text, String route) {
@@ -531,60 +582,6 @@ public class DynamicHeader {
         return row;
     }
 
-    private void showPopupBelow(Popup popup, Node anchor, double popupWidth, double rightAlignWidth) {
-        Bounds b = anchor.localToScreen(anchor.getBoundsInLocal());
-        if (b == null) {
-            return;
-        }
-
-        if (popup.getContent().isEmpty()) {
-            return;
-        }
-        Node popupNode = popup.getContent().get(0);
-        popupNode.applyCss();
-        popupNode.autosize();
-        double effectivePopupWidth = Math.max(popupWidth, popupNode.prefWidth(-1));
-        double effectivePopupHeight = Math.max(120, popupNode.prefHeight(-1));
-
-        double x = rightAlignWidth > 0
-            ? b.getMaxX() - rightAlignWidth
-            : b.getMinX() + (b.getWidth() - effectivePopupWidth) / 2.0;
-        double y = b.getMaxY() + 12;
-
-        // Keep popups bounded to the app root area so they never overflow outside the app box.
-        if (root.getScene() != null) {
-            Bounds appBounds = root.getScene().getRoot().localToScreen(root.getScene().getRoot().getBoundsInLocal());
-            if (appBounds != null) {
-                double minX = appBounds.getMinX() + 8;
-                double maxX = appBounds.getMaxX() - effectivePopupWidth - 8;
-                double minY = appBounds.getMinY() + 8;
-                double maxY = appBounds.getMaxY() - effectivePopupHeight - 8;
-                if (maxX >= minX) {
-                    x = Math.max(minX, Math.min(x, maxX));
-                }
-                if (maxY >= minY) {
-                    y = Math.max(minY, Math.min(y, maxY));
-                }
-            } else {
-                Window w = root.getScene().getWindow();
-                if (w != null) {
-                    double minX = w.getX() + 8;
-                    double maxX = w.getX() + w.getWidth() - effectivePopupWidth - 8;
-                    double minY = w.getY() + 8;
-                    double maxY = w.getY() + w.getHeight() - effectivePopupHeight - 8;
-                    if (maxX >= minX) {
-                        x = Math.max(minX, Math.min(x, maxX));
-                    }
-                    if (maxY >= minY) {
-                        y = Math.max(minY, Math.min(y, maxY));
-                    }
-                }
-            }
-        }
-
-        popup.show(anchor, x, y);
-    }
-
     private void showNotificationPopup() {
         if (notificationDropdown == null || notificationAnchor == null) {
             return;
@@ -595,6 +592,42 @@ public class DynamicHeader {
         notificationDropdown.setVisible(true);
         notificationDropdown.setMouseTransparent(false);
         notificationDropdown.toFront();
+    }
+
+    private void positionProfileDropdown() {
+        if (profileDropdown == null || profileAnchor == null || root.getScene() == null) {
+            return;
+        }
+
+        profileDropdown.applyCss();
+        profileDropdown.autosize();
+
+        Bounds anchorScreen = profileAnchor.localToScreen(profileAnchor.getBoundsInLocal());
+        Bounds rootScreen = root.localToScreen(root.getBoundsInLocal());
+        if (anchorScreen == null || rootScreen == null) {
+            return;
+        }
+
+        double popupW = profileDropdown.prefWidth(-1);
+        double popupH = Math.max(profileDropdown.prefHeight(-1), 220);
+
+        double xScreen = anchorScreen.getMaxX() - popupW;
+        double yScreen = anchorScreen.getMaxY() + 12;
+
+        double minX = rootScreen.getMinX() + 8;
+        double maxX = rootScreen.getMaxX() - popupW - 8;
+        double minY = rootScreen.getMinY() + 8;
+        double maxY = rootScreen.getMaxY() - popupH - 8;
+
+        if (maxX >= minX) {
+            xScreen = Math.max(minX, Math.min(xScreen, maxX));
+        }
+        if (maxY >= minY) {
+            yScreen = Math.max(minY, Math.min(yScreen, maxY));
+        }
+
+        Point2D local = root.screenToLocal(xScreen, yScreen);
+        profileDropdown.relocate(local.getX(), local.getY());
     }
 
     private void positionNotificationDropdown() {
@@ -656,24 +689,135 @@ public class DynamicHeader {
     }
 
     private void showProfilePopup() {
-        if (profilePopup == null || profileAnchor == null) {
+        if (profileDropdown == null || profileAnchor == null) {
             return;
         }
+
+        refreshProfileTriggerAvatar();
+
         closeAllTabPopups();
         closeNotificationPopup();
-        showPopupBelow(profilePopup, profileAnchor, 280, 280);
+
+        VBox previousProfileDropdown = profileDropdown;
+        profileDropdown = buildProfileDropdown();
+        profileDropdown.setVisible(false);
+        profileDropdown.setManaged(false);
+        profileDropdown.setMouseTransparent(true);
+        profileDropdown.setOnMouseEntered(e -> cancelProfileCloseDelay());
+        profileDropdown.setOnMouseExited(e -> scheduleCloseProfilePopup());
+
+        if (previousProfileDropdown != null) {
+            root.getChildren().remove(previousProfileDropdown);
+        }
+        if (!root.getChildren().contains(profileDropdown)) {
+            root.getChildren().add(profileDropdown);
+            StackPane.setAlignment(profileDropdown, Pos.TOP_LEFT);
+        }
+
+        positionProfileDropdown();
+        profileDropdown.setManaged(false);
+        profileDropdown.setVisible(true);
+        profileDropdown.setMouseTransparent(false);
+        profileDropdown.toFront();
+    }
+
+    private String profileDropdownCardStyle() {
+        String dropdownBg = themeManager.isDarkMode() ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.96)";
+        String dropdownBorder = themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)";
+        return
+            "-fx-background-color: " + dropdownBg + ";" +
+            "-fx-background-radius: 30px;" +
+            "-fx-border-color: " + dropdownBorder + ";" +
+            "-fx-border-radius: 30px;" +
+            "-fx-border-width: 1;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 28, 0.28, 0, 8);";
+    }
+
+    private void refreshProfileTriggerAvatar() {
+        if (profileTriggerAvatarCircle == null || profileTriggerInitialLabel == null) {
+            return;
+        }
+        boolean hasAvatar = applyAvatarFill(profileTriggerAvatarCircle);
+        profileTriggerInitialLabel.setText(currentInitial());
+        profileTriggerInitialLabel.setVisible(!hasAvatar);
+        profileTriggerInitialLabel.setManaged(!hasAvatar);
+    }
+
+    private String currentDisplayName() {
+        User user = SessionManager.getInstance().getCurrentUser();
+        if (user == null) {
+            return "Syndicati Member";
+        }
+
+        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+        String last = user.getLastName() == null ? "" : user.getLastName().trim();
+        String fullName = (first + " " + last).trim();
+        return fullName.isBlank() ? "User" : fullName;
+    }
+
+    private String currentEmail() {
+        User user = SessionManager.getInstance().getCurrentUser();
+        if (user == null || user.getEmailUser() == null || user.getEmailUser().isBlank()) {
+            return "contact@syndicati.tn";
+        }
+        return user.getEmailUser();
+    }
+
+    private String currentInitial() {
+        String name = currentDisplayName();
+        if (!name.isBlank()) {
+            return name.substring(0, 1).toUpperCase();
+        }
+        String email = currentEmail();
+        return email.isBlank() ? "U" : email.substring(0, 1).toUpperCase();
+    }
+
+    private Profile currentProfile() {
+        SessionManager session = SessionManager.getInstance();
+        Profile profile = session.getCurrentProfile();
+        if (profile != null) {
+            return profile;
+        }
+
+        User user = session.getCurrentUser();
+        if (user == null || user.getIdUser() == null) {
+            return null;
+        }
+
+        ProfileService profileService = new ProfileService();
+        profile = profileService.findOneByUserId(user.getIdUser()).orElse(null);
+        if (profile != null) {
+            session.setCurrentProfile(profile);
+        }
+        return profile;
+    }
+
+    private boolean applyAvatarFill(Circle avatarCircle) {
+        Profile profile = currentProfile();
+        String avatarPath = profile == null ? null : profile.getAvatar();
+
+        if (avatarPath != null && !avatarPath.isBlank()) {
+            Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
+            if (img != null && !img.isError()) {
+                avatarCircle.setFill(new ImagePattern(img));
+                return true;
+            }
+        }
+
+        // Fallback to accent color
+        avatarCircle.setFill(Color.web(themeManager.getAccentHex()));
+        return false;
     }
 
     private void scheduleCloseProfilePopup() {
         cancelProfileCloseDelay();
-        closeProfileDelay = new PauseTransition(Duration.millis(180));
+        closeProfileDelay = new PauseTransition(Duration.millis(450));
         closeProfileDelay.setOnFinished(e -> {
-            if (profilePopup == null) {
+            if (profileDropdown == null) {
                 return;
             }
-            Node content = profilePopup.getContent().isEmpty() ? null : profilePopup.getContent().get(0);
             boolean hoveringAnchor = profileAnchor != null && profileAnchor.isHover();
-            boolean hoveringContent = content != null && content.isHover();
+            boolean hoveringContent = profileDropdown.isHover();
             if (!hoveringAnchor && !hoveringContent) {
                 closeProfilePopup();
             }
@@ -708,8 +852,10 @@ public class DynamicHeader {
     }
 
     private void closeProfilePopup() {
-        if (profilePopup != null) {
-            profilePopup.hide();
+        cancelProfileCloseDelay();
+        if (profileDropdown != null) {
+            profileDropdown.setVisible(false);
+            profileDropdown.setMouseTransparent(true);
         }
     }
 
@@ -738,9 +884,9 @@ public class DynamicHeader {
 
     private void styleGhostPill(Button button) {
         button.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.62)") + ";" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.92)") + ";" +
             "-fx-background-radius: 22px;" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.10)") + ";" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.16)") + ";" +
             "-fx-border-radius: 22px;" +
             "-fx-border-width: 1;" +
             "-fx-text-fill: " + (themeManager.isDarkMode() ? "#f8fafc" : "#111827") + ";" +
@@ -758,7 +904,7 @@ public class DynamicHeader {
             "-fx-cursor: hand;"
         );
         row.setOnMouseEntered(e -> row.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)") + ";" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.10)") + ";" +
             "-fx-background-radius: 10px;" +
             "-fx-text-fill: " + text + ";" +
             "-fx-cursor: hand;"
@@ -773,18 +919,18 @@ public class DynamicHeader {
 
     private void applyThemeStyling() {
         navbar.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.55)" : "rgba(245,245,245,0.88)") + ";" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.97)") + ";" +
             "-fx-background-radius: 50px;" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.86)") + ";" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";" +
             "-fx-border-radius: 50px;" +
             "-fx-border-width: 1;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 26, 0.28, 0, 6);"
+            "-fx-effect: dropshadow(gaussian, " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.40)" : "rgba(15,23,42,0.12)") + ", 26, 0.28, 0, 6);"
         );
 
         tabsPill.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.42)") + ";" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.05)" : "rgba(248,250,252,0.96)") + ";" +
             "-fx-background-radius: 30px;" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.10)") + ";" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.14)") + ";" +
             "-fx-border-radius: 30px;" +
             "-fx-border-width: 1;"
         );
@@ -830,15 +976,20 @@ public class DynamicHeader {
             }
         }
 
-        if (profilePopup != null && !profilePopup.getContent().isEmpty() && profilePopup.getContent().get(0) instanceof VBox box) {
-            box.setStyle(
+        if (profileDropdown != null) {
+            profileDropdown.setStyle(
                 "-fx-background-color: " + dropdownBg + ";" +
-                "-fx-background-radius: 20px;" +
+                "-fx-background-radius: 30px;" +
                 "-fx-border-color: " + dropdownBorder + ";" +
-                "-fx-border-radius: 20px;" +
+                "-fx-border-radius: 30px;" +
                 "-fx-border-width: 1;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 24, 0.25, 0, 8);"
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 28, 0.28, 0, 8);"
             );
+            for (Node n : profileDropdown.getChildren()) {
+                if (n instanceof Button b) {
+                    styleDropdownRow(b);
+                }
+            }
         }
 
         updateTabsState();

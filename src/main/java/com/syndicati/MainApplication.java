@@ -9,8 +9,8 @@ import javafx.stage.StageStyle;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.scene.text.Font;
-import com.syndicati.views.home.LandingPageView;
-import com.syndicati.views.login.LoginView;
+import com.syndicati.views.frontend.home.LandingPageView;
+import com.syndicati.views.frontend.login.LoginView;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
 
@@ -58,14 +58,20 @@ public class MainApplication extends Application {
         connectionManager.startMonitoring();
         
         // Add JVM shutdown hook as backup
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("ðŸ”„ JVM Shutdown - Stopping database monitoring...");
-            connectionManager.shutdown();
-        }));
+        Runtime.getRuntime().addShutdownHook(
+            Thread.ofPlatform()
+                .name("Syndicati-ShutdownHook")
+                .unstarted(() -> {
+                    System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
+                    com.syndicati.services.mail.AsyncMailerService.shutdown();
+                    connectionManager.shutdown();
+                    System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
+                })
+        );
         
-        // Configure the stage - transparent for rounded corners and shadow
+        // Configure the stage. Use solid black scene fill to avoid desktop bleed-through.
         primaryStage.setTitle("Syndicati - Login");
-        scene.setFill(Color.TRANSPARENT);
+        scene.setFill(Color.BLACK);
         primaryStage.initStyle(StageStyle.TRANSPARENT);
         primaryStage.setScene(scene);
         primaryStage.setResizable(true);
@@ -86,15 +92,29 @@ public class MainApplication extends Application {
         // Force rounded corners by applying shape to scene root after showing
         applyRoundedShape(scene);
         
-        // Add shutdown hook to properly close database monitoring
+        // Add shutdown hook to properly close database monitoring and async email service
         primaryStage.setOnCloseRequest(event -> {
-            System.out.println("ðŸ”„ Shutting down application...");
+            System.out.println("[SHUTDOWN] Shutting down application...");
+            // Shutdown email service thread pool first
+            com.syndicati.services.mail.AsyncMailerService.shutdown();
+            // Then shutdown database monitoring
             connectionManager.shutdown();
-            System.out.println("âœ… Database monitoring stopped");
+            System.out.println("[SUCCESS] All services stopped");
+            
+            // Force exit JVM after a short delay to ensure cleanup
+            Thread.ofVirtual().name("Syndicati-DelayedExit").start(() -> {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                System.out.println("[SHUTDOWN] Forcing JVM exit...");
+                System.exit(0);
+            });
         });
         
-        System.out.println("âœ… Syndicati started!");
-        System.out.println("ðŸ” Login page loaded - use admin/admin to login");
+        System.out.println("[SUCCESS] Syndicati started!");
+        System.out.println("[INFO] Login page loaded - use admin/admin to login");
         
         // Login success is now event-driven from LoginView for immediate navigation.
     }
@@ -149,7 +169,7 @@ public class MainApplication extends Application {
         
         // Create completely new scene - don't set initial size, let it adapt to stage
         Scene scene = new Scene(landingPageView.getRoot());
-        scene.setFill(Color.TRANSPARENT); // Make scene transparent to show rounded corners
+        scene.setFill(Color.BLACK); // Keep non-transparent app background
         scene.getStylesheets().clear(); // Clear any inherited styles
         applyGlobalStyles(scene);
         // Apply global font family to entire scene (use Light as default body font)
@@ -314,8 +334,9 @@ public class MainApplication extends Application {
     
     public void logout() {
         System.out.println("ðŸ”“ Logging out - returning to login page...");
-        
-        // Store current window size and position before switching
+                // Clear user session
+        com.syndicati.utils.session.SessionManager.getInstance().clear();
+                // Store current window size and position before switching
         double currentWidth = primaryStage.getWidth();
         double currentHeight = primaryStage.getHeight();
         double currentX = primaryStage.getX();
@@ -329,9 +350,9 @@ public class MainApplication extends Application {
         loginView = new LoginView();
         loginView.setOnLoginSuccess(this::navigateToLandingPage);
         
-        // Update the scene with transparent fill - don't set initial size
+        // Update the scene with solid black fill - don't set initial size
         Scene scene = new Scene(loginView.getRoot());
-        scene.setFill(Color.TRANSPARENT); // Keep transparency for login view too
+        scene.setFill(Color.BLACK); // Keep non-transparent app background
         scene.getStylesheets().clear(); // Avoid inherited styles that could reintroduce backgrounds
         applyGlobalStyles(scene);
         
@@ -365,15 +386,8 @@ public class MainApplication extends Application {
         // Show stage
         primaryStage.show();
         
-        // Force multiple layout passes to ensure content is properly sized
-        javafx.application.Platform.runLater(() -> {
-            loginView.getRoot().layout();
-            primaryStage.sizeToScene();
-            javafx.application.Platform.runLater(() -> {
-                loginView.getRoot().layout();
-                primaryStage.sizeToScene();
-            });
-        });
+        // Avoid forcing additional size/layout passes here; media-backed backgrounds
+        // are initialized asynchronously and can be disrupted by immediate re-scaling.
         
         // Clean up landing page view
         if (landingPageView != null) {

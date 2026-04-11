@@ -136,22 +136,28 @@ public class DynamicFooter {
         link.setAlignment(Pos.CENTER);
         link.setPadding(new Insets(4, 10, 4, 10));
         link.setCursor(javafx.scene.Cursor.HAND);
+        ThemeManager themeManager = ThemeManager.getInstance();
+        boolean dark = themeManager.isDarkMode();
+        String baseText = dark ? themeManager.getIslandSecondaryTextColor() : "#334155";
+        String baseIcon = dark ? themeManager.getIslandTextColor() : "#0f172a";
+        String hoverText = dark ? themeManager.getModernAccentColor() : "#0b1220";
+        String hoverBg = dark ? themeManager.getLiquidGlassHover() : "rgba(15,23,42,0.08)";
         
         // Link icon with theme-aware styling
         Text linkIcon = new Text(icon);
         linkIcon.setFont(javafx.scene.text.Font.font(18));
-        linkIcon.setFill(Color.web(ThemeManager.getInstance().getIslandTextColor()));
+        linkIcon.setFill(Color.web(baseIcon));
         
         // Link text with improved typography
         Text linkText = new Text(text);
         linkText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 9));
-        linkText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));        link.getChildren().addAll(linkIcon, linkText);
+        linkText.setFill(Color.web(baseText));
+        link.getChildren().addAll(linkIcon, linkText);
         
         // Enhanced hover effects with smooth transitions
         link.setOnMouseEntered(e -> {
-            ThemeManager themeManager = ThemeManager.getInstance();
             link.setStyle(
-                "-fx-background-color: " + themeManager.getLiquidGlassHover() + ";" +
+                "-fx-background-color: " + hoverBg + ";" +
                 "-fx-background-radius: 12px;" +
                 "-fx-scale-x: 1.05;" +
                 "-fx-scale-y: 1.05;"
@@ -164,8 +170,8 @@ public class DynamicFooter {
             iconScale.play();
             
             // Change text and icon color on hover
-            linkText.setFill(Color.web(themeManager.getModernAccentColor()));
-            linkIcon.setFill(Color.web(themeManager.getModernAccentColor()));
+            linkText.setFill(Color.web(hoverText));
+            linkIcon.setFill(Color.web(hoverText));
         });
         
         link.setOnMouseExited(e -> {
@@ -182,14 +188,14 @@ public class DynamicFooter {
             iconScale.play();
             
             // Reset text and icon color
-            linkText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
-            linkIcon.setFill(Color.web(ThemeManager.getInstance().getIslandTextColor()));
+            linkText.setFill(Color.web(baseText));
+            linkIcon.setFill(Color.web(baseIcon));
         });
         
         // Add click effect
         link.setOnMousePressed(e -> {
             link.setStyle(
-                "-fx-background-color: " + ThemeManager.getInstance().getLiquidGlassHover() + ";" +
+                "-fx-background-color: " + hoverBg + ";" +
                 "-fx-background-radius: 12px;" +
                 "-fx-scale-x: 0.95;" +
                 "-fx-scale-y: 0.95;"
@@ -198,7 +204,7 @@ public class DynamicFooter {
         
         link.setOnMouseReleased(e -> {
             link.setStyle(
-                "-fx-background-color: " + ThemeManager.getInstance().getLiquidGlassHover() + ";" +
+                "-fx-background-color: " + hoverBg + ";" +
                 "-fx-background-radius: 12px;" +
                 "-fx-scale-x: 1.05;" +
                 "-fx-scale-y: 1.05;"
@@ -210,25 +216,43 @@ public class DynamicFooter {
     
     private void applyThemeStyling() {
         ThemeManager tm = ThemeManager.getInstance();
-        double pulse = 0.32 + (0.12 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
-        double radius = 22 + (6 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
-        
+        if (tm.isDarkMode()) {
+            double pulse = 0.32 + (0.12 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
+            double radius = 22 + (6 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
+
+            root.setStyle(
+                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ", " + tm.getDynamicIslandBackground() + ";" +
+                "-fx-background-insets: 0, 1.5;" +
+                "-fx-background-radius: 50px, 48.5px;" +
+                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.0) + ";" +
+                "-fx-border-width: 0;" +
+                "-fx-border-radius: 50px;"
+            );
+
+            DropShadow footerShadow = new DropShadow();
+            footerShadow.setBlurType(BlurType.GAUSSIAN);
+            footerShadow.setColor(tm.getNeonGlowColor().deriveColor(0, 1, 1, pulse));
+            footerShadow.setRadius(radius);
+            footerShadow.setOffsetX(0);
+            footerShadow.setOffsetY(0);
+            root.setEffect(footerShadow);
+            return;
+        }
+
         root.setStyle(
-            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ", " + tm.getDynamicIslandBackground() + ";" +
-            "-fx-background-insets: 0, 1.5;" +
-            "-fx-background-radius: 50px, 48.5px;" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.0) + ";" +
-            "-fx-border-width: 0;" +
+            "-fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.98), rgba(247,250,255,0.97));" +
+            "-fx-background-radius: 50px;" +
+            "-fx-border-color: rgba(15,23,42,0.14);" +
+            "-fx-border-width: 1px;" +
             "-fx-border-radius: 50px;"
         );
-        
-        // TRON neon edge glow - matches current accent
+
         DropShadow footerShadow = new DropShadow();
         footerShadow.setBlurType(BlurType.GAUSSIAN);
-        footerShadow.setColor(tm.getNeonGlowColor().deriveColor(0, 1, 1, pulse));
-        footerShadow.setRadius(radius);
+        footerShadow.setColor(Color.web("rgba(15,23,42,0.16)"));
+        footerShadow.setRadius(20);
         footerShadow.setOffsetX(0);
-        footerShadow.setOffsetY(0);
+        footerShadow.setOffsetY(4);
         root.setEffect(footerShadow);
     }
     
