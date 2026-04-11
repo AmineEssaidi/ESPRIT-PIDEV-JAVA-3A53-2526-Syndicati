@@ -45,7 +45,7 @@ public class MainApplication extends Application {
         loginView.setOnLoginSuccess(this::navigateToLandingPage);
         
         // Set up the scene with login view - dynamic sizing with min constraints
-        Scene scene = new Scene(loginView.getRoot(), 1500, 900);
+        Scene scene = new Scene(loginView.getRoot(), 1400, 900);
         applyGlobalStyles(scene);
         // Apply global font family to entire scene (use Light as default body font)
         if (scene.getRoot() != null) {
@@ -80,7 +80,7 @@ public class MainApplication extends Application {
         primaryStage.setResizable(true);
         
         // Set minimum window size
-        primaryStage.setMinWidth(1500);
+        primaryStage.setMinWidth(1400);
         primaryStage.setMinHeight(900);
         
         // Show the stage first (needed for width/height to be set)
@@ -211,7 +211,7 @@ public class MainApplication extends Application {
             appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
         }
 
-        primaryStage.setMinWidth(1500);
+        primaryStage.setMinWidth(1400);
         primaryStage.setMinHeight(900);
         ThemeManager.getInstance().setScene(scene);
         primaryStage.setScene(scene);
@@ -267,7 +267,7 @@ public class MainApplication extends Application {
             appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
         }
 
-        primaryStage.setMinWidth(1500);
+        primaryStage.setMinWidth(1400);
         primaryStage.setMinHeight(900);
 
         ThemeManager.getInstance().setScene(scene);
@@ -440,7 +440,7 @@ public class MainApplication extends Application {
         applyGlobalStyles(scene);
         
         // Set minimum window size
-        primaryStage.setMinWidth(1500);
+        primaryStage.setMinWidth(1400);
         primaryStage.setMinHeight(900);
         
         ThemeManager.getInstance().setScene(scene);
