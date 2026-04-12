@@ -2,7 +2,13 @@ package com.syndicati.views.frontend.services;
 
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
+import com.syndicati.models.entities.Appartement;
+import com.syndicati.models.entities.Residence;
+import com.syndicati.models.services.ServiceAppartement;
+import com.syndicati.models.services.ServiceResidence;
 import com.syndicati.utils.theme.ThemeManager;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
@@ -27,6 +33,8 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 
+
+import java.sql.SQLDataException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,50 +54,39 @@ public class ResidencePageView implements ViewInterface {
     private final VBox detailsFace = new VBox(20);
     private final VBox paginationBox = new VBox(12);
 
+    private StackPane hero;
+
     private int selectedResidence = 0;
-    private Apartment selectedApartment;
+    private Appartement selectedApartment;
 
-    private final List<Residence> residences = List.of(
-        new Residence("Azure Residence", "Lac 2, Tunis", 12, 120, 3, 2026),
-        new Residence("Palm Heights", "La Marsa", 9, 88, 2, 2025),
-        new Residence("Jardin Central", "Mutuelleville", 14, 160, 4, 2024),
-        new Residence("Skyline Harbor", "Sidi Bousaid", 16, 210, 5, 2026),
-        new Residence("Olive Gardens", "Menzah", 8, 74, 2, 2023),
-        new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
-    );
+    ServiceResidence ServiceResidence = new ServiceResidence();
+    ServiceAppartement ServiceAppartement= new ServiceAppartement();
+    List<Residence> residences;
+    {
+        try {
+            residences = ServiceResidence.Recuperer();
+        } catch (SQLDataException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
-    private final List<List<Apartment>> apartmentsByResidence = List.of(
-        List.of(
-            new Apartment("A1", "A", 1, true, 1800, 126, true, "Bright apartment with open terrace and premium finishes."),
-            new Apartment("B5", "B", 5, false, 2100, 138, true, "Large family apartment with harbor-facing windows."),
-            new Apartment("C3", "C", 3, true, 1650, 114, false, "Compact and elegant layout with smart storage."),
-            new Apartment("A8", "A", 8, true, 2300, 149, true, "Top-floor apartment with panoramic city view.")
-        ),
-        List.of(
-            new Apartment("P2", "P", 2, true, 1500, 102, true, "Quiet corner apartment with modern kitchen."),
-            new Apartment("H4", "H", 4, false, 1720, 118, false, "Rented unit with upgraded flooring and lighting."),
-            new Apartment("H7", "H", 7, true, 1990, 131, true, "Sunny premium unit near rooftop amenities.")
-        ),
-        List.of(
-            new Apartment("J3", "J", 3, true, 1580, 110, false, "Community-facing apartment with soft natural light."),
-            new Apartment("J6", "J", 6, true, 1870, 123, true, "Well-balanced layout for couples and small families."),
-            new Apartment("C9", "C", 9, false, 2240, 145, true, "High-floor rented unit with premium insulation.")
-        ),
-        List.of(
-            new Apartment("S5", "S", 5, true, 2450, 152, true, "Luxury apartment with double-height living area."),
-            new Apartment("S10", "S", 10, false, 2780, 170, true, "Rented executive apartment with marina panorama."),
-            new Apartment("H3", "H", 3, true, 2190, 136, false, "Contemporary design with clean modular spaces.")
-        ),
-        List.of(
-            new Apartment("O1", "O", 1, true, 1320, 94, false, "Affordable premium unit ideal for first tenants."),
-            new Apartment("O4", "O", 4, true, 1490, 101, true, "Balanced apartment with practical room distribution.")
-        ),
-        List.of(
-            new Apartment("R2", "R", 2, false, 2010, 127, true, "Rented apartment with sea-adjacent cross ventilation."),
-            new Apartment("R7", "R", 7, true, 2390, 148, true, "High-end apartment with lounge and office nook."),
-            new Apartment("B1", "B", 1, true, 1880, 119, false, "Calm residence-facing apartment with large balcony.")
-        )
-    );
+    /*
+    List.of(
+new Residence("Azure Residence", "Lac 2, Tunis", 12, 120, 3, 2026),
+new Residence("Palm Heights", "La Marsa", 9, 88, 2, 2025),
+new Residence("Jardin Central", "Mutuelleville", 14, 160, 4, 2024),
+new Residence("Skyline Harbor", "Sidi Bousaid", 16, 210, 5, 2026),
+new Residence("Olive Gardens", "Menzah", 8, 74, 2, 2023),
+new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
+);
+*/
+    private List<Appartement> getApartmentsForResidence(Residence Residence) {
+        try {
+            return ServiceAppartement.AppartementsParResidence(Residence);
+        } catch (SQLDataException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public ResidencePageView() {
         root = new VBox(28);
@@ -97,11 +94,12 @@ public class ResidencePageView implements ViewInterface {
         root.setPadding(new Insets(20, 0, 46, 0));
         root.setMaxWidth(Double.MAX_VALUE);
         root.setStyle("-fx-background-color: transparent;");
-
+        System.out.println("viewing resience page view!!");
+        hero = buildHero();
         root.getChildren().addAll(
-            buildHero(),
-            buildShowcase(),
-            buildPagination()
+                hero,
+                buildShowcase(),
+                buildPagination()
         );
 
         rebuildResidenceFace();
@@ -148,7 +146,7 @@ public class ResidencePageView implements ViewInterface {
         title.setWrappingWidth(760);
 
         Text subtitle = text(
-            "Explore our curated selection of high-end residences and apartments. Experience a new standard of comfort and elegance with Horizon.",
+            "Discover our apartment complexes, experience a new standard of comfort and elegance.",
             18,
             false,
             textMuted()
@@ -202,6 +200,9 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private void rebuildResidenceFace() {
+        hero.setVisible(true);
+        hero.setManaged(true);
+        System.out.println("REBUILD MAIN FACE");
         residenceFace.getChildren().clear();
 
         VBox sectionLabel = new VBox(10);
@@ -241,7 +242,7 @@ public class ResidencePageView implements ViewInterface {
             "-fx-background-radius: 32px 32px 0 0;"
         );
 
-        StackPane yearTag = new StackPane(text(String.valueOf(r.year), 12, true, "#ffffff"));
+        StackPane yearTag = new StackPane(text(String.valueOf(r.getDate_ajout()), 12, true, "#ffffff"));
         yearTag.setPadding(new Insets(7, 12, 7, 12));
         yearTag.setStyle(
             "-fx-background-color: rgba(0,0,0,0.6);" +
@@ -259,20 +260,20 @@ public class ResidencePageView implements ViewInterface {
 
         body.getChildren().addAll(
             miniType("Residence"),
-            text(r.name, 30, true, "#ffffff"),
-            iconLine("Map", r.address)
+            text(r.getNom_r(), 30, true, "#ffffff"),
+            iconLine("Location", r.getAdresse())
         );
 
         HBox stats = new HBox(12,
-            statBox(String.valueOf(r.floors), "Floors"),
-            statBox(String.valueOf(r.units), "Units"),
-            statBox(String.valueOf(r.blocks), "Blocks")
+                statBox(String.valueOf(r.getN_etages()), "Floors"),
+                statBox(String.valueOf(r.getN_appartements()), "Units"),
+                statBox(String.valueOf(r.getN_blocs()), "Blocks")
         );
         stats.setPadding(new Insets(16, 0, 0, 0));
         stats.setStyle("-fx-border-color: " + borderSoft() + " transparent transparent transparent; -fx-border-width: 1px 0 0 0;");
 
         HBox actions = new HBox(10);
-        Button seeApts = mainBtn("See Apartments");
+        Button seeApts = mainBtn("Check Details");
         seeApts.setOnAction(e -> openApartments(index));
         Button export = mainBtn("Export PDF");
         export.setDisable(true);
@@ -308,25 +309,25 @@ public class ResidencePageView implements ViewInterface {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
         header.getChildren().addAll(
-            backBtn(() -> switchToFace("main")),
-            text("Apartments in " + residence.name, 34, true, "#ffffff")
+                backBtn(() -> switchToFace("main")),
+                text("Apartments in " + residence.getNom_r(), 34, true, "#ffffff")
         );
 
         GridPane cards = responsiveGrid();
         List<Node> nodes = new ArrayList<>();
-        List<Apartment> apartments = apartmentsByResidence.get(selectedResidence);
-        for (Apartment apt : apartments) {
+        List<Appartement> apartments = getApartmentsForResidence(residence);
+        for (Appartement apt : apartments) {
             nodes.add(apartmentCard(apt));
         }
         rebuildResponsiveGrid(cards, nodes, apartmentsFace.getWidth(), 3, 2, 1);
         apartmentsFace.widthProperty().addListener((obs, oldW, newW) ->
-            rebuildResponsiveGrid(cards, nodes, newW.doubleValue(), 3, 2, 1)
+                rebuildResponsiveGrid(cards, nodes, newW.doubleValue(), 3, 2, 1)
         );
 
         apartmentsFace.getChildren().addAll(header, cards);
     }
 
-    private VBox apartmentCard(Apartment apt) {
+    private VBox apartmentCard(Appartement apt) {
         VBox card = new VBox();
         card.setStyle(
             "-fx-background-color: " + surfaceCard() + ";" +
@@ -342,8 +343,8 @@ public class ResidencePageView implements ViewInterface {
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
             "-fx-background-radius: 32px 32px 0 0;"
         );
-
-        StackPane availability = pill(apt.available ? "Available" : "Rented", 11, 0.12, 0.25);
+        JsonObject info = JsonParser.parseString(apt.getAppartement_info()).getAsJsonObject();
+        StackPane availability = pill(apt.getDisponible() == 1 ? "Available" : "Rented", 11, 0.12, 0.25);
         StackPane.setAlignment(availability, Pos.TOP_RIGHT);
         StackPane.setMargin(availability, new Insets(18, 18, 0, 0));
         media.getChildren().add(availability);
@@ -351,17 +352,18 @@ public class ResidencePageView implements ViewInterface {
         VBox body = new VBox(10);
         body.setPadding(new Insets(20));
         body.getChildren().addAll(
-            text("Apartment " + apt.type, 26, true, "#ffffff"),
-            infoRow("Bloc", apt.bloc),
-            infoRow("Floor", String.valueOf(apt.floor))
+            text("Apartment " + apt.getType_a(), 26, true, "#ffffff"),
+
+        infoRow("Bloc", info.has("bloc") && !info.get("bloc").isJsonNull() ? info.get("bloc").getAsString() : "N/A"),
+        infoRow("Floor", info.has("floor") && !info.get("floor").isJsonNull() ? info.get("floor").getAsString() : "N/A")
         );
 
         HBox features = new HBox(8);
-        if (apt.parking) {
+        if (apt.getParking()==1) {
             features.getChildren().add(featureTag("Parking"));
         }
-        if (apt.available) {
-            features.getChildren().add(featureTag(apt.rent + " TND"));
+        if (apt.getDisponible()==1) {
+            features.getChildren().add(featureTag(apt.getPrix_location() + " TND"));
         }
 
         Button seeDetails = mainBtn("Voir les details");
@@ -381,7 +383,8 @@ public class ResidencePageView implements ViewInterface {
     private void rebuildDetailsFace() {
         detailsFace.getChildren().clear();
         Residence residence = residences.get(selectedResidence);
-        Apartment apt = selectedApartment != null ? selectedApartment : apartmentsByResidence.get(selectedResidence).get(0);
+        List<Appartement> apartments = getApartmentsForResidence(residence);
+        Appartement apt = selectedApartment != null ? selectedApartment : apartments.getFirst();
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -408,16 +411,18 @@ public class ResidencePageView implements ViewInterface {
         info.setPadding(new Insets(22));
         info.setStyle(shell(22, "rgba(255,255,255,0.03)", 1.2));
         HBox.setHgrow(info, Priority.ALWAYS);
+        JsonObject jsonobj = JsonParser.parseString(apt.getAppartement_info()).getAsJsonObject();
+        JsonObject aptInfo = JsonParser.parseString(apt.getAppartement_info()).getAsJsonObject();
 
         info.getChildren().addAll(
-            pill("Type " + apt.type, 11, 0.10, 0.25),
-            text(residence.name, 30, true, "#ffffff"),
-            infoRow("Loyer", apt.rent + " TND"),
-            infoRow("Surface", apt.area + " m2"),
-            infoRow("Bloc", apt.bloc),
-            infoRow("Etage", String.valueOf(apt.floor))
+                pill("Type " + apt.getType_a(), 11, 0.10, 0.25),
+                text(residence.getNom_r(), 30, true, "#ffffff"),
+                infoRow("Loyer", apt.getPrix_location() + " TND"),
+                infoRow("Surface", apt.getSuperficie() + " m2"),
+                infoRow("Bloc", aptInfo.has("bloc") && !aptInfo.get("bloc").isJsonNull() ? aptInfo.get("bloc").getAsString() : "N/A"),
+                infoRow("Floor", aptInfo.has("floor") && !aptInfo.get("floor").isJsonNull() ? aptInfo.get("floor").getAsString() : "N/A")
         );
-        if (apt.parking) {
+        if (apt.getParking()==1) {
             info.getChildren().add(featureTag("Parking inclus"));
         }
 
@@ -428,9 +433,8 @@ public class ResidencePageView implements ViewInterface {
         FlowPane recGrid = new FlowPane();
         recGrid.setHgap(12);
         recGrid.setVgap(12);
-
-        List<Apartment> apartments = apartmentsByResidence.get(selectedResidence);
-        for (Apartment rec : apartments) {
+        List<Appartement> appartements = getApartmentsForResidence(ServiceResidence.TrouverResidenceParId(selectedResidence));
+        for (Appartement rec : appartements) {
             if (rec == apt) {
                 continue;
             }
@@ -442,7 +446,7 @@ public class ResidencePageView implements ViewInterface {
         detailsFace.getChildren().addAll(header, top, recommendations, recGrid, contact);
     }
 
-    private VBox recommendationCard(Apartment apt) {
+    private VBox recommendationCard(Appartement apt) {
         VBox card = new VBox(8);
         card.setPrefWidth(240);
         card.setPadding(new Insets(10));
@@ -468,7 +472,7 @@ public class ResidencePageView implements ViewInterface {
 
         card.getChildren().addAll(
             image,
-            text(apt.type + " • " + apt.rent + " TND", 15, true, "#ffffff"),
+            text(apt.getType_a() + " • " + apt.getPrix_location() + " TND", 15, true, "#ffffff"),
             view
         );
         return card;
@@ -526,6 +530,9 @@ public class ResidencePageView implements ViewInterface {
         boolean main = "main".equals(face);
         boolean apartments = "apartments".equals(face);
         boolean details = "details".equals(face);
+
+        hero.setVisible(main);
+        hero.setManaged(main);
 
         residenceFace.setVisible(main);
         residenceFace.setManaged(main);
@@ -850,8 +857,6 @@ public class ResidencePageView implements ViewInterface {
 
     @Override
     public void cleanup() {}
-
-    private record Residence(String name, String address, int floors, int units, int blocks, int year) {}
 
     private record Apartment(String type, String bloc, int floor, boolean available, int rent, int area, boolean parking, String description) {}
 }

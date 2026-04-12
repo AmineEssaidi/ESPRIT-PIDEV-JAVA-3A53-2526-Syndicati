@@ -1,15 +1,18 @@
 package com.syndicati.views.backend.dashboard;
 
 import com.syndicati.controllers.backend.users.UserController;
-import com.syndicati.models.entities.Onboarding;
-import com.syndicati.models.entities.Profile;
-import com.syndicati.models.entities.User;
+import com.syndicati.models.entities.*;
+import com.syndicati.models.services.ServiceAppartement;
+import com.syndicati.models.services.ServiceMaintenance;
+import com.syndicati.models.services.ServiceResidence;
 import javafx.application.Platform;
 import javafx.animation.TranslateTransition;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;
+import javafx.stage.Stage;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
@@ -20,6 +23,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.*;
 import javafx.stage.Popup;
+import javafx.stage.Stage;
 import javafx.stage.Window;
 import javafx.util.Duration;
 import com.syndicati.interfaces.ViewInterface;
@@ -27,6 +31,9 @@ import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
+
+import java.sql.SQLDataException;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.nio.file.Files;
@@ -61,6 +68,26 @@ public class DashboardView implements ViewInterface {
     private PauseTransition notificationHideDelay;
     private final UserController userController;
     private static final DateTimeFormatter DASHBOARD_DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+
+    ServiceResidence ServiceResidence = new ServiceResidence();
+    ServiceAppartement ServiceAppartement = new ServiceAppartement();
+    ServiceMaintenance ServiceMaintenance = new ServiceMaintenance();
+
+    List<Residence> ListeResidences;
+    List<Appartement> ListeAppartements;
+    List<Maintenance> ListeMaintenances;
+
+    {
+        try {
+            ListeResidences = ServiceResidence.Recuperer();
+            ListeAppartements = ServiceAppartement.Recuperer();
+            ListeMaintenances = ServiceMaintenance.Recuperer();
+
+        } catch (SQLDataException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     public DashboardView() {
         this.root = new HBox();
@@ -1349,27 +1376,37 @@ public class DashboardView implements ViewInterface {
 
     private VBox residenceTablePane() {
         VBox wrap = new VBox(14);
+        Object data;
         wrap.getChildren().add(dataTableWithCrud("Residences", "Residence",
-            new String[]{"Residence", "Address", "Units", "Syndic", "Status"},
-            new String[][]{
-                {"Residence Jasmin", "Bardo", "120", "Ahmed B.", "Active"},
-                {"Residence Mimosa", "Lac 2", "86", "Leila M.", "Active"},
-                {"Residence Olive", "Menzah", "64", "Karim S.", "Maintenance"}
-            }, true, true
+                new String[]{"Residence", "Address", "N of Appartments", "Date Built", "Blocks"},
+                ListeResidences.stream()
+                        .map(r -> new String[]{
+                                r.getNom_r(),
+                                r.getAdresse(),
+                                String.valueOf(r.getN_appartements()),
+                                r.getDate_ajout(),
+                                String.valueOf(r.getN_blocs())
+                        })
+                        .toArray(String[][]::new), true, true
         ));
         return wrap;
     }
 
     private VBox residenceApartmentsPane() {
         VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Appartements", "Appartement",
-            new String[]{"Unit", "Residence", "Resident", "Floor", "State"},
-            new String[][]{
-                {"A-101", "Jasmin", "Ahmed B.", "1", "Occupied"},
-                {"A-202", "Jasmin", "Leila M.", "2", "Occupied"},
-                {"B-105", "Mimosa", "-", "1", "Available"},
-                {"C-401", "Olive", "-", "4", "Available"}
-            }, true, true
+        wrap.getChildren().add(dataTableWithCrud("Apartments", "Apartments",
+                new String[]{"Residence", "Type", "Rent Price", "Status", "Parking Available?"},
+                ListeAppartements.stream()
+                        .map(a -> new String[]{
+                                ServiceResidence.TrouverResidenceParId(a.getResidence_id()).getNom_r() != null
+                                        ? ServiceResidence.TrouverResidenceParId(a.getResidence_id()).getNom_r()
+                                        : "Unavailable",
+                                a.getType_a(),
+                                String.valueOf(a.getPrix_location()),
+                                String.valueOf(a.getDisponible()).equals("1") ? "Available" : "Rented",
+                                String.valueOf(a.getParking()).equals("1") ? "Available" : "Unavailable"
+                        })
+                        .toArray(String[][]::new), true, true
         ));
         return wrap;
     }
@@ -1377,12 +1414,18 @@ public class DashboardView implements ViewInterface {
     private VBox residenceMaintenancePane() {
         VBox wrap = new VBox(14);
         wrap.getChildren().add(dataTableWithCrud("Maintenance", "Maintenance Ticket",
-            new String[]{"Ticket", "Residence", "Issue", "Priority", "Status"},
-            new String[][]{
-                {"MNT-301", "Jasmin", "Water Pump", "High", "In Progress"},
-                {"MNT-298", "Mimosa", "Garage Lighting", "Medium", "Open"},
-                {"MNT-296", "Olive", "Lift Noise", "Low", "Scheduled"}
-            }, false, false
+                new String[]{"Maintenance Date", "Apartment Condition", "Plumbing", "Electricity", "Heating", "Description", "AI Recommendation"},
+                ListeMaintenances.stream()
+                        .map(m -> new String[]{
+                                m.getDate_derniere_maintenance(),
+                                m.getEtat_app(),
+                                String.valueOf(m.getEtat_plomberie()),
+                                String.valueOf(m.getEtat_electricite()),
+                                String.valueOf(m.getEtat_chauffage()),
+                                m.getdescription_maint(),
+                                m.getRecommendation_ia()
+                        })
+                        .toArray(String[][]::new), true, true
         ));
         return wrap;
     }
@@ -1627,6 +1670,17 @@ public class DashboardView implements ViewInterface {
         VBox wrap = new VBox(faceContainer);
         wrap.setMaxWidth(Double.MAX_VALUE);
         VBox.setVgrow(faceContainer, Priority.ALWAYS);
+
+
+        Button testBtn = pillAction("testing add button", false);
+        testBtn.setOnAction(e -> {
+            Stage stage = (Stage) faceContainer.getScene().getWindow();
+            Scene previousScene = faceContainer.getScene();
+            new AddResidence(stage, previousScene).show();
+        });
+        head.getChildren().add(testBtn);
+
+
         return wrap;
     }
 
@@ -1970,6 +2024,73 @@ public class DashboardView implements ViewInterface {
             }
         }
         
+        return false;
+    }
+
+    private String VerifierResidence(String nom)
+    {
+        String erreur="";
+        if (nom.equals(""))
+            erreur= "Le nom ne peut pas être vide";
+
+        return erreur;
+
+    }
+    private boolean AjouterResidence(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        String nom = safe(values.get("Nom"));
+        String adresse = safe(values.get("Adresse"));
+        String nAppartements = safe(values.get("N Appartements"));
+        String dateAjout = safe(values.get("Date Ajout"));
+        String nBlocs = safe(values.get("N Blocs"));
+        System.out.println("nom : " +nom);
+        System.out.println("Adresse "+adresse);
+        System.out.println("N appart"+ nAppartements);
+        System.out.println("Date: "+dateAjout);
+
+        if ("add".equals(mode)) {
+            Residence residence = new Residence();
+            residence.setNom_r(nom);
+            residence.setAdresse(adresse);
+            residence.setImage_r(null);
+            residence.setDate_ajout(dateAjout);
+            residence.setN_appartements(Integer.parseInt(nAppartements));
+            residence.setN_etages(2);
+            residence.setN_blocs(nBlocs);
+
+            try {
+                ServiceResidence.Ajouter(residence);
+                System.out.println("residence added successfully");
+                return true;
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        /*
+        if ("edit".equals(mode)) {
+            String oldNom = (originalRowData != null && originalRowData.length > 0) ? originalRowData[0] : nom;
+            Optional<Residence> existingOpt = ServiceResidence.residenceByNom(oldNom);
+            if (existingOpt.isEmpty()) {
+                existingOpt = ServiceResidence.residenceByNom(nom);
+            }
+            if (existingOpt.isEmpty()) {
+                return false;
+            }
+
+            Residence existing = existingOpt.get();
+            existing.setNom_r(nom);
+            existing.setAdresse(adresse);
+            existing.setN_appartements(Integer.parseInt(nAppartements));
+            existing.setDate_ajout(dateAjout);
+            existing.setN_blocs(nBlocs);
+
+            try {
+                return ServiceResidence.Modifier(existing);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        */
         return false;
     }
 
@@ -2346,6 +2467,12 @@ public class DashboardView implements ViewInterface {
         return c;
     }
 
+    private void switchToTestPage(StackPane container) {
+        Stage stage = (Stage) container.getScene().getWindow();
+        Scene previousScene = container.getScene();
+        new AddResidence(stage, previousScene).show();
+    }
+
     private void styleSubTab(Button b, boolean active) {
         b.setStyle(active
             ? "-fx-background-color:" + accentRgba(0.2) + ";-fx-background-radius:12px;-fx-text-fill:white;-fx-border-color:" + accentRgba(0.3) + ";-fx-border-width:1;-fx-border-radius:12px;-fx-cursor:hand;"
@@ -2377,4 +2504,5 @@ public class DashboardView implements ViewInterface {
     private String boldFont()  { return com.syndicati.MainApplication.getInstance().getBoldFontFamily();  }
     private String lightFont() { return com.syndicati.MainApplication.getInstance().getLightFontFamily(); }
 }
+
 

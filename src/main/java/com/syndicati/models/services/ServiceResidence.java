@@ -108,5 +108,32 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
         return ResidenceList;
     }
 
+    public Residence TrouverResidenceParId(int id)
+    {
+        String requete= "SELECT * FROM RESIDENCE WHERE id_residence = ? ;";
+        Residence Residence=null;
+        try
+        {
+            PreparedStatement ps= connection.prepareStatement(requete);
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Residence=new Residence(
+                rs.getString("nom_r"),
+                rs.getString("adresse"),
+                rs.getString("image_r"),
+                rs.getString("date_ajout"),
+                rs.getInt("n_appartements"),
+                rs.getInt("n_etages"),
+                rs.getString("n_blocs")
+                );
+
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return Residence;
+    }
 
 }

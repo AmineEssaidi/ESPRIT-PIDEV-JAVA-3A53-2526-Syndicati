@@ -49,6 +49,8 @@ public class ResidencePageView implements ViewInterface {
     private int selectedResidence = 0;
     private Apartment selectedApartment;
 
+    private StackPane hero;
+
     private final List<Residence> residences = List.of(
         new Residence("Azure Residence", "Lac 2, Tunis", 12, 120, 3, 2026),
         new Residence("Palm Heights", "La Marsa", 9, 88, 2, 2025),
@@ -94,12 +96,13 @@ public class ResidencePageView implements ViewInterface {
     public ResidencePageView() {
         root = new VBox(28);
         root.setAlignment(Pos.TOP_CENTER);
+        System.out.println("viewing resience page view");
         root.setPadding(new Insets(20, 0, 46, 0));
         root.setMaxWidth(Double.MAX_VALUE);
         root.setStyle("-fx-background-color: transparent;");
-
+        hero = buildHero();
         root.getChildren().addAll(
-            buildHero(),
+            hero,
             buildShowcase(),
             buildPagination()
         );
@@ -109,7 +112,7 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private StackPane buildHero() {
-        StackPane hero = new StackPane();
+        hero = buildHero();
         hero.prefWidthProperty().bind(Bindings.min(root.widthProperty().multiply(0.95), 1800));
         hero.setMinHeight(320);
         hero.setPrefHeight(360);
@@ -202,8 +205,10 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private void rebuildResidenceFace() {
+        hero.setVisible(true);
+        hero.setManaged(true);
         residenceFace.getChildren().clear();
-
+        System.out.println("rebuilding resience page viewwwwwwwww");
         VBox sectionLabel = new VBox(10);
         sectionLabel.setAlignment(Pos.CENTER);
         Text h = text("Our Residences", 50, true, tm.getAccentHex());
@@ -302,6 +307,9 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private void rebuildApartmentsFace() {
+        hero.setVisible(false);
+        hero.setManaged(false);
+        System.out.println("rebuilding appartment face!");
         apartmentsFace.getChildren().clear();
         Residence residence = residences.get(selectedResidence);
 
@@ -526,7 +534,9 @@ public class ResidencePageView implements ViewInterface {
         boolean main = "main".equals(face);
         boolean apartments = "apartments".equals(face);
         boolean details = "details".equals(face);
-
+        System.out.println("switched to main face!");
+        hero.setVisible(true);
+        hero.setManaged(true);
         residenceFace.setVisible(main);
         residenceFace.setManaged(main);
         apartmentsFace.setVisible(apartments);

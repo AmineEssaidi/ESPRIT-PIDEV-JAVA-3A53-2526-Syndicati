@@ -39,7 +39,10 @@ public class CRUD {
                  */
             //ServiceAppartement.Ajouter(new Appartement(9, 10, 1,0, "image_cool", "S+4", "{\"bloc\": \"D\",\"floor\": \"0\",\"number\": \"8\",\"parking\": true,\"disponible\": false}", 300, 2000, 9999999, "2024-03-11"));
             //ServiceAppartement.Modifier(new Appartement(9, 10, 1,0, "image_modifia", "S+2", "{\"bloc\": \"D\",\"floor\": \"0\",\"number\": \"8\",\"parking\": true,\"disponible\": false}", 300, 2000, 9999999, "2024-03-11", 73));
-            ServiceAppartement.Supprimer(new Appartement(9, 10, 1,0, "image_cool", "S+4", "{\"bloc\": \"D\",\"floor\": \"0\",\"number\": \"8\",\"parking\": true,\"disponible\": false}", 300, 2000, 9999999, "2024-03-11", 73));
+            //ServiceAppartement.Supprimer(new Appartement(9, 10, 1,0, "image_cool", "S+4", "{\"bloc\": \"D\",\"floor\": \"0\",\"number\": \"8\",\"parking\": true,\"disponible\": false}", 300, 2000, 9999999, "2024-03-11", 73));
+    System.out.println(ServiceResidence.TrouverResidenceParId(10));
+            System.out.println("Appartements:"+ServiceAppartement.AppartementsParResidence(new Residence("Residence Narjess 1", "Tunisie",
+                    "a", "2025-09-11", 9, 4, "A", 8)));
 
         } catch (SQLDataException e) {
             throw new RuntimeException(e);

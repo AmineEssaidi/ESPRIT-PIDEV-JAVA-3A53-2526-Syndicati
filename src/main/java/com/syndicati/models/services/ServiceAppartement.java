@@ -2,6 +2,7 @@ package com.syndicati.models.services;
 
 import com.syndicati.models.entities.Appartement;
 import com.syndicati.models.entities.Appartement;
+import com.syndicati.models.entities.Residence;
 import com.syndicati.models.services.IServiceSyndicati;
 import com.syndicati.services.DatabaseService;
 
@@ -122,5 +123,38 @@ public class ServiceAppartement implements IServiceSyndicati<Appartement> {
         return AppartementList;
     }
 
+    public List<Appartement> AppartementsParResidence(Residence Residence) throws SQLDataException
+    {
+        String requete= "SELECT * FROM APPARTEMENT WHERE residence_id = "+Residence.getId_residence();
+        List<Appartement> AppartementList= null;
+
+        try
+        {
+            Statement statement= connection.createStatement();
+            ResultSet AppartementSet= statement.executeQuery(requete);
+            AppartementList = new ArrayList<>();
+            while(AppartementSet.next())
+            {
+                Appartement Appartement=new Appartement();
+                Appartement.setId_app(AppartementSet.getInt(1));
+                Appartement.setResidence_id(AppartementSet.getInt("residence_id"));
+                Appartement.setId_user(AppartementSet.getInt("id_user"));
+                Appartement.setParking(AppartementSet.getInt("parking"));
+                Appartement.setDisponible(AppartementSet.getInt("disponible"));
+                Appartement.setImage_a(AppartementSet.getString("image_a"));
+                Appartement.setType_a(AppartementSet.getString("type_a"));
+                Appartement.setAppartement_info(AppartementSet.getString("appartement_info"));
+                Appartement.setSuperficie(AppartementSet.getInt("superficie"));
+                Appartement.setPrix_location(AppartementSet.getInt("prix_location"));
+                Appartement.setPrix_vente(AppartementSet.getInt("prix_vente"));
+                Appartement.setDate_construction(AppartementSet.getString("date_construction"));
+                AppartementList.add(Appartement);
+
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return AppartementList;
+    }
 
 }
