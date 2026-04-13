@@ -4,16 +4,12 @@ import com.syndicati.models.entities.Participation;
 import com.syndicati.models.repositories.ParticipationRepository;
 
 import java.util.List;
-
-/**
- * Service layer for Participation operations.
- */
 import java.util.Optional;
 
 /**
  * Service layer for Participation operations.
  */
-public class ParticipationService {
+ public class ParticipationService {
 
     private final ParticipationRepository repository;
 
@@ -59,7 +55,35 @@ public class ParticipationService {
     }
 
     public boolean updateParticipation(Participation p) {
-        return repository.update(p);
+        Optional<Participation> oldOpt = repository.findById(p.getIdParticipation());
+        if (oldOpt.isPresent()) {
+            Participation oldP = oldOpt.get();
+            int diff = p.getNbAccompagnants() - oldP.getNbAccompagnants();
+            
+            if (diff == 0) {
+                return repository.update(p);
+            }
+            
+            EvenementService es = new EvenementService();
+            if (diff > 0) {
+                // User added companions, need to check availability
+                Optional<com.syndicati.models.entities.Evenement> eOpt = es.getEventById(p.getEvenement().getIdEvent());
+                if (eOpt.isPresent() && eOpt.get().getNbRestants() >= diff) {
+                    if (es.decrementPlaces(p.getEvenement().getIdEvent(), diff)) {
+                        return repository.update(p);
+                    }
+                } else {
+                    System.err.println("Not enough places for the update: needed " + diff);
+                    return false;
+                }
+            } else {
+                // User removed companions, free up seats
+                if (es.incrementPlaces(p.getEvenement().getIdEvent(), Math.abs(diff))) {
+                    return repository.update(p);
+                }
+            }
+        }
+        return false;
     }
 
     public boolean updateStatus(int id, String status) {

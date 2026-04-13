@@ -927,11 +927,14 @@ public class DashboardView implements ViewInterface {
     private VBox buildGeneralOverview() {
         VBox v = new VBox(20); v.setFillWidth(true);
         HBox stats = new HBox(16); stats.setFillHeight(true);
+        com.syndicati.models.services.ParticipationService ps = new com.syndicati.models.services.ParticipationService();
+        int totalParts = ps.getAllParticipations().size();
+
         addStatCards(stats,
-            new String[]{"USR","OK","ACT","PLS"},
-            new String[]{"Total Residents","Active Today","Interactions Today","Community Pulse"},
-            new String[]{"1,247","84","502","38"},
-            new String[]{"#a78bfa","#34d399","#60a5fa","#fbbf24"}
+            new String[]{"USR","OK","ACT","PRT"},
+            new String[]{"Total Residents","Active Today","Interactions Today","Total Participations"},
+            new String[]{"1,247","84","502", String.valueOf(totalParts)},
+            new String[]{"#a78bfa","#34d399","#60a5fa","#f472b6"}
         );
         HBox grid = new HBox(16); grid.setFillHeight(true);
         VBox chart = buildActivityChart(); HBox.setHgrow(chart, Priority.ALWAYS);
@@ -1423,19 +1426,6 @@ public class DashboardView implements ViewInterface {
                 {"Fete de quartier", "Social", "Apr 5", "120", "Open"},
                 {"Formation securite incendie", "Training", "Apr 12", "30", "Limited"}
             }, true, true
-        ));
-        return wrap;
-    }
-
-    private VBox eventParticipationsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Participations", "Participation",
-            new String[]{"Event", "Resident", "Seat", "Checked-in", "Date"},
-            new String[][]{
-                {"Assemblee Generale 2024", "Ahmed B.", "A12", "No", "Mar 20"},
-                {"Fete de quartier", "Leila M.", "B03", "No", "Apr 5"},
-                {"Formation securite incendie", "Omar Z.", "C08", "No", "Apr 12"}
-            }, false, true
         ));
         return wrap;
     }

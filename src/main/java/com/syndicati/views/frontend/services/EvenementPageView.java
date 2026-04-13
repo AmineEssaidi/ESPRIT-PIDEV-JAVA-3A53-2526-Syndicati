@@ -565,15 +565,27 @@ public class EvenementPageView implements ViewInterface {
         );
 
         Button joinBtn = gradientButton("Join Now", 12, new Insets(10, 14, 10, 14));
+        
+        // Check if already joined
+        com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+        if (sm.isLoggedIn()) {
+            boolean joined = participationService.getParticipationsByUser(sm.getCurrentUser().getIdUser())
+                    .stream().anyMatch(p -> p.getEvenement().getIdEvent() == e.getIdEvent());
+            if (joined) {
+                joinBtn.setText("Already Joined");
+                joinBtn.setDisable(true);
+                joinBtn.setStyle(joinBtn.getStyle() + "-fx-opacity: 0.7;");
+            }
+        }
+
         joinBtn.setOnAction(ev -> {
-            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
             if (!sm.isLoggedIn()) {
-                System.err.println("Error: You must be logged in to join an event.");
+                showErrorAlert("Not Logged In", "You must be logged in to join this event.");
                 return;
             }
 
             if (e.getNbRestants() <= 0) {
-                System.err.println("Error: No places left for this event.");
+                showErrorAlert("No Places Left", "This event is currently full. Please check back later.");
                 return;
             }
 
@@ -585,6 +597,14 @@ public class EvenementPageView implements ViewInterface {
             detailImage,
             text(e.getTitreEvent(), 20, true, tm.getTextColor()),
             text(e.getDescriptionEvent(), 13, false, textSoft()),
+            new HBox(10, 
+                text("\uD83D\uDCCD " + e.getLieuEvent(), 12, false, textMuted()),
+                text("\uD83D\uDCC5 " + (e.getDateEvent() != null ? e.getDateEvent().toString() : ""), 12, false, textMuted())
+            ),
+            new HBox(5, 
+                text(String.valueOf(e.getNbRestants()), 14, true, tm.getAccentHex()),
+                text("places available", 13, false, textMuted())
+            ),
             text("Hosted by " + (e.getUser() != null ? e.getUser().getFirstName() + " " + e.getUser().getLastName() : "Community Team"), 12, false, textMuted()),
             joinBtn
         );
@@ -883,23 +903,33 @@ public class EvenementPageView implements ViewInterface {
     }
 
     private void showParticipationForm(com.syndicati.models.entities.Evenement e, Button joinBtn) {
-        VBox overlay = new VBox(20);
-        overlay.setAlignment(Pos.CENTER);
-        overlay.setPadding(new Insets(40));
-        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.85); -fx-background-radius: 32px;");
+        // Create full-screen dimmed overlay
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.78);");
+        
+        // Ensure its size covers the entire window scene
+        if (root.getScene() != null) {
+            overlay.setPrefSize(root.getScene().getWidth(), root.getScene().getHeight());
+        }
 
-        VBox form = new VBox(15);
-        form.setMinWidth(450);
-        form.setPadding(new Insets(34));
+        VBox form = new VBox(20);
+        form.setMinWidth(480);
+        form.setMaxWidth(480);
+        form.setPadding(new Insets(40));
+        form.setAlignment(Pos.CENTER);
         form.setStyle(
             "-fx-background-color: " + surfaceStrong().split(";")[0] + ";" +
-            "-fx-background-radius: 20px;" +
+            "-fx-background-radius: 24px;" +
             "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-radius: 20px;"
+            "-fx-border-width: 1.5px;" +
+            "-fx-border-radius: 24px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 30, 0, 0, 10);"
         );
 
         Text titleText = text("Join Event: " + e.getTitreEvent(), 26, true, tm.getAccentHex());
         Text subText = text("Confirm your participation and add companions if any.", 14, false, textMuted());
+        subText.setWrappingWidth(400);
+        subText.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
         TextField companionsField = new TextField("0");
         applyInputStyle(companionsField);
@@ -914,19 +944,19 @@ public class EvenementPageView implements ViewInterface {
         HBox actions = new HBox(12);
         actions.setAlignment(Pos.CENTER_RIGHT);
         Button cancel = iconButton("Cancel");
-        Button confirm = gradientButton("Confirm Registration", 13, new Insets(10, 20, 10, 20));
+        Button confirm = gradientButton("Confirm Registration", 13, new Insets(10, 24, 10, 24));
 
         actions.getChildren().addAll(cancel, confirm);
 
         form.getChildren().addAll(titleText, subText, companionsBox, commentBox, actions);
         overlay.getChildren().add(form);
 
-        // Find root stack to add overlay
-        Pane viewContainer = (Pane) root.getParent();
-        if (viewContainer instanceof StackPane) {
-            ((StackPane) viewContainer).getChildren().add(overlay);
+        // Add overlay to the absolute scene root
+        if (root.getScene() != null && root.getScene().getRoot() instanceof Pane) {
+            Pane rootPane = (Pane) root.getScene().getRoot();
+            rootPane.getChildren().add(overlay);
+            overlay.toFront();
         } else {
-            // If not found, try to find the absolute root
             root.getChildren().add(overlay);
         }
 
@@ -970,13 +1000,20 @@ public class EvenementPageView implements ViewInterface {
 
                 boolean ok = participationService.registerParticipation(p);
                 if (ok) {
-                    showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. A confirmation email has been sent.");
+                    // Immediate visual feedback on the card
+                    e.setNbRestants(e.getNbRestants() - totalNeeded);
                     joinBtn.setText("Registered!");
                     joinBtn.setDisable(true);
+                    joinBtn.setStyle(joinBtn.getStyle() + "-fx-opacity: 0.7;");
+                    
+                    showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. A confirmation email has been sent.");
+                    
                     if (overlay.getParent() instanceof Pane) {
                         ((Pane) overlay.getParent()).getChildren().remove(overlay);
                     }
-                    refreshContent();
+                    
+                    // Refresh after a small delay to let user see the change
+                    javafx.application.Platform.runLater(() -> refreshContent());
                 } else {
                     showErrorAlert("Registration Failed", "An error occurred while saving your participation. Please try again later.");
                 }
