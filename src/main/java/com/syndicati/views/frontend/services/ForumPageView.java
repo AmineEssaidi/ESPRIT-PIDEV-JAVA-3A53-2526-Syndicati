@@ -58,6 +58,7 @@ public class ForumPageView implements ViewInterface {
     private Label selectedImageLabel;
     private Label createStatusLabel;
 
+    private StackPane detailCategoryPill;
     private Text detailCategory;
     private Text detailDate;
     private Text detailTitle;
@@ -228,14 +229,14 @@ public class ForumPageView implements ViewInterface {
         detailCategory = new Text("Discussion General");
         detailCategory.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 11));
         detailCategory.setFill(Color.WHITE);
-        StackPane catPill = new StackPane(detailCategory);
-        catPill.setPadding(new Insets(5, 10, 5, 10));
-        catPill.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.20) + "; -fx-background-radius: 10px;");
+        detailCategoryPill = new StackPane(detailCategory);
+        detailCategoryPill.setPadding(new Insets(5, 12, 5, 12));
+        detailCategoryPill.setStyle(categoryStyle("General"));
 
         detailDate = new Text();
         detailDate.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
         detailDate.setFill(Color.web(textSoft()));
-        topMeta.getChildren().addAll(catPill, detailDate);
+        topMeta.getChildren().addAll(detailCategoryPill, detailDate);
 
         detailTitle = new Text("Welcome to the Forum");
         detailTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 32));
@@ -404,15 +405,7 @@ public class ForumPageView implements ViewInterface {
         createCategoryCombo = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(com.syndicati.models.entities.Publication.CATEGORIES));
         createCategoryCombo.setPromptText("Select a category");
         createCategoryCombo.setMaxWidth(Double.MAX_VALUE);
-        createCategoryCombo.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.06); " +
-            "-fx-text-fill: white; " +
-            "-fx-background-radius: 12px; " +
-            "-fx-border-color: " + borderSoft() + "; " +
-            "-fx-border-width: 1px; " +
-            "-fx-border-radius: 12px; " +
-            "-fx-padding: 8px;"
-        );
+        createCategoryCombo.setStyle(comboStyle());
 
         createDescriptionArea = createStyledTextArea("Detailed description (min 10 characters)");
 
@@ -525,7 +518,9 @@ public class ForumPageView implements ViewInterface {
             "-fx-border-color: " + borderSoft() + "; " +
             "-fx-border-width: 1px; " +
             "-fx-border-radius: 12px; " +
-            "-fx-padding: 10px;"
+            "-fx-padding: 10px;" +
+            "-fx-focus-color: " + tm.getAccentHex() + "; " +
+            "-fx-faint-focus-color: transparent;"
         );
         return tf;
     }
@@ -544,7 +539,9 @@ public class ForumPageView implements ViewInterface {
             "-fx-border-color: " + borderSoft() + "; " +
             "-fx-border-width: 1px; " +
             "-fx-border-radius: 12px; " +
-            "-fx-padding: 5px;"
+            "-fx-padding: 8px;" +
+            "-fx-focus-color: " + tm.getAccentHex() + "; " +
+            "-fx-faint-focus-color: transparent;"
         );
         return ta;
     }
@@ -876,6 +873,7 @@ public class ForumPageView implements ViewInterface {
         Text t = new Text(text);
         t.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
         t.setFill(Color.web("rgba(255,255,255,0.94)"));
+        t.setMouseTransparent(true);
         return t;
     }
 
@@ -1006,6 +1004,7 @@ public class ForumPageView implements ViewInterface {
         // Update click behavior for entity data
         item.setOnMouseClicked(e -> {
             detailCategory.setText(cat);
+            detailCategoryPill.setStyle(categoryStyle(cat));
             detailDate.setText(date + ", " + pub.getDateCreationPub().getYear());
             detailAuthor.setText(author);
             detailTitle.setText(pub.getTitrePub());
@@ -1118,21 +1117,37 @@ public class ForumPageView implements ViewInterface {
         return "profile_images/" + dbValue;
     }
 
+    private String comboStyle() {
+        return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)") + ";" +
+               "-fx-text-fill:" + (tm.isDarkMode() ? "#ffffff" : "#1a1a2e") + ";" +
+               "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
+               "-fx-border-width:1.5px;-fx-border-radius:12px;" +
+               "-fx-background-radius:12px;-fx-padding:8 14 8 14;" +
+               "-fx-font-size:13px;-fx-cursor:hand;";
+    }
+
     private String categoryStyle(String category) {
         String key = category.toLowerCase();
+        
+        // Premium Palette (Muted tings from template)
         if (key.contains("announcement")) {
-            return "-fx-background-color: rgba(255,50,50,0.20); -fx-background-radius: 8px; -fx-border-color: rgba(255,50,50,0.40); -fx-border-width: 1px; -fx-border-radius: 8px;";
+            return "-fx-background-color: rgba(239, 68, 68, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(239, 68, 68, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
         if (key.contains("suggestion")) {
-            return "-fx-background-color: rgba(50,255,100,0.15); -fx-background-radius: 8px; -fx-border-color: rgba(50,255,100,0.30); -fx-border-width: 1px; -fx-border-radius: 8px;";
+            return "-fx-background-color: rgba(16, 185, 129, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(16, 185, 129, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
         if (key.contains("culture")) {
-            return "-fx-background-color: rgba(200,100,255,0.20); -fx-background-radius: 8px; -fx-border-color: rgba(200,100,255,0.40); -fx-border-width: 1px; -fx-border-radius: 8px;";
+            return "-fx-background-color: rgba(139, 92, 246, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(139, 92, 246, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
-        if (key.contains("nouveaute")) {
-            return "-fx-background-color: rgba(255,200,50,0.20); -fx-background-radius: 8px; -fx-border-color: rgba(255,200,50,0.40); -fx-border-width: 1px; -fx-border-radius: 8px;";
+        if (key.contains("sport")) {
+            return "-fx-background-color: rgba(245, 158, 11, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(245, 158, 11, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
-        return "-fx-background-color: rgba(100,200,255,0.15); -fx-background-radius: 8px; -fx-border-color: rgba(100,200,255,0.30); -fx-border-width: 1px; -fx-border-radius: 8px;";
+        if (key.contains("meeting")) {
+            return "-fx-background-color: rgba(6, 182, 212, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(6, 182, 212, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
+        }
+        
+        // Default (Accent-tinted)
+        return "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + "; -fx-background-radius: 12px; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.4) + "; -fx-border-width: 1px; -fx-border-radius: 12px;";
     }
 
     @Override
