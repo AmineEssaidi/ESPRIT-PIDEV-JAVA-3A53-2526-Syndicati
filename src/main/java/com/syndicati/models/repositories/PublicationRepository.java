@@ -26,7 +26,7 @@ public class PublicationRepository {
     }
 
     public List<Publication> findAllByDateDesc() {
-        String sql = "SELECT p.*, " +
+        String sql = "SELECT p.*, p.user_id AS pub_user_id, " +
                      "u.first_name AS author_fname, " +
                      "u.last_name AS author_lname, " +
                      "pr.avatar AS author_av " +
@@ -155,7 +155,7 @@ public class PublicationRepository {
         pub.setCategoriePub(rs.getString("categorie_pub"));
         pub.setImagePub(rs.getString("image_pub"));
         
-        int userId = rs.getInt("user_id");
+        int userId = rs.getInt("pub_user_id");
         if (!rs.wasNull()) {
             pub.setUserId(userId);
         }
