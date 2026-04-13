@@ -58,6 +58,7 @@ public class ForumPageView implements ViewInterface {
     private TextArea createDescriptionArea;
     private java.io.File selectedImageFile;
     private Label selectedImageLabel;
+    private javafx.scene.image.ImageView createImageView;
     private Label createStatusLabel;
 
     // Edit form fields
@@ -68,6 +69,9 @@ public class ForumPageView implements ViewInterface {
     private java.io.File selectedEditImageFile;
     private Label selectedEditImageLabel;
     private Label editStatusLabel;
+    private javafx.scene.image.ImageView oldImageView;
+    private javafx.scene.image.ImageView newImageView;
+    private boolean shouldDeleteImage = false;
 
     private StackPane detailCategoryPill;
     private Text detailCategory;
@@ -441,8 +445,20 @@ public class ForumPageView implements ViewInterface {
         imageRow.setAlignment(Pos.CENTER_LEFT);
         selectedImageLabel = new Label("No image selected (Optional)");
         selectedImageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 11px;");
+
+        createImageView = new javafx.scene.image.ImageView();
+        createImageView.setFitWidth(120);
+        createImageView.setFitHeight(120);
+        createImageView.setPreserveRatio(true);
+        createImageView.setCursor(javafx.scene.Cursor.HAND);
+        createImageView.setOnMouseClicked(e -> showImageLightbox(createImageView.getImage()));
+        
+        StackPane createImgFrame = new StackPane(createImageView);
+        createImgFrame.setPrefSize(130, 130);
+        createImgFrame.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 12px; -fx-border-width: 1px;");
+
         Button selectImgBtn = ghostBtn("Select Image", this::handleSelectImage);
-        imageRow.getChildren().addAll(selectImgBtn, selectedImageLabel);
+        imageRow.getChildren().addAll(selectImgBtn, createImgFrame, selectedImageLabel);
 
         createStatusLabel = new Label();
         createStatusLabel.setStyle("-fx-text-fill: #ff4444; -fx-font-size: 12px;");
@@ -503,6 +519,11 @@ public class ForumPageView implements ViewInterface {
             selectedImageFile = file;
             selectedImageLabel.setText(file.getName());
             selectedImageLabel.setStyle("-fx-text-fill: #10b981; -fx-font-size: 11px;"); // Success color
+            try {
+                createImageView.setImage(new javafx.scene.image.Image(file.toURI().toString()));
+            } catch (Exception e) {
+                System.err.println("Failed to load create preview: " + e.getMessage());
+            }
         }
     }
 
@@ -528,9 +549,15 @@ public class ForumPageView implements ViewInterface {
         createCategoryCombo.setValue(null);
         createDescriptionArea.clear();
         selectedImageFile = null;
+        if (createImageView != null) createImageView.setImage(null);
         selectedImageLabel.setText("No image selected (Optional)");
         selectedImageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 11px;");
         createStatusLabel.setText("");
+        
+        // Reset edit-specific previews too
+        if (oldImageView != null) oldImageView.setImage(null);
+        if (newImageView != null) newImageView.setImage(null);
+        shouldDeleteImage = false;
         
         switchFace(readFace);
     }
@@ -607,6 +634,45 @@ public class ForumPageView implements ViewInterface {
         
         selectedEditImageLabel = new Label("No image selected (Optional)");
         selectedEditImageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 11px;");
+
+        // Dual Image Previews
+        HBox imagePreviewContainer = new HBox(20);
+        imagePreviewContainer.setAlignment(Pos.CENTER);
+        imagePreviewContainer.setPadding(new Insets(10, 0, 10, 0));
+
+        VBox oldImageBlock = new VBox(8);
+        oldImageBlock.setAlignment(Pos.CENTER);
+        Label oldLabel = new Label("Current Image");
+        oldLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.6); -fx-font-size: 11px;");
+        oldImageView = new javafx.scene.image.ImageView();
+        oldImageView.setFitWidth(120);
+        oldImageView.setFitHeight(120);
+        oldImageView.setPreserveRatio(true);
+        oldImageView.setCursor(javafx.scene.Cursor.HAND);
+        oldImageView.setOnMouseClicked(e -> showImageLightbox(oldImageView.getImage()));
+        
+        StackPane oldImgFrame = new StackPane(oldImageView);
+        oldImgFrame.setPrefSize(130, 130);
+        oldImgFrame.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 12px; -fx-border-width: 1px;");
+        oldImageBlock.getChildren().addAll(oldLabel, oldImgFrame);
+
+        VBox newImageBlock = new VBox(8);
+        newImageBlock.setAlignment(Pos.CENTER);
+        Label newLabel = new Label("New Image");
+        newLabel.setStyle("-fx-text-fill: " + tm.getAccentHex() + "; -fx-font-size: 11px;");
+        newImageView = new javafx.scene.image.ImageView();
+        newImageView.setFitWidth(120);
+        newImageView.setFitHeight(120);
+        newImageView.setPreserveRatio(true);
+        newImageView.setCursor(javafx.scene.Cursor.HAND);
+        newImageView.setOnMouseClicked(e -> showImageLightbox(newImageView.getImage()));
+        
+        StackPane newImgFrame = new StackPane(newImageView);
+        newImgFrame.setPrefSize(130, 130);
+        newImgFrame.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.3) + "; -fx-border-radius: 12px; -fx-border-width: 1px;");
+        newImageBlock.getChildren().addAll(newLabel, newImgFrame);
+
+        imagePreviewContainer.getChildren().addAll(oldImageBlock, newImageBlock);
         
         Button imageBtn = ghostBtn("Change Image", () -> {
             javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
@@ -617,10 +683,28 @@ public class ForumPageView implements ViewInterface {
             java.io.File file = fc.showOpenDialog(com.syndicati.MainApplication.getInstance().getPrimaryStage());
             if (file != null) {
                 selectedEditImageFile = file;
+                shouldDeleteImage = false;
                 selectedEditImageLabel.setText("Selected: " + file.getName());
                 selectedEditImageLabel.setStyle("-fx-text-fill: #10b981; -fx-font-size: 11px;");
+                try {
+                    newImageView.setImage(new javafx.scene.image.Image(file.toURI().toString()));
+                } catch (Exception e) {
+                    System.err.println("Failed to load new image preview: " + e.getMessage());
+                }
             }
         });
+
+        Button deleteImageBtn = ghostBtn("Delete Image", () -> {
+            shouldDeleteImage = true;
+            selectedEditImageFile = null;
+            newImageView.setImage(null);
+            selectedEditImageLabel.setText("Image marked for deletion");
+            selectedEditImageLabel.setStyle("-fx-text-fill: #ef4444; -fx-font-size: 11px;");
+        });
+        deleteImageBtn.setStyle(deleteImageBtn.getStyle() + "-fx-text-fill: #ef4444; -fx-border-color: rgba(239, 68, 68, 0.4);");
+
+        HBox imageControls = new HBox(12, imageBtn, deleteImageBtn);
+        imageControls.setAlignment(Pos.CENTER_LEFT);
 
         editStatusLabel = new Label();
         editStatusLabel.setStyle("-fx-text-fill: #ef4444; -fx-font-size: 12px;");
@@ -632,7 +716,8 @@ public class ForumPageView implements ViewInterface {
             sectionLabel("TITLE"), editTitleField,
             sectionLabel("CATEGORY"), editCategoryCombo,
             sectionLabel("DESCRIPTION"), editDescriptionArea,
-            sectionLabel("IMAGE"), imageBtn, selectedEditImageLabel,
+            sectionLabel("IMAGE PREVIEW"), imagePreviewContainer,
+            sectionLabel("IMAGE CONTROLS"), imageControls, selectedEditImageLabel,
             editStatusLabel,
             updateBtn
         );
@@ -664,10 +749,21 @@ public class ForumPageView implements ViewInterface {
         editCategoryCombo.setValue(pub.getCategoriePub());
         editDescriptionArea.setText(pub.getDescriptionPub());
         selectedEditImageFile = null; // Reset to null unless user picks new one
+        newImageView.setImage(null);
+        shouldDeleteImage = false;
+        
         if (pub.getImagePub() != null && !pub.getImagePub().isBlank()) {
             selectedEditImageLabel.setText("Current: " + pub.getImagePub());
+            String imgPath = "uploads/forum_images/" + pub.getImagePub();
+            try {
+                javafx.scene.image.Image img = com.syndicati.utils.image.ImageLoaderUtil.loadImage(imgPath, false);
+                oldImageView.setImage(img);
+            } catch (Exception e) {
+                oldImageView.setImage(null);
+            }
         } else {
             selectedEditImageLabel.setText("No image currently set");
+            oldImageView.setImage(null);
         }
         editStatusLabel.setText("");
     }
@@ -690,7 +786,9 @@ public class ForumPageView implements ViewInterface {
             return;
         }
         String imageName = currentEditingPub.getImagePub();
-        if (selectedEditImageFile != null) {
+        if (shouldDeleteImage) {
+            imageName = null;
+        } else if (selectedEditImageFile != null) {
             String newImg = savePublicationImage(selectedEditImageFile);
             if (newImg != null) imageName = newImg;
         }
@@ -713,31 +811,119 @@ public class ForumPageView implements ViewInterface {
     }
 
     public void updateDetailView(com.syndicati.models.entities.Publication pub) {
+        if (pub == null) return;
+        
         javafx.application.Platform.runLater(() -> {
+            // 1. Basic Text Fields
             detailTitle.setText(pub.getTitrePub());
             detailDescription.setText(pub.getDescriptionPub());
-            detailCategory.setText(pub.getCategoriePub() != null ? pub.getCategoriePub() : "General");
-            detailCategoryPill.setStyle(categoryStyle(pub.getCategoriePub()));
+            String cat = pub.getCategoriePub() != null ? pub.getCategoriePub() : "General";
+            detailCategory.setText(cat);
+            detailCategoryPill.setStyle(categoryStyle(cat));
             
+            if (pub.getDateCreationPub() != null) {
+                String date = pub.getDateCreationPub().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd"));
+                detailDate.setText(date + ", " + pub.getDateCreationPub().getYear());
+            } else {
+                detailDate.setText("Just now");
+            }
+            detailAuthor.setText(pub.getAuthorFullName() != null ? pub.getAuthorFullName() : "Author");
+            
+            // 2. Author Avatar logic
+            try {
+                VBox hText = (VBox) detailHero.getChildren().get(2); // heroText
+                HBox aBox = (HBox) hText.getChildren().get(2); // authorBox
+                StackPane dAvatar = (StackPane) aBox.getChildren().get(0);
+                
+                // Reset to initials first
+                String initial = pub.getAuthorInitials();
+                dAvatar.setOnMouseClicked(null);
+                dAvatar.setCursor(javafx.scene.Cursor.DEFAULT);
+                
+                Text dInitial = new Text(initial);
+                dInitial.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 13));
+                dInitial.setFill(javafx.scene.paint.Color.WHITE);
+                dAvatar.getChildren().setAll(dInitial);
+
+                if (pub.getAuthorAvatar() != null && !pub.getAuthorAvatar().isEmpty()) {
+                    String avPath = resolveAvatarPath(pub.getAuthorAvatar());
+                    javafx.scene.image.Image avImg = com.syndicati.utils.image.ImageLoaderUtil.loadProfileAvatar(avPath, true);
+                    if (avImg != null) {
+                        javafx.scene.image.ImageView avView = new javafx.scene.image.ImageView(avImg);
+                        avView.setFitWidth(34);
+                        avView.setFitHeight(34);
+                        avView.setPreserveRatio(true);
+                        avView.setSmooth(true);
+                        javafx.scene.shape.Circle clip = new javafx.scene.shape.Circle(17, 17, 17);
+                        avView.setClip(clip);
+                        dAvatar.getChildren().setAll(avView);
+                        dAvatar.setCursor(javafx.scene.Cursor.HAND);
+                        dAvatar.setOnMouseClicked(ev -> {
+                            ev.consume();
+                            showImageLightbox(avView.getImage());
+                        });
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 3. Publication Image Logic
             if (pub.getImagePub() != null && !pub.getImagePub().isEmpty()) {
-                String imgPath = "uploads/forum_images/" + pub.getImagePub();
+                String imgPath = pub.getImagePub();
+                if (!imgPath.startsWith("uploads/") && !imgPath.startsWith("forum_images/")) {
+                    imgPath = "uploads/forum_images/" + imgPath;
+                } else if (imgPath.startsWith("forum_images/")) {
+                    imgPath = "uploads/" + imgPath;
+                }
+                
                 try {
                     javafx.scene.image.Image img = com.syndicati.utils.image.ImageLoaderUtil.loadImage(imgPath, false);
                     if (img != null) {
                         detailImageView.setImage(img);
+                        // Ratio check logic
+                        if (img.getHeight() > 0 && img.getWidth() > 0) {
+                            double ratio = img.getWidth() / img.getHeight();
+                            if (detailHero.getWidth() / ratio < 250) {
+                                detailImageView.fitWidthProperty().unbind();
+                                detailImageView.setFitHeight(250);
+                            } else {
+                                detailImageView.fitHeightProperty().unbind();
+                                detailImageView.fitWidthProperty().bind(detailHero.widthProperty());
+                            }
+                        }
+                    } else {
+                        detailImageView.setImage(null);
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ex) {
+                    detailImageView.setImage(null);
+                }
+            } else {
+                detailImageView.setImage(null);
             }
             
-            // Refresh ownership check for buttons
+            // 4. Ownership check for Edit/Delete buttons
             try {
                 com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
-                boolean isOwner = (currentUser != null && java.util.Objects.equals(pub.getUserId(), currentUser.getIdUser()));
+                Integer pubUserId = pub.getUserId();
+                Integer currentUserId = (currentUser != null) ? currentUser.getIdUser() : null;
+                
+                boolean isOwner = (pubUserId != null && currentUserId != null && java.util.Objects.equals(pubUserId, currentUserId));
+                
                 detailEditBtn.setVisible(isOwner);
                 detailEditBtn.setManaged(isOwner);
                 detailDeleteBtn.setVisible(isOwner);
                 detailDeleteBtn.setManaged(isOwner);
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                System.err.println("Error in ownership check: " + ex.getMessage());
+                // Don't hide buttons if it's just a metadata error, but keep safety
+                if (currentPub != null && pub.getId() != null && java.util.Objects.equals(pub.getId(), currentPub.getId())) {
+                     // Keep current state if error occurs during update
+                } else {
+                    detailEditBtn.setVisible(false);
+                    detailEditBtn.setManaged(false);
+                    detailDeleteBtn.setVisible(false);
+                    detailDeleteBtn.setManaged(false);
+                }
+            }
         });
     }
 
@@ -1231,110 +1417,8 @@ public class ForumPageView implements ViewInterface {
         
         // Update click behavior for entity data
         item.setOnMouseClicked(e -> {
-            detailCategory.setText(cat);
-            detailCategoryPill.setStyle(categoryStyle(cat));
-            detailDate.setText(date + ", " + pub.getDateCreationPub().getYear());
-            detailAuthor.setText(author);
             currentPub = pub;
-            detailTitle.setText(pub.getTitrePub());
-            detailDescription.setText(pub.getDescriptionPub());
-
-            // Update Detail Avatar
-            // Re-find the avatar container in detailHero
-            try {
-                VBox hText = (VBox) detailHero.getChildren().get(2); // heroText
-                HBox aBox = (HBox) hText.getChildren().get(2); // authorBox
-                StackPane dAvatar = (StackPane) aBox.getChildren().get(0);
-                
-                String initial = pub.getAuthorInitials();
-                
-                // RESET AVATAR STATE to avoid "ghost" click handlers from previous users
-                dAvatar.setOnMouseClicked(null);
-                dAvatar.setCursor(javafx.scene.Cursor.DEFAULT);
-                
-                Text dInitial = new Text(initial);
-                dInitial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-                dInitial.setFill(Color.WHITE);
-                dAvatar.getChildren().setAll(dInitial);
-
-                // Load real avatar if available
-                if (pub.getAuthorAvatar() != null && !pub.getAuthorAvatar().isEmpty()) {
-                    String avPath = resolveAvatarPath(pub.getAuthorAvatar());
-                    javafx.scene.image.Image avImg = com.syndicati.utils.image.ImageLoaderUtil.loadProfileAvatar(avPath, true);
-                    if (avImg != null) {
-                        javafx.scene.image.ImageView avView = new javafx.scene.image.ImageView(avImg);
-                        avView.setFitWidth(34);
-                        avView.setFitHeight(34);
-                        avView.setPreserveRatio(true);
-                        avView.setSmooth(true);
-                        javafx.scene.shape.Circle clip = new javafx.scene.shape.Circle(17, 17, 17);
-                        avView.setClip(clip);
-                        dAvatar.getChildren().setAll(avView);
-                        dAvatar.setCursor(javafx.scene.Cursor.HAND);
-                        dAvatar.setOnMouseClicked(ev -> {
-                            ev.consume();
-                            showImageLightbox(avView.getImage());
-                        });
-                    }
-                }
-            } catch (Exception ignored) {}
-
-            // Handle image loading
-            if (pub.getImagePub() != null && !pub.getImagePub().isEmpty()) {
-                String imgPath = pub.getImagePub();
-                if (!imgPath.startsWith("uploads/") && !imgPath.startsWith("forum_images/")) {
-                    imgPath = "uploads/forum_images/" + imgPath;
-                } else if (imgPath.startsWith("forum_images/")) {
-                    imgPath = "uploads/" + imgPath;
-                }
-                
-                try {
-                    // Try to load the image. Using async=false temporarily to ensure pixels are available for initial render.
-                    javafx.scene.image.Image img = com.syndicati.utils.image.ImageLoaderUtil.loadImage(imgPath, false);
-                    if (img != null) {
-                        detailImageView.setImage(img);
-                        // If image is too short to cover 400px height, switch to fitHeight
-                        if (img.getHeight() > 0 && img.getWidth() > 0) {
-                            double ratio = img.getWidth() / img.getHeight();
-                            if (detailHero.getWidth() / ratio < 250) {
-                                detailImageView.fitWidthProperty().unbind();
-                                detailImageView.setFitHeight(250);
-                            } else {
-                                detailImageView.fitHeightProperty().unbind();
-                                detailImageView.fitWidthProperty().bind(detailHero.widthProperty());
-                            }
-                        }
-                    } else {
-                        detailImageView.setImage(null);
-                    }
-                } catch (Exception ex) {
-                    detailImageView.setImage(null);
-                    System.out.println("Error loading image: " + imgPath);
-                }
-            } else {
-                detailImageView.setImage(null);
-            }
-
-            // Check ownership to show/hide edit and delete buttons
-            try {
-                com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
-                
-                Integer pubUserId = pub.getUserId();
-                Integer currentUserId = (currentUser != null) ? currentUser.getIdUser() : null;
-                
-                boolean isOwner = (pubUserId != null && currentUserId != null && pubUserId.equals(currentUserId));
-                
-                detailEditBtn.setVisible(isOwner);
-                detailEditBtn.setManaged(isOwner);
-                detailDeleteBtn.setVisible(isOwner);
-                detailDeleteBtn.setManaged(isOwner);
-            } catch (Exception ex) {
-                detailEditBtn.setVisible(false);
-                detailEditBtn.setManaged(false);
-                detailDeleteBtn.setVisible(false);
-                detailDeleteBtn.setManaged(false);
-            }
-
+            updateDetailView(pub);
             switchFace(readFace);
         });
 
