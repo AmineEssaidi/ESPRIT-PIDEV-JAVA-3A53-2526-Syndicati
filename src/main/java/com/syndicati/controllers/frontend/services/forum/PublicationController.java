@@ -56,13 +56,13 @@ public class PublicationController {
         }
 
         new Thread(() -> {
-            boolean success = service.addPublication(pub);
+            int newId = service.addPublication(pub);
             Platform.runLater(() -> {
-                if (success) {
-                    afficher(); // Refresh list
-                    view.switchFaceToRead();
+                if (newId > 0) {
+                    afficher(); // Refresh sidebar list
+                    view.updateDetailView(pub); // Show the new post details immediately
+                    view.switchFaceToRead();     // Switch to detail view
                 } else {
-                    // Could show an error alert here
                     System.err.println("Failed to create publication.");
                 }
             });

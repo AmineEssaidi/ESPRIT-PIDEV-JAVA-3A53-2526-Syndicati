@@ -812,6 +812,7 @@ public class ForumPageView implements ViewInterface {
 
     public void updateDetailView(com.syndicati.models.entities.Publication pub) {
         if (pub == null) return;
+        this.currentPub = pub;
         
         javafx.application.Platform.runLater(() -> {
             // 1. Basic Text Fields
@@ -826,6 +827,13 @@ public class ForumPageView implements ViewInterface {
                 detailDate.setText(date + ", " + pub.getDateCreationPub().getYear());
             } else {
                 detailDate.setText("Just now");
+            }
+
+            // Sync author names from session if missing (e.g. for newly created posts)
+            com.syndicati.models.entities.User sessionUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+            if (pub.getAuthorFirstName() == null && sessionUser != null && java.util.Objects.equals(pub.getUserId(), sessionUser.getIdUser())) {
+                pub.setAuthorFirstName(sessionUser.getFirstName());
+                pub.setAuthorLastName(sessionUser.getLastName());
             }
             detailAuthor.setText(pub.getAuthorFullName() != null ? pub.getAuthorFullName() : "Author");
             

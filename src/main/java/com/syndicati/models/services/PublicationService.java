@@ -20,11 +20,15 @@ public class PublicationService {
         return repository.findAllByDateDesc();
     }
 
-    public boolean addPublication(Publication pub) {
+    public int addPublication(Publication pub) {
         if (pub.isValid()) {
-            return repository.create(pub) > 0;
+            int id = repository.create(pub);
+            if (id > 0) {
+                pub.setId(id);
+                return id;
+            }
         }
-        return false;
+        return -1;
     }
 
     public boolean updatePublication(Publication pub) {
