@@ -24,6 +24,9 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.shape.Circle;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.ComboBox;
 import javafx.util.Duration;
 
 /**
@@ -46,6 +49,14 @@ public class ForumPageView implements ViewInterface {
     private String currentFilter = "General";
     private Button btnGeneral;
     private Button btnAnnouncements;
+
+    // Creation form fields
+    private TextField createTitleField;
+    private ComboBox<String> createCategoryCombo;
+    private TextArea createDescriptionArea;
+    private java.io.File selectedImageFile;
+    private Label selectedImageLabel;
+    private Label createStatusLabel;
 
     private Text detailCategory;
     private Text detailDate;
@@ -165,7 +176,7 @@ public class ForumPageView implements ViewInterface {
         main.setMaxWidth(Double.MAX_VALUE);
 
         readFace = buildReadFace();
-        createFace = buildEditorFace("Create New Post", "Title", "Category", "Description", "Post Now");
+        createFace = buildCreateFace();
         editFace = buildEditorFace("Edit Post", "Edit title", "Edit category", "Edit description", "Save Changes");
 
         createFace.setVisible(false);
@@ -363,6 +374,179 @@ public class ForumPageView implements ViewInterface {
         ft.setToValue(0);
         ft.setOnFinished(e -> faceStack.getChildren().remove(lightbox));
         ft.play();
+    }
+
+    private VBox buildCreateFace() {
+        VBox face = new VBox(14);
+        face.setPadding(new Insets(18));
+        face.setStyle("-fx-background-color: transparent;");
+
+        HBox header = new HBox();
+        header.setAlignment(Pos.CENTER_LEFT);
+        Text t = sectionTitle("Create New Post");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Button back = ghostBtn("Back", () -> switchFace(readFace));
+        header.getChildren().addAll(t, spacer, back);
+
+        VBox formCard = new VBox(16);
+        formCard.setPadding(new Insets(24));
+        formCard.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.03);" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-radius: 20px;"
+        );
+
+        createTitleField = createStyledTextField("Post Title (min 5 characters)");
+        
+        createCategoryCombo = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(com.syndicati.models.entities.Publication.CATEGORIES));
+        createCategoryCombo.setPromptText("Select a category");
+        createCategoryCombo.setMaxWidth(Double.MAX_VALUE);
+        createCategoryCombo.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.06); " +
+            "-fx-text-fill: white; " +
+            "-fx-background-radius: 12px; " +
+            "-fx-border-color: " + borderSoft() + "; " +
+            "-fx-border-width: 1px; " +
+            "-fx-border-radius: 12px; " +
+            "-fx-padding: 8px;"
+        );
+
+        createDescriptionArea = createStyledTextArea("Detailed description (min 10 characters)");
+
+        HBox imageRow = new HBox(12);
+        imageRow.setAlignment(Pos.CENTER_LEFT);
+        selectedImageLabel = new Label("No image selected (Optional)");
+        selectedImageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 11px;");
+        Button selectImgBtn = ghostBtn("Select Image", this::handleSelectImage);
+        imageRow.getChildren().addAll(selectImgBtn, selectedImageLabel);
+
+        createStatusLabel = new Label();
+        createStatusLabel.setStyle("-fx-text-fill: #ff4444; -fx-font-size: 12px;");
+
+        Button submitBtn = filledBtn("Post Discussion", this::handleCreate);
+        submitBtn.setMaxWidth(Double.MAX_VALUE);
+        submitBtn.setPrefHeight(40);
+
+        formCard.getChildren().addAll(
+            sectionLabel("TITLE"), createTitleField,
+            sectionLabel("CATEGORY"), createCategoryCombo,
+            sectionLabel("DESCRIPTION"), createDescriptionArea,
+            sectionLabel("IMAGE (OPTIONAL)"), imageRow,
+            createStatusLabel,
+            submitBtn
+        );
+
+        face.getChildren().addAll(header, formCard);
+        return face;
+    }
+
+    private void handleCreate() {
+        String title = createTitleField.getText().trim();
+        String category = createCategoryCombo.getValue();
+        String description = createDescriptionArea.getText();
+
+        if (title.isEmpty() || !Character.isLetter(title.charAt(0))) {
+            createStatusLabel.setText("Title must start with a letter.");
+            return;
+        }
+        if (category == null || category.isEmpty()) {
+            createStatusLabel.setText("Please select a category.");
+            return;
+        }
+        if (description.length() < 10) {
+            createStatusLabel.setText("Description must be at least 10 characters.");
+            return;
+        }
+
+        createStatusLabel.setText("");
+        
+        String imagePath = null;
+        if (selectedImageFile != null) {
+            imagePath = saveSelectedImage();
+        }
+
+        publicationController.addPublication(title, category, description, imagePath);
+    }
+
+    private void handleSelectImage() {
+        javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
+        fileChooser.setTitle("Select Publication Image");
+        fileChooser.getExtensionFilters().addAll(
+            new javafx.stage.FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif")
+        );
+        java.io.File file = fileChooser.showOpenDialog(MainApplication.getInstance().getPrimaryStage());
+        if (file != null) {
+            selectedImageFile = file;
+            selectedImageLabel.setText(file.getName());
+            selectedImageLabel.setStyle("-fx-text-fill: #10b981; -fx-font-size: 11px;"); // Success color
+        }
+    }
+
+    private String saveSelectedImage() {
+        try {
+            String fileName = "forum_" + System.currentTimeMillis() + "_" + selectedImageFile.getName().replaceAll("\\s+", "_");
+            java.nio.file.Path targetDir = java.nio.file.Paths.get("uploads/forum_images");
+            if (!java.nio.file.Files.exists(targetDir)) {
+                java.nio.file.Files.createDirectories(targetDir);
+            }
+            java.nio.file.Path targetPath = targetDir.resolve(fileName);
+            java.nio.file.Files.copy(selectedImageFile.toPath(), targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return fileName;
+        } catch (Exception e) {
+            System.err.println("Failed to save image: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public void switchFaceToRead() {
+        // Clear fields
+        createTitleField.clear();
+        createCategoryCombo.setValue(null);
+        createDescriptionArea.clear();
+        selectedImageFile = null;
+        selectedImageLabel.setText("No image selected (Optional)");
+        selectedImageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 11px;");
+        createStatusLabel.setText("");
+        
+        switchFace(readFace);
+    }
+
+    private TextField createStyledTextField(String prompt) {
+        TextField tf = new TextField();
+        tf.setPromptText(prompt);
+        tf.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.06); " +
+            "-fx-text-fill: white; " +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.4); " +
+            "-fx-background-radius: 12px; " +
+            "-fx-border-color: " + borderSoft() + "; " +
+            "-fx-border-width: 1px; " +
+            "-fx-border-radius: 12px; " +
+            "-fx-padding: 10px;"
+        );
+        return tf;
+    }
+
+    private TextArea createStyledTextArea(String prompt) {
+        TextArea ta = new TextArea();
+        ta.setPromptText(prompt);
+        ta.setPrefHeight(150);
+        ta.setWrapText(true);
+        ta.setStyle(
+            "-fx-control-inner-background: rgba(255,255,255,0.03); " +
+            "-fx-background-color: transparent; " +
+            "-fx-text-fill: white; " +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.4); " +
+            "-fx-background-radius: 12px; " +
+            "-fx-border-color: " + borderSoft() + "; " +
+            "-fx-border-width: 1px; " +
+            "-fx-border-radius: 12px; " +
+            "-fx-padding: 5px;"
+        );
+        return ta;
     }
 
     private VBox buildEditorFace(String heading, String f1, String f2, String f3, String submitText) {
@@ -835,6 +1019,11 @@ public class ForumPageView implements ViewInterface {
                 StackPane dAvatar = (StackPane) aBox.getChildren().get(0);
                 
                 String initial = pub.getAuthorInitials();
+                
+                // RESET AVATAR STATE to avoid "ghost" click handlers from previous users
+                dAvatar.setOnMouseClicked(null);
+                dAvatar.setCursor(javafx.scene.Cursor.DEFAULT);
+                
                 Text dInitial = new Text(initial);
                 dInitial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
                 dInitial.setFill(Color.WHITE);
@@ -864,7 +1053,13 @@ public class ForumPageView implements ViewInterface {
 
             // Handle image loading
             if (pub.getImagePub() != null && !pub.getImagePub().isEmpty()) {
-                String imgPath = "uploads/forum_images/" + pub.getImagePub();
+                String imgPath = pub.getImagePub();
+                if (!imgPath.startsWith("uploads/") && !imgPath.startsWith("forum_images/")) {
+                    imgPath = "uploads/forum_images/" + imgPath;
+                } else if (imgPath.startsWith("forum_images/")) {
+                    imgPath = "uploads/" + imgPath;
+                }
+                
                 try {
                     // Try to load the image. Using async=false temporarily to ensure pixels are available for initial render.
                     javafx.scene.image.Image img = com.syndicati.utils.image.ImageLoaderUtil.loadImage(imgPath, false);

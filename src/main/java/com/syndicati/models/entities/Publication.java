@@ -126,7 +126,8 @@ public class Publication {
 
     // Basic validation logic
     public boolean isValid() {
-        return titrePub != null && titrePub.length() >= 5 &&
+        return titrePub != null && !titrePub.trim().isEmpty() &&
+               Character.isLetter(titrePub.trim().charAt(0)) &&
                descriptionPub != null && descriptionPub.length() >= 10 &&
                categoriePub != null && CATEGORIES.contains(categoriePub);
     }

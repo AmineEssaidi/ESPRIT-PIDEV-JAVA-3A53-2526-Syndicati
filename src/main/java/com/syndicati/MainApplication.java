@@ -415,6 +415,10 @@ public class MainApplication extends Application {
         return lightFontFamily;
     }
     
+    public Stage getPrimaryStage() {
+        return primaryStage;
+    }
+    
     public void logout() {
         System.out.println("ðŸ”“ Logging out - returning to login page...");
                 // Clear user session
