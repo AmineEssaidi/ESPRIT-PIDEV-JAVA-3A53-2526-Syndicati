@@ -62,7 +62,9 @@ public class PublicationController {
                     afficher(); // Refresh sidebar list
                     view.updateDetailView(pub); // Show the new post details immediately
                     view.switchFaceToRead();     // Switch to detail view
+                    view.showNotification("Publication created successfully!", "success");
                 } else {
+                    view.showNotification("Failed to create publication.", "error");
                     System.err.println("Failed to create publication.");
                 }
             });
@@ -84,7 +86,9 @@ public class PublicationController {
                 if (success) {
                     afficher(); // Refresh list
                     view.switchFaceToRead();
+                    view.showNotification("Publication updated successfully!", "success");
                 } else {
+                    view.showNotification("Failed to update publication.", "error");
                     System.err.println("Failed to update publication.");
                 }
             });
@@ -97,9 +101,11 @@ public class PublicationController {
             Platform.runLater(() -> {
                 if (success) {
                     afficher(); // Refresh list
+                    view.updateDetailView(null); // Clear the detail view of the deleted post
                     view.switchFaceToRead();
-                    // Optionally clear the detail view if the deleted post was selected
+                    view.showNotification("Publication deleted successfully!", "success");
                 } else {
+                    view.showNotification("Failed to delete publication.", "error");
                     System.err.println("Failed to delete publication.");
                 }
             });

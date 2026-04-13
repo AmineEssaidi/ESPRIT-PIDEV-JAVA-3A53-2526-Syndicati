@@ -325,7 +325,9 @@ public class ForumPageView implements ViewInterface {
 
         detailDeleteBtn = ghostBtn("Delete", () -> {
             if (currentPub != null) {
-                publicationController.deletePublication(currentPub.getId());
+                showDeleteConfirmation(() -> {
+                    publicationController.deletePublication(currentPub.getId());
+                });
             }
         });
         detailDeleteBtn.setStyle(detailDeleteBtn.getStyle() + "-fx-text-fill: #ef4444; -fx-border-color: rgba(239, 68, 68, 0.4);");
@@ -407,6 +409,102 @@ public class ForumPageView implements ViewInterface {
         ft.setToValue(0);
         ft.setOnFinished(e -> faceStack.getChildren().remove(lightbox));
         ft.play();
+    }
+
+    private void showDeleteConfirmation(Runnable onConfirm) {
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.7);");
+        overlay.setOpacity(0);
+
+        VBox card = new VBox(20);
+        card.setPadding(new Insets(30));
+        card.setMaxSize(400, 200);
+        card.setAlignment(Pos.CENTER);
+        card.setStyle(
+            "-fx-background-color: " + surfaceCard() + ";" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 20px;" +
+            "-fx-background-radius: 20px;"
+        );
+
+        Text title = new Text("Delete Publication");
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
+        title.setFill(Color.WHITE);
+
+        Text msg = new Text("Are you sure you want to delete this publication?\nThis action cannot be undone.");
+        msg.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 14));
+        msg.setFill(Color.web("rgba(255,255,255,0.8)"));
+        msg.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        Button cancelBtn = ghostBtn("Cancel", () -> hideLightbox(overlay));
+        cancelBtn.setPrefWidth(120);
+        
+        Button deleteBtn = filledBtn("Confirm Delete", () -> {
+            onConfirm.run();
+            hideLightbox(overlay);
+        });
+        deleteBtn.setPrefWidth(120);
+        deleteBtn.setStyle(deleteBtn.getStyle() + "-fx-background-color: #ef4444;");
+
+        HBox btns = new HBox(12, cancelBtn, deleteBtn);
+        btns.setAlignment(Pos.CENTER);
+
+        card.getChildren().addAll(title, msg, btns);
+        overlay.getChildren().add(card);
+
+        faceStack.getChildren().add(overlay);
+
+        FadeTransition ft = new FadeTransition(Duration.millis(300), overlay);
+        ft.setToValue(1);
+        ft.play();
+    }
+
+    public void showNotification(String message, String type) {
+        javafx.application.Platform.runLater(() -> {
+            StackPane overlay = new StackPane();
+            overlay.setMouseTransparent(true);
+            overlay.setPadding(new Insets(40));
+            StackPane.setAlignment(overlay, Pos.BOTTOM_CENTER);
+
+            HBox card = new HBox(12);
+            card.setPadding(new Insets(12, 24, 12, 24));
+            card.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+            card.setAlignment(Pos.CENTER);
+            
+            String bgColor = type.equals("success") ? "rgba(16, 185, 129, 0.9)" : "rgba(239, 68, 68, 0.9)";
+            card.setStyle(
+                "-fx-background-color: " + bgColor + ";" +
+                "-fx-background-radius: 30px;" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 15, 0, 0, 8);"
+            );
+
+            Text txt = new Text(message);
+            txt.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 14));
+            txt.setFill(javafx.scene.paint.Color.WHITE);
+
+            card.getChildren().add(txt);
+            overlay.getChildren().add(card);
+            
+            faceStack.getChildren().add(overlay);
+            
+            FadeTransition fadeIn = new FadeTransition(Duration.millis(300), overlay);
+            fadeIn.setFromValue(0);
+            fadeIn.setToValue(1);
+            
+            TranslateTransition slideUp = new TranslateTransition(Duration.millis(400), overlay);
+            slideUp.setFromY(50);
+            slideUp.setToY(0);
+            
+            FadeTransition fadeOut = new FadeTransition(Duration.millis(400), overlay);
+            fadeOut.setFromValue(1);
+            fadeOut.setToValue(0);
+            fadeOut.setDelay(Duration.millis(2500));
+            fadeOut.setOnFinished(e -> faceStack.getChildren().remove(overlay));
+            
+            new ParallelTransition(fadeIn, slideUp).play();
+            fadeOut.play();
+        });
     }
 
     private VBox buildCreateFace() {
@@ -811,7 +909,35 @@ public class ForumPageView implements ViewInterface {
     }
 
     public void updateDetailView(com.syndicati.models.entities.Publication pub) {
-        if (pub == null) return;
+        if (pub == null) {
+            this.currentPub = null;
+            javafx.application.Platform.runLater(() -> {
+                detailTitle.setText("Welcome to the Forum");
+                detailDescription.setText("Select a discussion from the sidebar to preview the split-view detail layout.");
+                detailCategory.setText("Discussion General");
+                detailCategoryPill.setStyle(categoryStyle("General"));
+                detailDate.setText("");
+                detailAuthor.setText("Horizon Community");
+                
+                // Clear avatar
+                try {
+                    VBox hText = (VBox) detailHero.getChildren().get(2);
+                    HBox aBox = (HBox) hText.getChildren().get(2);
+                    StackPane dAvatar = (StackPane) aBox.getChildren().get(0);
+                    Text dInitial = new Text("H");
+                    dInitial.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 13));
+                    dInitial.setFill(javafx.scene.paint.Color.WHITE);
+                    dAvatar.getChildren().setAll(dInitial);
+                } catch (Exception ignored) {}
+                
+                detailImageView.setImage(null);
+                detailEditBtn.setVisible(false);
+                detailEditBtn.setManaged(false);
+                detailDeleteBtn.setVisible(false);
+                detailDeleteBtn.setManaged(false);
+            });
+            return;
+        }
         this.currentPub = pub;
         
         javafx.application.Platform.runLater(() -> {
