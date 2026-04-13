@@ -9,7 +9,7 @@ import javafx.geometry.Pos;
 import com.syndicati.components.shared.DynamicHeader;
 import com.syndicati.components.shared.DynamicFooter;
 import com.syndicati.components.home.HomeContent;
-import com.syndicati.models.entities.User;
+import com.syndicati.models.user.User;
  
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
@@ -559,4 +559,5 @@ public class LandingPageView implements ViewInterface {
         ));
     }
 }
+
 

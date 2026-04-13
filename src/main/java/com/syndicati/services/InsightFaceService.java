@@ -116,7 +116,7 @@ public class InsightFaceService {
             for (int i = 0; i < 60; i++) {  // 60 attempts = 30 seconds (500ms each)
                 try {
                     if (ping()) {
-                        log("✓ Face detection service initialized successfully (attempt " + (i+1) + ")");
+                        log("âœ“ Face detection service initialized successfully (attempt " + (i+1) + ")");
                         isInitialized = true;
                         connected = true;
                         return true;
@@ -417,13 +417,13 @@ public class InsightFaceService {
         
         if (spoofing.isSpoof) {
             indicatorColor = new java.awt.Color(255, 0, 0, 200);
-            text = String.format("⚠ SPOOF DETECTED (%.0f%%)", spoofing.spoofingScore * 100);
+            text = String.format("âš  SPOOF DETECTED (%.0f%%)", spoofing.spoofingScore * 100);
         } else if (spoofing.spoofingScore > 0.3) {
             indicatorColor = new java.awt.Color(255, 255, 0, 200);
             text = String.format("? SUSPICIOUS (%.0f%%)", spoofing.spoofingScore * 100);
         } else {
             indicatorColor = new java.awt.Color(0, 255, 0, 200);
-            text = "✓ REAL FACE";
+            text = "âœ“ REAL FACE";
         }
         
         g2d.setColor(indicatorColor);
@@ -607,3 +607,4 @@ public class InsightFaceService {
         }
     }
 }
+

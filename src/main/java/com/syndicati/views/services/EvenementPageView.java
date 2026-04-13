@@ -730,3 +730,4 @@ public class EvenementPageView implements ViewInterface {
     @Override
     public void cleanup() {}
 }
+

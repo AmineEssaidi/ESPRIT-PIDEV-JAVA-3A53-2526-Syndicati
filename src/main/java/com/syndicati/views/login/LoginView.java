@@ -284,12 +284,12 @@ public class LoginView implements ViewInterface {
         primaryRow.setAlignment(Pos.CENTER);
         primaryRow.setMaxWidth(Double.MAX_VALUE);
 
-        Button google = createAuthMethodButton("🔍", "Sign in with Google", true);
+        Button google = createAuthMethodButton("ðŸ”", "Sign in with Google", true);
         HBox.setHgrow(google, Priority.ALWAYS);
         google.setMaxWidth(Double.MAX_VALUE);
         google.setOnAction(e -> showInfoMessage("Google login UI is ready. Functionality will be connected later."));
 
-        Button toggle = new Button("⌄");
+        Button toggle = new Button("âŒ„");
         toggle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
         toggle.setPrefWidth(42);
         toggle.setPrefHeight(42);
@@ -309,15 +309,15 @@ public class LoginView implements ViewInterface {
         secondary.setManaged(false);
         secondary.setOpacity(0);
 
-        Button github = createAuthMethodButton("🐙", "GitHub", false);
+        Button github = createAuthMethodButton("ðŸ™", "GitHub", false);
         github.setOnAction(e -> showInfoMessage("GitHub login UI is ready. Functionality will be connected later."));
 
         HBox biometricRow = new HBox(8);
         biometricRow.setAlignment(Pos.CENTER);
         biometricRow.setMaxWidth(Double.MAX_VALUE);
 
-        Button passkey = createAuthMethodButton("🔐", "Passkey", false);
-        Button faceId = createAuthMethodButton("📷", "Face ID", false);
+        Button passkey = createAuthMethodButton("ðŸ”", "Passkey", false);
+        Button faceId = createAuthMethodButton("ðŸ“·", "Face ID", false);
         HBox.setHgrow(passkey, Priority.ALWAYS);
         HBox.setHgrow(faceId, Priority.ALWAYS);
         passkey.setMaxWidth(Double.MAX_VALUE);
@@ -1563,4 +1563,5 @@ public class LoginView implements ViewInterface {
         return "admin".equals(username) && "admin".equals(password);
     }
 }
+
 

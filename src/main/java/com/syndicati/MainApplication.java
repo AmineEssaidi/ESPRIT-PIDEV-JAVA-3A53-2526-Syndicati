@@ -144,7 +144,7 @@ public class MainApplication extends Application {
         if (isLoggedIn) return; // Prevent multiple navigations
 
         isLoggedIn = true;
-        System.out.println("ðŸ”“ Login successful! Navigating to landing page...");
+        System.out.println("Ã°Å¸â€â€œ Login successful! Navigating to landing page...");
 
         // Store current window size and position before switching
         double currentWidth = primaryStage.getWidth();
@@ -165,7 +165,7 @@ public class MainApplication extends Application {
         }
 
         showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
-        System.out.println("âœ… Successfully navigated to landing page!");
+        System.out.println("Ã¢Å“â€¦ Successfully navigated to landing page!");
     }
 
     private void showAdminDestinationChoice(
@@ -311,13 +311,13 @@ public class MainApplication extends Application {
                 Font boldFont = Font.loadFont(boldStream, 14);
                 if (boldFont != null) {
                     boldFontFamily = boldFont.getFamily();
-                    System.out.println("ðŸ“¦ Loaded bold font: " + boldFont.getName() + " (family: " + boldFontFamily + ")");
+                    System.out.println("Ã°Å¸â€œÂ¦ Loaded bold font: " + boldFont.getName() + " (family: " + boldFontFamily + ")");
                 } else {
-                    System.out.println("âš ï¸ Failed to load ClashGrotesk-Bold.otf font â€“ using default family name.");
+                    System.out.println("Ã¢Å¡Â Ã¯Â¸Â Failed to load ClashGrotesk-Bold.otf font Ã¢â‚¬â€œ using default family name.");
                 }
                 boldStream.close();
             } else {
-                System.out.println("âš ï¸ ClashGrotesk-Bold.otf not found on classpath.");
+                System.out.println("Ã¢Å¡Â Ã¯Â¸Â ClashGrotesk-Bold.otf not found on classpath.");
             }
             
             // Load Archivo-Regular for body text (primary)
@@ -326,13 +326,13 @@ public class MainApplication extends Application {
                 Font regularPrimaryFont = Font.loadFont(regularPrimaryStream, 14);
                 if (regularPrimaryFont != null) {
                     lightFontFamily = regularPrimaryFont.getFamily();
-                    System.out.println("ðŸ“¦ Loaded body font (regular): " + regularPrimaryFont.getName() + " (family: " + lightFontFamily + ")");
+                    System.out.println("Ã°Å¸â€œÂ¦ Loaded body font (regular): " + regularPrimaryFont.getName() + " (family: " + lightFontFamily + ")");
                 } else {
-                    System.out.println("âš ï¸ Failed to load Archivo-Regular.ttf font â€“ trying Archivo-Light.");
+                    System.out.println("Ã¢Å¡Â Ã¯Â¸Â Failed to load Archivo-Regular.ttf font Ã¢â‚¬â€œ trying Archivo-Light.");
                 }
                 regularPrimaryStream.close();
             } else {
-                System.out.println("âš ï¸ Archivo-Regular.ttf not found on classpath â€“ trying Archivo-Light.");
+                System.out.println("Ã¢Å¡Â Ã¯Â¸Â Archivo-Regular.ttf not found on classpath Ã¢â‚¬â€œ trying Archivo-Light.");
             }
 
             // Fallback: Archivo-Regular
@@ -342,13 +342,13 @@ public class MainApplication extends Application {
                     Font archivoRegular = Font.loadFont(archivoRegularStream, 14);
                     if (archivoRegular != null) {
                         lightFontFamily = archivoRegular.getFamily();
-                        System.out.println("ðŸ“¦ Loaded body font (regular): " + archivoRegular.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("Ã°Å¸â€œÂ¦ Loaded body font (regular): " + archivoRegular.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load Archivo-Regular.ttf font â€“ trying Archivo-Light.");
+                        System.out.println("Ã¢Å¡Â Ã¯Â¸Â Failed to load Archivo-Regular.ttf font Ã¢â‚¬â€œ trying Archivo-Light.");
                     }
                     archivoRegularStream.close();
                 } else {
-                    System.out.println("âš ï¸ Archivo-Regular.ttf not found on classpath â€“ trying Archivo-Light.");
+                    System.out.println("Ã¢Å¡Â Ã¯Â¸Â Archivo-Regular.ttf not found on classpath Ã¢â‚¬â€œ trying Archivo-Light.");
                 }
             }
 
@@ -359,13 +359,13 @@ public class MainApplication extends Application {
                     Font archivoLight = Font.loadFont(archivoLightStream, 14);
                     if (archivoLight != null) {
                         lightFontFamily = archivoLight.getFamily();
-                        System.out.println("ðŸ“¦ Loaded body font (light): " + archivoLight.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("Ã°Å¸â€œÂ¦ Loaded body font (light): " + archivoLight.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load Archivo-Light.ttf font â€“ trying Clash fallback.");
+                        System.out.println("Ã¢Å¡Â Ã¯Â¸Â Failed to load Archivo-Light.ttf font Ã¢â‚¬â€œ trying Clash fallback.");
                     }
                     archivoLightStream.close();
                 } else {
-                    System.out.println("âš ï¸ Archivo-Light.ttf not found on classpath â€“ trying Clash fallback.");
+                    System.out.println("Ã¢Å¡Â Ã¯Â¸Â Archivo-Light.ttf not found on classpath Ã¢â‚¬â€œ trying Clash fallback.");
                 }
             }
 
@@ -376,13 +376,13 @@ public class MainApplication extends Application {
                     Font regularFont = Font.loadFont(regularStream, 14);
                     if (regularFont != null) {
                         lightFontFamily = regularFont.getFamily();
-                        System.out.println("ðŸ“¦ Loaded regular font: " + regularFont.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("Ã°Å¸â€œÂ¦ Loaded regular font: " + regularFont.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load ClashGrotesk-Regular.ttf font â€“ trying light font.");
+                        System.out.println("Ã¢Å¡Â Ã¯Â¸Â Failed to load ClashGrotesk-Regular.ttf font Ã¢â‚¬â€œ trying light font.");
                     }
                     regularStream.close();
                 } else {
-                    System.out.println("âš ï¸ ClashGrotesk-Regular.ttf not found on classpath â€“ trying light font.");
+                    System.out.println("Ã¢Å¡Â Ã¯Â¸Â ClashGrotesk-Regular.ttf not found on classpath Ã¢â‚¬â€œ trying light font.");
                 }
             }
 
@@ -393,17 +393,17 @@ public class MainApplication extends Application {
                     Font lightFont = Font.loadFont(lightStream, 14);
                     if (lightFont != null) {
                         lightFontFamily = lightFont.getFamily();
-                        System.out.println("ðŸ“¦ Loaded light fallback font: " + lightFont.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("Ã°Å¸â€œÂ¦ Loaded light fallback font: " + lightFont.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load ClashGrotesk-Light.otf font â€“ using default family name.");
+                        System.out.println("Ã¢Å¡Â Ã¯Â¸Â Failed to load ClashGrotesk-Light.otf font Ã¢â‚¬â€œ using default family name.");
                     }
                     lightStream.close();
                 } else {
-                    System.out.println("âš ï¸ ClashGrotesk-Light.otf not found on classpath.");
+                    System.out.println("Ã¢Å¡Â Ã¯Â¸Â ClashGrotesk-Light.otf not found on classpath.");
                 }
             }
         } catch (Exception ex) {
-            System.out.println("âš ï¸ Error loading custom fonts: " + ex.getMessage());
+            System.out.println("Ã¢Å¡Â Ã¯Â¸Â Error loading custom fonts: " + ex.getMessage());
         }
     }
     
@@ -416,7 +416,7 @@ public class MainApplication extends Application {
     }
     
     public void logout() {
-        System.out.println("ðŸ”“ Logging out - returning to login page...");
+        System.out.println("Ã°Å¸â€â€œ Logging out - returning to login page...");
                 // Clear user session
         com.syndicati.utils.session.SessionManager.getInstance().clear();
                 // Store current window size and position before switching
@@ -478,7 +478,7 @@ public class MainApplication extends Application {
             landingPageView = null;
         }
         
-        System.out.println("âœ… Successfully returned to login page!");
+        System.out.println("Ã¢Å“â€¦ Successfully returned to login page!");
     }
     
     public static MainApplication getInstance() {
@@ -501,7 +501,7 @@ public class MainApplication extends Application {
                 scene.getStylesheets().add(css);
             }
         } else {
-            System.out.println("âš ï¸ Global stylesheet not found: " + GLOBAL_SCROLLBAR_CSS);
+            System.out.println("Ã¢Å¡Â Ã¯Â¸Â Global stylesheet not found: " + GLOBAL_SCROLLBAR_CSS);
         }
     }
     
@@ -660,4 +660,5 @@ public class MainApplication extends Application {
         launch(args);
     }
 }
+
 

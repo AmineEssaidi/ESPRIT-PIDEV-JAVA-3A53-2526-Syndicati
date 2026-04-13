@@ -667,3 +667,4 @@ public class ForumPageView implements ViewInterface {
     }
 }
 
+

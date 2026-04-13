@@ -2,19 +2,21 @@ package com.syndicati.views.frontend.profile;
 
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
-import com.syndicati.models.entities.Profile;
-import com.syndicati.models.entities.Onboarding;
-import com.syndicati.models.entities.User;
-import com.syndicati.models.entities.UserRelationship;
-import com.syndicati.models.entities.UserStanding;
-import com.syndicati.models.services.ProfileService;
-import com.syndicati.models.services.OnboardingService;
-import com.syndicati.models.services.UserRelationshipService;
-import com.syndicati.models.services.UserService;
-import com.syndicati.models.services.UserStandingService;
-import com.syndicati.services.ProfileImageService;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.Onboarding;
+import com.syndicati.models.user.User;
+import com.syndicati.models.user.UserRelationship;
+import com.syndicati.models.user.UserStanding;
+import com.syndicati.controllers.user.profile.ProfileController;
+import com.syndicati.controllers.user.profile.ProfileAvatarController;
+import com.syndicati.controllers.user.profile.ProfileSessionController;
+import com.syndicati.controllers.user.onboarding.OnboardingController;
+import com.syndicati.controllers.user.relationship.UserRelationshipController;
+import com.syndicati.controllers.user.user.UserController;
+import com.syndicati.controllers.user.standing.UserStandingController;
 import com.syndicati.services.biometric.RealCameraService;
 import com.syndicati.controllers.biometric.FaceController;
+import com.syndicati.controllers.biometric.CameraController;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
@@ -85,12 +87,15 @@ public class ProfileView implements ViewInterface {
     private final VBox root;
     private final ThemeManager tm;
     private final SessionManager sessionManager;
-    private final UserService userService;
-    private final OnboardingService onboardingService;
-    private final ProfileService profileService;
-    private final UserStandingService standingService;
-    private final UserRelationshipService relationshipService;
+    private final UserController userService;
+    private final OnboardingController onboardingService;
+    private final ProfileController profileService;
+    private final UserStandingController standingService;
+    private final UserRelationshipController relationshipService;
     private final FaceController faceController;
+    private final CameraController cameraController;
+    private final ProfileSessionController profileSessionController;
+    private final ProfileAvatarController profileAvatarController;
 
     private User currentUser;
     private Profile currentProfile;
@@ -126,12 +131,15 @@ public class ProfileView implements ViewInterface {
     public ProfileView() {
         this.tm = ThemeManager.getInstance();
         this.sessionManager = SessionManager.getInstance();
-        this.userService = new UserService();
-        this.onboardingService = new OnboardingService();
-        this.profileService = new ProfileService();
-        this.standingService = new UserStandingService();
-        this.relationshipService = new UserRelationshipService();
+        this.userService = new UserController();
+        this.onboardingService = new OnboardingController();
+        this.profileService = new ProfileController();
+        this.standingService = new UserStandingController();
+        this.relationshipService = new UserRelationshipController();
         this.faceController = new FaceController();
+        this.cameraController = new CameraController();
+        this.profileSessionController = new ProfileSessionController();
+        this.profileAvatarController = new ProfileAvatarController();
         this.root = new VBox();
         build();
     }
@@ -339,7 +347,7 @@ public class ProfileView implements ViewInterface {
         
         HBox menuHeader = new HBox(10);
         menuHeader.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
+        Button backBtn = new Button("â†");
         backBtn.setFont(Font.font(18));
         backBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: " + textMuted() + "; -fx-font-weight: 700; -fx-padding: 0;");
         backBtn.setPrefSize(30, 30);
@@ -364,12 +372,12 @@ public class ProfileView implements ViewInterface {
         actionTiles.getRowConstraints().addAll(r, r);
         
         // Action tiles with proper icons (no emojis - text labels instead)
-        actionTiles.add(createActionTile("Host Spotlight", "▶"), 0, 0);
+        actionTiles.add(createActionTile("Host Spotlight", "â–¶"), 0, 0);
         actionTiles.add(createActionTile("Join by Code", "#"), 1, 0);
-        actionTiles.add(createActionTile("2FA", "◆"), 2, 0);
-        actionTiles.add(createActionTile("Biometrics", "◉"), 0, 1);
-        actionTiles.add(createActionTile("Face ID", "◐"), 1, 1);
-        actionTiles.add(createActionTile("Settings", "⚙"), 2, 1);
+        actionTiles.add(createActionTile("2FA", "â—†"), 2, 0);
+        actionTiles.add(createActionTile("Biometrics", "â—‰"), 0, 1);
+        actionTiles.add(createActionTile("Face ID", "â—"), 1, 1);
+        actionTiles.add(createActionTile("Settings", "âš™"), 2, 1);
         
         quickActionMenu.getChildren().addAll(menuHeader, actionTiles);
         VBox.setVgrow(actionTiles, Priority.ALWAYS);
@@ -620,7 +628,7 @@ public class ProfileView implements ViewInterface {
         
         HBox topBar = new HBox(10);
         topBar.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
+        Button backBtn = new Button("â†");
         backBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
         backBtn.setPrefSize(30, 30);
         backBtn.setOnMouseEntered(e -> backBtn.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: #ffffff; -fx-font-size: 14; -fx-padding: 0;"));
@@ -669,7 +677,7 @@ public class ProfileView implements ViewInterface {
                 Alert hostAlert = new Alert(AlertType.INFORMATION);
                 hostAlert.setTitle("Host Spotlight");
                 hostAlert.setHeaderText("Start a Spotlight Session");
-                hostAlert.setContentText("Spotlight session management is coming soon!\n\nYou'll be able to:\n• Start video sessions\n• Invite residents to join\n• Control session settings");
+                hostAlert.setContentText("Spotlight session management is coming soon!\n\nYou'll be able to:\nâ€¢ Start video sessions\nâ€¢ Invite residents to join\nâ€¢ Control session settings");
                 hostAlert.showAndWait();
                 break;
                 
@@ -777,7 +785,7 @@ public class ProfileView implements ViewInterface {
         titleBox.getChildren().addAll(title, subtitle);
         HBox.setHgrow(titleBox, Priority.ALWAYS);
         
-        Button closeBtn = new Button("✕");
+        Button closeBtn = new Button("âœ•");
         closeBtn.setStyle(
             "-fx-background-color: transparent;" +
             "-fx-text-fill: " + textMuted() + ";" +
@@ -897,7 +905,7 @@ public class ProfileView implements ViewInterface {
             faceController.hasAnyActiveFaceEnrollment(currentUser.getIdUser());
         
         Text statusIcon = text(
-            (hasEnrollment || hasAnyEnrollment) ? "✓" : "○",
+            (hasEnrollment || hasAnyEnrollment) ? "âœ“" : "â—‹",
             14,
             true,
             (hasEnrollment || hasAnyEnrollment) ? tm.getAccentHex() : textMuted()
@@ -933,7 +941,7 @@ public class ProfileView implements ViewInterface {
         VBox pinSection = new VBox(4);
         Text pinLabel = text("Security PIN", 10, true, textDefault());
         TextField pinInput = new TextField();
-        pinInput.setPromptText("••••");
+        pinInput.setPromptText("â€¢â€¢â€¢â€¢");
         pinInput.setStyle(
             "-fx-padding: 8 10 8 10;" +
             "-fx-border-radius: 6;" +
@@ -994,7 +1002,7 @@ public class ProfileView implements ViewInterface {
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
         Text title = text("Register Passkey", 16, true, "#ffffff");
-        Button closeBtn = new Button("✕");
+        Button closeBtn = new Button("âœ•");
         closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.6); -fx-font-size: 16; -fx-padding: 0; -fx-min-width: 32; -fx-min-height: 32;");
         closeBtn.setOnMouseEntered(e -> closeBtn.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: #ffffff; -fx-font-size: 16; -fx-padding: 0; -fx-min-width: 32; -fx-min-height: 32;"));
         closeBtn.setOnMouseExited(e -> closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.6); -fx-font-size: 16; -fx-padding: 0; -fx-min-width: 32; -fx-min-height: 32;"));
@@ -1010,7 +1018,7 @@ public class ProfileView implements ViewInterface {
         
         Text description = text(
             "Passkey registration uses FIDO2/WebAuthn standard for secure passwordless authentication. " +
-            "Supports:\n• Windows Hello (biometric/PIN)\n• Security keys (USB, NFC, Bluetooth)\n• Platform authenticators",
+            "Supports:\nâ€¢ Windows Hello (biometric/PIN)\nâ€¢ Security keys (USB, NFC, Bluetooth)\nâ€¢ Platform authenticators",
             10, false, "rgba(255,255,255,0.6)"
         );
         description.setWrappingWidth(400);
@@ -1145,7 +1153,7 @@ public class ProfileView implements ViewInterface {
             
             // Update status box
             statusContent.getChildren().clear();
-            Text statusIcon = text(isEnrolled ? "✓" : "○", 14, true, isEnrolled ? tm.getAccentHex() : textMuted());
+            Text statusIcon = text(isEnrolled ? "âœ“" : "â—‹", 14, true, isEnrolled ? tm.getAccentHex() : textMuted());
             Text statusText = text(isEnrolled ? "Already enrolled" : "Not enrolled yet", 9, false, isEnrolled ? tm.getAccentHex() : textMuted());
             statusContent.getChildren().addAll(statusIcon, statusText);
             
@@ -1207,7 +1215,7 @@ public class ProfileView implements ViewInterface {
         
         statusContent.getChildren().clear();
         Text icon = text(
-            (enrolledForSelected || enrolledOnAny) ? "✓" : "○",
+            (enrolledForSelected || enrolledOnAny) ? "âœ“" : "â—‹",
             14,
             true,
             (enrolledForSelected || enrolledOnAny) ? tm.getAccentHex() : textMuted()
@@ -1260,12 +1268,12 @@ public class ProfileView implements ViewInterface {
             try {
                 // Initialize camera service if not already done
                 if (cameraService == null) {
-                    cameraService = new RealCameraService();
+                    cameraService = cameraController.getOrCreate(cameraService);
                 }
                 
                 // Initialize camera
                 System.out.println("ProfileView: Initializing camera...");
-                if (!cameraService.initializeCamera(0)) {
+                if (!cameraController.initializeDefaultCamera(cameraService)) {
                     javafx.application.Platform.runLater(() -> {
                         Alert alert = new Alert(AlertType.ERROR);
                         alert.setTitle("Camera Error");
@@ -1522,9 +1530,9 @@ public class ProfileView implements ViewInterface {
         info.setHeaderText("Complete Your Registration");
         info.setContentText("Click 'OK' to start. Your device will prompt you for authentication.\n\n" +
             "This will register a passkey for passwordless login using:\n" +
-            "• Windows Hello (Biometric or PIN)\n" +
-            "• FIDO2 Security Key\n" +
-            "• Or other platform authenticators");
+            "â€¢ Windows Hello (Biometric or PIN)\n" +
+            "â€¢ FIDO2 Security Key\n" +
+            "â€¢ Or other platform authenticators");
         info.showAndWait();
         
         // Simulate WebAuthn flow
@@ -1533,9 +1541,9 @@ public class ProfileView implements ViewInterface {
         challenge.setHeaderText("Device Verification Required");
         challenge.setContentText("Waiting for device authentication...\n\n" +
             "Please verify using:\n" +
-            "• Windows Hello (face/fingerprint)\n" +
-            "• USB Security Key\n" +
-            "• Mobile authenticator");
+            "â€¢ Windows Hello (face/fingerprint)\n" +
+            "â€¢ USB Security Key\n" +
+            "â€¢ Mobile authenticator");
         challenge.showAndWait();
         
         Alert registered = new Alert(AlertType.INFORMATION);
@@ -1559,7 +1567,7 @@ public class ProfileView implements ViewInterface {
         
         HBox topBar = new HBox(10);
         topBar.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
+        Button backBtn = new Button("â†");
         backBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
         backBtn.setPrefSize(30, 30);
         
@@ -1624,7 +1632,7 @@ public class ProfileView implements ViewInterface {
         
         HBox topBar = new HBox(10);
         topBar.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
+        Button backBtn = new Button("â†");
         backBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
         backBtn.setPrefSize(30, 30);
         
@@ -1656,9 +1664,9 @@ public class ProfileView implements ViewInterface {
         
         // Security Section
         form.getChildren().add(createSettingsLabel("Security"));
-        form.getChildren().add(createSettingsInput("••••••••", 12));
-        form.getChildren().add(createSettingsInput("••••••••", 12));
-        form.getChildren().add(createSettingsInput("••••••••", 12));
+        form.getChildren().add(createSettingsInput("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢", 12));
+        form.getChildren().add(createSettingsInput("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢", 12));
+        form.getChildren().add(createSettingsInput("â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢", 12));
         
         // Save Button
         Button saveBtn = new Button("Save Changes");
@@ -1956,7 +1964,7 @@ public class ProfileView implements ViewInterface {
         );
         HBox.setHgrow(headerLeft, Priority.ALWAYS);
 
-        Button editOnboardingBtn = new Button("✎ Modify");
+        Button editOnboardingBtn = new Button("âœŽ Modify");
         editOnboardingBtn.setStyle(
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
             "-fx-text-fill: " + tm.getAccentHex() + ";" +
@@ -2331,7 +2339,7 @@ public class ProfileView implements ViewInterface {
         );
         HBox.setHgrow(textBox, Priority.ALWAYS);
 
-        Button accept = new Button("✓");
+        Button accept = new Button("âœ“");
         accept.setPrefSize(32, 32);
         accept.setStyle("-fx-background-color: rgba(67,181,129,0.2); -fx-text-fill: #43b581; -fx-background-radius: 10px; -fx-font-weight: 900;");
         accept.setOnAction(e -> {
@@ -2344,7 +2352,7 @@ public class ProfileView implements ViewInterface {
             }
         });
 
-        Button decline = new Button("×");
+        Button decline = new Button("Ã—");
         decline.setPrefSize(32, 32);
         decline.setStyle("-fx-background-color: rgba(240,71,71,0.15); -fx-text-fill: #f04747; -fx-background-radius: 10px; -fx-font-weight: 900;");
         decline.setOnAction(e -> {
@@ -2753,27 +2761,12 @@ public class ProfileView implements ViewInterface {
     }
 
     private void hydrateSessionData() {
-        currentUser = sessionManager.getCurrentUser();
-        currentProfile = sessionManager.getCurrentProfile();
-        currentStanding = null;
-        currentCircleFriends = new ArrayList<>();
-        currentPendingRelationships = new ArrayList<>();
-
-        if (currentUser != null && currentUser.getIdUser() != null) {
-            currentUser = userService.findById(currentUser.getIdUser()).orElse(currentUser);
-            sessionManager.setCurrentUser(currentUser);
-
-            if (currentProfile == null) {
-                currentProfile = profileService.findOneByUserId(currentUser.getIdUser()).orElse(null);
-                if (currentProfile != null) {
-                    sessionManager.setCurrentProfile(currentProfile);
-                }
-            }
-
-            currentStanding = standingService.findOrCreateByUserId(currentUser.getIdUser());
-            currentCircleFriends = relationshipService.findFriends(currentUser, 8);
-            currentPendingRelationships = relationshipService.findPendingRequestsFor(currentUser);
-        }
+        ProfileSessionController.SessionSnapshot snapshot = profileSessionController.hydrate(sessionManager);
+        currentUser = snapshot.getCurrentUser();
+        currentProfile = snapshot.getCurrentProfile();
+        currentStanding = snapshot.getCurrentStanding();
+        currentCircleFriends = snapshot.getCurrentCircleFriends();
+        currentPendingRelationships = snapshot.getCurrentPendingRelationships();
     }
 
     private String displayFirstName() {
@@ -3225,15 +3218,11 @@ public class ProfileView implements ViewInterface {
             File selectedFile = fileChooser.showOpenDialog(null);
             if (selectedFile != null && selectedFile.exists()) {
                 byte[] fileData = Files.readAllBytes(selectedFile.toPath());
-                String newImagePath = ProfileImageService.saveAvatarImage(fileData, selectedFile.getName(), profile.getIdProfile());
-                
-                if (newImagePath != null) {
-                    // Update profile in database
-                    profile.setAvatar(newImagePath);
-                    profileService.updateProfile(profile);
-                    
+                ProfileAvatarController.AvatarUpdateResult result = profileAvatarController.updateAvatar(profile, fileData, selectedFile.getName());
+
+                if (result.isSuccess()) {
                     // Update avatar display
-                    Image img = ImageLoaderUtil.loadProfileAvatar(newImagePath, false);
+                    Image img = ImageLoaderUtil.loadProfileAvatar(result.getImagePath(), false);
                     if (img != null && !img.isError()) {
                         avatar.setFill(new ImagePattern(img));
                         avatarText.setVisible(false);
@@ -3243,7 +3232,7 @@ public class ProfileView implements ViewInterface {
                         showAlert("Error", "Failed to load uploaded image");
                     }
                 } else {
-                    showAlert("Error", "Failed to save image");
+                    showAlert("Error", result.getMessage());
                 }
             }
         } catch (Exception ex) {
@@ -3264,4 +3253,5 @@ public class ProfileView implements ViewInterface {
         alert.showAndWait();
     }
 }
+
 

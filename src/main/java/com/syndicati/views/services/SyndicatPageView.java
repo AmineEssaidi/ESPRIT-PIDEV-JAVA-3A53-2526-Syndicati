@@ -230,3 +230,4 @@ public class SyndicatPageView implements ViewInterface {
     public void cleanup() {}
 }
 
+

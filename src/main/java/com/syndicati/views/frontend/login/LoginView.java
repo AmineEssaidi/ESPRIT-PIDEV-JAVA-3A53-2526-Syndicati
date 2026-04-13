@@ -1,9 +1,10 @@
 package com.syndicati.views.frontend.login;
 
-import com.syndicati.controllers.frontend.auth.AuthController;
+import com.syndicati.controllers.user.auth.AuthController;
+import com.syndicati.controllers.user.profile.ProfileController;
+import com.syndicati.controllers.biometric.CameraController;
 import com.syndicati.utils.session.SessionManager;
-import com.syndicati.models.services.ProfileService;
-import com.syndicati.models.entities.User;
+import com.syndicati.models.user.User;
 import com.syndicati.services.biometric.RealCameraService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -55,6 +56,8 @@ public class LoginView implements ViewInterface {
     private Runnable onLoginSuccess;
     private boolean loginSuccessFired = false;
     private final AuthController authController;
+    private final ProfileController profileController;
+    private final CameraController cameraController;
     private TextField signUpFirstNameField;
     private RealCameraService cameraService;
     private ImageView faceIdVideoView;
@@ -74,6 +77,8 @@ public class LoginView implements ViewInterface {
     public LoginView() {
         this.root = new StackPane();
         this.authController = new AuthController();
+        this.profileController = new ProfileController();
+        this.cameraController = new CameraController();
         setupLayout();
     }
 
@@ -320,12 +325,12 @@ public class LoginView implements ViewInterface {
         primaryRow.setAlignment(Pos.CENTER);
         primaryRow.setMaxWidth(Double.MAX_VALUE);
 
-        Button google = createAuthMethodButton("🔍", "Sign in with Google", true);
+        Button google = createAuthMethodButton("ðŸ”", "Sign in with Google", true);
         HBox.setHgrow(google, Priority.ALWAYS);
         google.setMaxWidth(Double.MAX_VALUE);
         google.setOnAction(e -> showInfoMessage("Google login UI is ready. Functionality will be connected later."));
 
-        Button toggle = new Button("⌄");
+        Button toggle = new Button("âŒ„");
         toggle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
         toggle.setPrefWidth(42);
         toggle.setPrefHeight(42);
@@ -345,15 +350,15 @@ public class LoginView implements ViewInterface {
         secondary.setManaged(false);
         secondary.setOpacity(0);
 
-        Button github = createAuthMethodButton("🐙", "GitHub", false);
+        Button github = createAuthMethodButton("ðŸ™", "GitHub", false);
         github.setOnAction(e -> showInfoMessage("GitHub login UI is ready. Functionality will be connected later."));
 
         HBox biometricRow = new HBox(8);
         biometricRow.setAlignment(Pos.CENTER);
         biometricRow.setMaxWidth(Double.MAX_VALUE);
 
-        Button passkey = createAuthMethodButton("🔐", "Passkey", false);
-        Button faceId = createAuthMethodButton("📷", "Face ID", false);
+        Button passkey = createAuthMethodButton("ðŸ”", "Passkey", false);
+        Button faceId = createAuthMethodButton("ðŸ“·", "Face ID", false);
         HBox.setHgrow(passkey, Priority.ALWAYS);
         HBox.setHgrow(faceId, Priority.ALWAYS);
         passkey.setMaxWidth(Double.MAX_VALUE);
@@ -800,17 +805,17 @@ public class LoginView implements ViewInterface {
         requirementsBox.setStyle("-fx-padding: 12; -fx-background-color: rgba(255,255,255,0.03); -fx-border-radius: 8; -fx-background-radius: 8;");
         
         // Length requirement
-        HBox lengthReq = createRequirementRow("✓", "8+ characters");
+        HBox lengthReq = createRequirementRow("âœ“", "8+ characters");
         lengthReq.setId("req-length");
         lengthReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
         
         // Uppercase requirement
-        HBox uppercaseReq = createRequirementRow("✓", "Uppercase letter");
+        HBox uppercaseReq = createRequirementRow("âœ“", "Uppercase letter");
         uppercaseReq.setId("req-uppercase");
         uppercaseReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
         
         // Special character requirement
-        HBox specialReq = createRequirementRow("✓", "Special character");
+        HBox specialReq = createRequirementRow("âœ“", "Special character");
         specialReq.setId("req-special");
         specialReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
         
@@ -865,7 +870,7 @@ public class LoginView implements ViewInterface {
     }
     
     private Button createPasswordToggleButton(PasswordField pwField) {
-        Button btn = new Button("👁");
+        Button btn = new Button("ðŸ‘");
         btn.setOnAction(e -> {
             String currentText = pwField.getText();
             TextField tempField = new TextField(currentText);
@@ -1157,7 +1162,7 @@ public class LoginView implements ViewInterface {
             } else if (trimmed.length() < 2) {
                 valid = false;
                 message = "Must be at least 2 characters";
-            } else if (!trimmed.matches("^[a-zA-ZÀ-ÿ\\s-]+$")) {
+            } else if (!trimmed.matches("^[a-zA-ZÃ€-Ã¿\\s-]+$")) {
                 valid = false;
                 message = "Only letters, spaces and hyphens allowed";
             }
@@ -1167,7 +1172,7 @@ public class LoginView implements ViewInterface {
                 validationMsg.setVisible(false);
                 validationMsg.setManaged(false);
                 validationMsg.setFill(Color.web(ThemeManager.getInstance().getAccentHex()));
-                validationMsg.setText("✓");
+                validationMsg.setText("âœ“");
             } else if (!trimmed.isEmpty()) {
                 validationMsg.setVisible(true);
                 validationMsg.setManaged(true);
@@ -1198,8 +1203,7 @@ public class LoginView implements ViewInterface {
             
             // Check if email already exists (basic check)
             if (valid && !trimmed.isEmpty()) {
-                java.util.Optional<com.syndicati.models.entities.User> existing = 
-                    new com.syndicati.models.services.UserService().findByEmail(trimmed);
+                Optional<User> existing = authController.findUserByEmail(trimmed);
                 if (existing.isPresent()) {
                     valid = false;
                     message = "Email already registered";
@@ -1211,7 +1215,7 @@ public class LoginView implements ViewInterface {
                 validationMsg.setVisible(true);
                 validationMsg.setManaged(true);
                 validationMsg.setFill(Color.web(ThemeManager.getInstance().getAccentHex()));
-                validationMsg.setText("✓");
+                validationMsg.setText("âœ“");
             } else if (!trimmed.isEmpty()) {
                 validationMsg.setVisible(true);
                 validationMsg.setManaged(true);
@@ -1580,8 +1584,7 @@ public class LoginView implements ViewInterface {
         // Store new user in session if available
         if (result.getUser() != null) {
             SessionManager.getInstance().setCurrentUser(result.getUser());
-            ProfileService profileService = new ProfileService();
-            profileService.findOneByUserId(result.getUser().getIdUser()).ifPresent(profile ->
+            profileController.profileByUserId(result.getUser().getIdUser()).ifPresent(profile ->
                 SessionManager.getInstance().setCurrentProfile(profile)
             );
         }
@@ -1617,7 +1620,7 @@ public class LoginView implements ViewInterface {
             errors.add("First name is required");
         } else if (firstName.length() < 2) {
             errors.add("First name must be at least 2 characters");
-        } else if (!firstName.matches("^[a-zA-ZÀ-ÿ\\s-]+$")) {
+        } else if (!firstName.matches("^[a-zA-ZÃ€-Ã¿\\s-]+$")) {
             errors.add("First name can only contain letters, spaces and hyphens");
         }
         
@@ -1626,7 +1629,7 @@ public class LoginView implements ViewInterface {
             errors.add("Last name is required");
         } else if (lastName.length() < 2) {
             errors.add("Last name must be at least 2 characters");
-        } else if (!lastName.matches("^[a-zA-ZÀ-ÿ\\s-]+$")) {
+        } else if (!lastName.matches("^[a-zA-ZÃ€-Ã¿\\s-]+$")) {
             errors.add("Last name can only contain letters, spaces and hyphens");
         }
         
@@ -1637,8 +1640,7 @@ public class LoginView implements ViewInterface {
             errors.add("Please enter a valid email address");
         } else {
             // Check for duplicate email
-            java.util.Optional<com.syndicati.models.entities.User> existing = 
-                new com.syndicati.models.services.UserService().findByEmail(email);
+            Optional<User> existing = authController.findUserByEmail(email);
             if (existing.isPresent()) {
                 errors.add("Email is already registered");
             }
@@ -1713,7 +1715,7 @@ public class LoginView implements ViewInterface {
             errorItem.setAlignment(Pos.TOP_LEFT);
             errorItem.setStyle("-fx-padding: 0;");
             
-            Text bullet = new Text("✕");
+            Text bullet = new Text("âœ•");
             bullet.setFont(Font.font(14));
             bullet.setFill(Color.web("#ff3b30"));
             
@@ -1978,7 +1980,7 @@ public class LoginView implements ViewInterface {
         if ("admin".equals(username) && "admin".equals(password)) {
             loginSuccessFired = true;
             // Store dummy admin user in session for header profile
-            com.syndicati.models.entities.User adminUser = new com.syndicati.models.entities.User();
+            com.syndicati.models.user.User adminUser = new com.syndicati.models.user.User();
             adminUser.setFirstName("Admin");
             adminUser.setLastName("");
             adminUser.setEmailUser("admin@syndicati.tn");
@@ -2002,8 +2004,7 @@ public class LoginView implements ViewInterface {
             if (result.getUser() != null) {
                 SessionManager.getInstance().setCurrentUser(result.getUser());
                 // Also load user's profile if available
-                ProfileService profileService = new ProfileService();
-                profileService.findOneByUserId(result.getUser().getIdUser()).ifPresent(profile ->
+                profileController.profileByUserId(result.getUser().getIdUser()).ifPresent(profile ->
                     SessionManager.getInstance().setCurrentProfile(profile)
                 );
                 System.out.println("Login successful for user: " + result.getUser().getEmailUser());
@@ -2133,8 +2134,7 @@ public class LoginView implements ViewInterface {
 
             if (verify.getUser() != null) {
                 SessionManager.getInstance().setCurrentUser(verify.getUser());
-                ProfileService profileService = new ProfileService();
-                profileService.findOneByUserId(verify.getUser().getIdUser()).ifPresent(profile ->
+                profileController.profileByUserId(verify.getUser().getIdUser()).ifPresent(profile ->
                     SessionManager.getInstance().setCurrentProfile(profile)
                 );
             }
@@ -2445,7 +2445,7 @@ public class LoginView implements ViewInterface {
             
             if (finalPasskeyBtn != null) {
                 finalPasskeyBtn.setDisable(true);
-                finalPasskeyBtn.setText("🔄 Authenticating...");
+                finalPasskeyBtn.setText("ðŸ”„ Authenticating...");
             }
 
             // Simulate WebAuthn authentication flow
@@ -2480,7 +2480,7 @@ public class LoginView implements ViewInterface {
                         // Re-enable button
                         if (finalPasskeyBtn != null) {
                             finalPasskeyBtn.setDisable(false);
-                            finalPasskeyBtn.setText("🔐 Passkey");
+                            finalPasskeyBtn.setText("ðŸ” Passkey");
                         }
                     });
                     
@@ -2489,7 +2489,7 @@ public class LoginView implements ViewInterface {
                         showErrorMessage("Passkey authentication failed: " + ex.getMessage());
                         if (finalPasskeyBtn != null) {
                             finalPasskeyBtn.setDisable(false);
-                            finalPasskeyBtn.setText("🔐 Passkey");
+                            finalPasskeyBtn.setText("ðŸ” Passkey");
                         }
                     });
                 }
@@ -2524,8 +2524,8 @@ public class LoginView implements ViewInterface {
 
             // Initialize camera if not already done
             if (cameraService == null) {
-                cameraService = new RealCameraService();
-                if (!cameraService.initializeCamera(0)) {
+                cameraService = cameraController.getOrCreate(cameraService);
+                if (!cameraController.initializeDefaultCamera(cameraService)) {
                     showErrorMessage("Failed to access camera.\n\nPlease check:\n1. Camera is connected and powered on\n2. No other app is using it\n3. Check console for details");
                     return;
                 }
@@ -2534,7 +2534,7 @@ public class LoginView implements ViewInterface {
             // Disable verify button during authentication
             if (faceIdVerifyButton != null) {
                 faceIdVerifyButton.setDisable(true);
-                faceIdVerifyButton.setText("🔄 Verifying...");
+                faceIdVerifyButton.setText("ðŸ”„ Verifying...");
             }
             if (faceIdStatusLabel != null) {
                 faceIdStatusLabel.setText("Starting camera...");
@@ -2653,7 +2653,7 @@ public class LoginView implements ViewInterface {
                     Thread.sleep(1000);
 
                     // Fetch actual user from database
-                    Optional<User> authenticatedUserOpt = new com.syndicati.models.services.UserService().findByEmail(email);
+                    Optional<User> authenticatedUserOpt = authController.findUserByEmail(email);
                     
                     if (!authenticatedUserOpt.isPresent()) {
                         javafx.application.Platform.runLater(() -> {
@@ -2679,14 +2679,13 @@ public class LoginView implements ViewInterface {
                         SessionManager.getInstance().setCurrentUser(authenticatedUser);
                         
                         // Load and set user's profile
-                        ProfileService profileService = new ProfileService();
-                        profileService.findOneByUserId(authenticatedUser.getIdUser()).ifPresent(profile ->
+                        profileController.profileByUserId(authenticatedUser.getIdUser()).ifPresent(profile ->
                             SessionManager.getInstance().setCurrentProfile(profile)
                         );
                         
                         // Update status
                         if (faceIdStatusLabel != null) {
-                            faceIdStatusLabel.setText("✓ Authentication successful!");
+                            faceIdStatusLabel.setText("âœ“ Authentication successful!");
                         }
                         
                         // Show success message
@@ -2759,4 +2758,5 @@ public class LoginView implements ViewInterface {
         }
     }
 }
+
 

@@ -111,7 +111,7 @@ public class MediaPipeService {
             for (int i = 0; i < 15; i++) {
                 Thread.sleep(500);  // 500ms * 15 = 7.5 second total timeout
                 if (ping()) {
-                    log("✓ InsightFace service initialized successfully");
+                    log("âœ“ InsightFace service initialized successfully");
                     isInitialized = true;
                     return true;
                 }
@@ -425,13 +425,13 @@ public class MediaPipeService {
         
         if (spoofing.isSpoof) {
             indicatorColor = new java.awt.Color(255, 0, 0, 200);
-            text = String.format("⚠ SPOOF DETECTED (%.0f%%)", spoofing.spoofingScore * 100);
+            text = String.format("âš  SPOOF DETECTED (%.0f%%)", spoofing.spoofingScore * 100);
         } else if (spoofing.spoofingScore > 0.3) {
             indicatorColor = new java.awt.Color(255, 255, 0, 200);
             text = String.format("? SUSPICIOUS (%.0f%%)", spoofing.spoofingScore * 100);
         } else {
             indicatorColor = new java.awt.Color(0, 255, 0, 200);
-            text = "✓ REAL FACE";
+            text = "âœ“ REAL FACE";
         }
         
         g2d.setColor(indicatorColor);
@@ -611,3 +611,4 @@ public class MediaPipeService {
         }
     }
 }
+
