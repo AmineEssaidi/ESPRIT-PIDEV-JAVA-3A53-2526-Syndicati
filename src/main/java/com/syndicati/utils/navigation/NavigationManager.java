@@ -13,6 +13,7 @@ import com.syndicati.views.frontend.services.ResidencePageView;
 import com.syndicati.views.frontend.services.ForumPageView;
 import com.syndicati.views.frontend.services.SyndicatPageView;
 import com.syndicati.views.frontend.services.EvenementPageView;
+import com.syndicati.views.frontend.services.ParticipationsPageView;
 import com.syndicati.utils.security.AccessControlService;
 import javafx.scene.control.Alert;
 
@@ -34,6 +35,7 @@ public class NavigationManager {
     private ForumPageView forumView;
     private SyndicatPageView syndicatView;
     private EvenementPageView evenementView;
+    private ParticipationsPageView participationsView;
     
     private NavigationManager() {}
     
@@ -62,6 +64,7 @@ public class NavigationManager {
         this.forumView = null;
         this.syndicatView = null;
         this.evenementView = null;
+        this.participationsView = null;
     }
 
     private ServicesView servicesView() {
@@ -118,6 +121,11 @@ public class NavigationManager {
         if (evenementView == null) evenementView = new EvenementPageView();
         return evenementView;
     }
+
+    private ParticipationsPageView participationsView() {
+        if (participationsView == null) participationsView = new ParticipationsPageView();
+        return participationsView;
+    }
     
     public Pane getPage(String pageName) {
         switch (pageName.toLowerCase()) {
@@ -145,6 +153,8 @@ public class NavigationManager {
                 return syndicatView().getRoot();
             case "services/evenement":
                 return evenementView().getRoot();
+            case "services/participations":
+                return participationsView().getRoot();
             default:
                 return landingPageView.getRoot();
         }

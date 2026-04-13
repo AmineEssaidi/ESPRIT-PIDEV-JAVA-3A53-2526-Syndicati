@@ -4,7 +4,8 @@ package com.syndicati;
  * Simple launcher class for IntelliJ IDEA
  * This class can be easily run as a Java application in IntelliJ
  */
-public class Launcher {
+public class
+Launcher {
     
     public static void main(String[] args) {
         System.out.println("ðŸš€ Starting Syndicati Desktop...");

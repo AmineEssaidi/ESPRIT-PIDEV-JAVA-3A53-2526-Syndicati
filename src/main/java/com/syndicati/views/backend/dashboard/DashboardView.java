@@ -1145,6 +1145,33 @@ public class DashboardView implements ViewInterface {
         return s;
     }
 
+    private VBox eventParticipationsPane() {
+        VBox wrap = new VBox(14);
+        com.syndicati.models.services.ParticipationService ps = new com.syndicati.models.services.ParticipationService();
+        List<com.syndicati.models.entities.Participation> parts = ps.getAllParticipations();
+
+        String[][] partRows;
+        if (parts.isEmpty()) {
+            partRows = new String[][]{{"No participations found", "-", "-", "-", "-"}};
+        } else {
+            partRows = new String[parts.size()][5];
+            for (int i = 0; i < parts.size(); i++) {
+                com.syndicati.models.entities.Participation p = parts.get(i);
+                partRows[i][0] = String.valueOf(p.getIdParticipation());
+                partRows[i][1] = p.getUser().getFirstName() + " " + p.getUser().getLastName();
+                partRows[i][2] = p.getEvenement().getTitreEvent();
+                partRows[i][3] = String.valueOf(p.getNbAccompagnants());
+                partRows[i][4] = p.getStatutParticipation();
+            }
+        }
+
+        wrap.getChildren().add(dataTableWithCrud("Participations", "Participation",
+            new String[]{"ID", "User", "Event", "Companions", "Status"},
+            partRows, false, true
+        ));
+        return wrap;
+    }
+
     private VBox usersTablePane() {
         VBox wrap = new VBox(16);
         List<User> users = userController.users();
@@ -1859,6 +1886,8 @@ public class DashboardView implements ViewInterface {
             return handleUserSave(mode, originalRowData, fields);
         } else if ("Profile".equalsIgnoreCase(entityLabel)) {
             return handleProfileSave(mode, originalRowData, fields);
+        } else if ("Participation".equalsIgnoreCase(entityLabel)) {
+            return handleParticipationSave(mode, originalRowData, fields);
         }
         return false;
     }
@@ -1978,6 +2007,8 @@ public class DashboardView implements ViewInterface {
             return handleUserDelete(rowData);
         } else if ("Profile".equalsIgnoreCase(entityLabel)) {
             return handleProfileDelete(rowData);
+        } else if ("Participation".equalsIgnoreCase(entityLabel)) {
+            return handleParticipationDelete(rowData);
         }
         return false;
     }
@@ -1992,6 +2023,35 @@ public class DashboardView implements ViewInterface {
         return existing.filter(user -> user.getIdUser() != null)
             .map(user -> userController.userDelete(user.getIdUser()))
             .orElse(false);
+    }
+
+    private boolean handleParticipationSave(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        if ("edit".equals(mode)) {
+            try {
+                int id = Integer.parseInt(originalRowData[0]);
+                com.syndicati.models.services.ParticipationService ps = new com.syndicati.models.services.ParticipationService();
+                Optional<com.syndicati.models.entities.Participation> pOpt = ps.getParticipationById(id);
+                if (pOpt.isPresent()) {
+                    com.syndicati.models.entities.Participation p = pOpt.get();
+                    p.setNbAccompagnants(Integer.parseInt(values.get("Companions")));
+                    p.setStatutParticipation(values.get("Status"));
+                    return ps.updateParticipation(p);
+                }
+            } catch (Exception e) {
+                System.err.println("Error saving participation: " + e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    private boolean handleParticipationDelete(String[] rowData) {
+        try {
+            int id = Integer.parseInt(rowData[0]);
+            return new com.syndicati.models.services.ParticipationService().cancelParticipation(id);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private boolean handleProfileDelete(String[] rowData) {

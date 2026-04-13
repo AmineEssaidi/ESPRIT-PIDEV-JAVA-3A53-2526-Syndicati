@@ -162,6 +162,7 @@ public class DynamicHeader {
         servicesItems.put("Forum", "services/forum");
         servicesItems.put("Syndicat", "services/syndicat");
         servicesItems.put("Evenement", "services/evenement");
+        servicesItems.put("My Participations", "services/participations");
         attachTabDropdown("services", services, servicesItems);
 
         Button about = createTabButton("about", "About");

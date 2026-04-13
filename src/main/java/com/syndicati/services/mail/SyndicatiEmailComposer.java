@@ -69,6 +69,27 @@ public final class SyndicatiEmailComposer {
         return wrap(body, footerExtra);
     }
 
+    public static String participationConfirmation(String firstName, String eventTitle, int companions, String date) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Event Participation Confirmed</h2>" +
+            "<p>Hello " + esc(nameOrFallback(firstName)) + ",</p>" +
+            "<p>Your participation in the event <strong>" + esc(eventTitle) + "</strong> has been successfully recorded.</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<h3 style='margin-bottom:20px;color:#ff4b5c;font-size:18px;letter-spacing:-0.5px;'>Registration Details</h3>" +
+            "<table style='width:100%;color:rgba(255,255,255,0.7);font-size:14px;'>" +
+            "<tr><td style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);'>Event:</td><td style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffffff;text-align:right;'>" + esc(eventTitle) + "</td></tr>" +
+            "<tr><td style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);'>Companions:</td><td style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffffff;text-align:right;'>" + companions + "</td></tr>" +
+            "<tr><td style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);'>Date:</td><td style='padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#ffffff;text-align:right;'>" + esc(date) + "</td></tr>" +
+            "</table>" +
+            "</div>" +
+            "<p>We look forward to seeing you there! If you need to make any changes, you can manage your participations through your dashboard.</p>" +
+            "<div class='button-container'><a href='#' class='button'>View My Events</a></div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Events • Community Engagement Unit</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: EVT-PRT-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " • Community Access Granted</p>";
+        return wrap(body, footerExtra);
+    }
+
     private static String wrap(String body, String footerExtra) {
         return "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><style>"
             + BASE_CSS

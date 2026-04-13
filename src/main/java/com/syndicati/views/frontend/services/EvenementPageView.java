@@ -3,6 +3,9 @@ package com.syndicati.views.frontend.services;
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.models.services.EvenementService;
+import com.syndicati.models.services.ParticipationService;
+import java.util.List;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
@@ -10,6 +13,11 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.DatePicker;
+import javafx.scene.control.Pagination;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -25,29 +33,40 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 
-/**
- * Evenement page mirrored from Horizon twig/css structure.
- */
 public class EvenementPageView implements ViewInterface {
 
     private final VBox root;
     private final ThemeManager tm = ThemeManager.getInstance();
+    private final EvenementService evenementService;
+    private final ParticipationService participationService;
 
-    private static final String[][] EVENTS = {
-        {"Assemblee generale des coproprietaires", "Mar 22, 2026", "Hall principal", "Meeting", "84", "Review budget, maintenance planning, and resident proposals."},
-        {"Atelier securite incendie", "Mar 28, 2026", "Bloc C", "Training", "41", "Practical fire safety workshop with live evacuation drills."},
-        {"Marche de printemps", "Apr 02, 2026", "Patio central", "Social", "126", "A full day of local stands, food, and neighborhood activities."},
-        {"Onboarding outils digitaux", "Apr 06, 2026", "Cowork lounge", "Workshop", "33", "Learn resident portal workflows and everyday digital tools."},
-        {"Matinee fitness", "Apr 12, 2026", "Jardin deck", "Lifestyle", "57", "Community wellness session with breathing and mobility work."},
-        {"Soiree networking", "Apr 18, 2026", "Sky lounge", "Networking", "72", "Connect with residents and propose collaborative initiatives."}
-    };
+    // Form fields for CRUD
+    private TextField titreField;
+    private TextArea descArea;
+    private TextField lieuField;
+    private TextField typeField;
+    private DatePicker datePicker;
+    private TextField nbPlacesField;
+    private com.syndicati.models.entities.Evenement editingEvent = null;
+
+    private GridPane eventsGrid;
+    private VBox mainFace;
+    private VBox extraFace;
 
     public EvenementPageView() {
+        this.evenementService = new EvenementService();
+        this.participationService = new ParticipationService();
+
         root = new VBox(26);
         root.setAlignment(Pos.TOP_CENTER);
         root.setPadding(new Insets(20, 0, 44, 0));
         root.setStyle("-fx-background-color: transparent;");
 
+        refreshContent();
+    }
+
+    private void refreshContent() {
+        root.getChildren().clear();
         root.getChildren().addAll(
             buildHeroSection(),
             buildDashboardSection(),
@@ -121,7 +140,8 @@ public class EvenementPageView implements ViewInterface {
         left.setMaxWidth(Double.MAX_VALUE);
 
         left.getChildren().add(sectionPill("Event Dashboard"));
-        Text dashTitle = text("Join the Action.\n6 Events Upcoming.", 48, true, tm.getAccentHex());
+        int eventCount = evenementService.getAllEvents().size();
+        Text dashTitle = text("Join the Action.\n" + eventCount + " Events Upcoming.", 48, true, tm.getAccentHex());
         dashTitle.wrappingWidthProperty().bind(Bindings.max(280, left.widthProperty().subtract(10)));
         left.getChildren().add(dashTitle);
 
@@ -157,17 +177,20 @@ public class EvenementPageView implements ViewInterface {
             "-fx-padding: 26px;"
         );
 
-        VBox mainFace = new VBox(18);
+        mainFace = new VBox(18);
         mainFace.setAlignment(Pos.TOP_LEFT);
         mainFace.setFillWidth(true);
-        VBox extraFace = new VBox(14);
+        extraFace = new VBox(14);
         extraFace.setAlignment(Pos.TOP_LEFT);
         extraFace.setFillWidth(true);
         extraFace.setVisible(false);
         extraFace.setManaged(false);
 
         Button hostTrigger = buildHostTrigger();
-        hostTrigger.setOnAction(e -> switchFace(mainFace, extraFace));
+        hostTrigger.setOnAction(e -> {
+            clearForm();
+            switchFace(mainFace, extraFace);
+        });
 
         mainFace.getChildren().addAll(
             hostTrigger,
@@ -186,21 +209,57 @@ public class EvenementPageView implements ViewInterface {
             closeForm
         );
 
+        titreField = (TextField) addFormInput(null, "Event Title", "Sunset Rooftop Gathering");
+        
+        HBox row1 = new HBox(14);
+        VBox dateCol = new VBox(6);
+        dateCol.getChildren().add(text("Date and Time", 11, true, textSoft()));
+        datePicker = new DatePicker();
+        datePicker.setMaxWidth(Double.MAX_VALUE);
+        datePicker.setPromptText("2026-04-25 17:30");
+        datePicker.setStyle(
+            "-fx-background-color: #1a1a1a;" +
+            "-fx-border-color: #333333;" +
+            "-fx-border-radius: 12px;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-text-fill: white;"
+        );
+        dateCol.getChildren().add(datePicker);
+        HBox.setHgrow(dateCol, Priority.ALWAYS);
+        
+        VBox typeCol = new VBox(6);
+        typeCol.getChildren().add(text("Event Type", 11, true, textSoft()));
+        typeField = new TextField();
+        typeField.setPromptText("Social");
+        applyInputStyle(typeField);
+        typeCol.getChildren().add(typeField);
+        HBox.setHgrow(typeCol, Priority.ALWAYS);
+        row1.getChildren().addAll(dateCol, typeCol);
+        
+        lieuField = (TextField) addFormInput(null, "Location", "Rooftop");
+        descArea = (TextArea) addFormInput(null, "Description", "A sunset meetup with music and community networking.", true);
+
+        HBox row2 = new HBox(14);
+        nbPlacesField = (TextField) addFormInput(null, "Total Places", "80");
+        TextField remainingDummy = new TextField("80");
+        applyInputStyle(remainingDummy);
+        VBox remainingCol = new VBox(6, text("Initial Remaining", 11, true, textSoft()), remainingDummy);
+        HBox.setHgrow(nbPlacesField.getParent(), Priority.ALWAYS);
+        HBox.setHgrow(remainingCol, Priority.ALWAYS);
+        row2.getChildren().addAll(nbPlacesField.getParent(), remainingCol);
+
+        Button saveBtn = gradientButton("Organize Now", 12, new Insets(13, 18, 13, 18));
+        saveBtn.setOnAction(e -> handleSaveEvent(mainFace, extraFace));
+
         extraFace.getChildren().addAll(
             formHead,
             text("Share your vision with the community", 13, false, textMuted()),
-            formRow("Event Title", "Sunset Rooftop Gathering"),
-            twoColRow(
-                formRow("Date and Time", "2026-04-25 17:30"),
-                formRow("Event Type", "Social")
-            ),
-            formRow("Location", "Rooftop"),
-            formRow("Description", "A sunset meetup with music and community networking."),
-            twoColRow(
-                formRow("Total Places", "80"),
-                formRow("Initial Remaining", "80")
-            ),
-            gradientButton("Organize Now", 12, new Insets(13, 18, 13, 18))
+            titreField.getParent(),
+            row1,
+            lieuField.getParent(),
+            descArea.getParent(),
+            row2,
+            saveBtn
         );
 
         switcher.getChildren().addAll(mainFace, extraFace);
@@ -369,14 +428,14 @@ public class EvenementPageView implements ViewInterface {
         top.getChildren().addAll(
             sectionPill("Upcoming Events"),
             spacer(),
-            text("Showing 1-3 of 6", 13, false, textMuted())
+            text("Showing 1-" + Math.min(3, evenementService.getAllEvents().size()) + " of " + evenementService.getAllEvents().size(), 13, false, textMuted())
         );
 
-        GridPane grid = new GridPane();
-        grid.setHgap(48);
-        grid.setVgap(48);
-        rebuildEventsGrid(grid, section.getWidth());
-        section.widthProperty().addListener((obs, oldW, newW) -> rebuildEventsGrid(grid, newW.doubleValue()));
+        eventsGrid = new GridPane();
+        eventsGrid.setHgap(48);
+        eventsGrid.setVgap(48);
+        rebuildEventsGrid(eventsGrid, section.getWidth());
+        section.widthProperty().addListener((obs, oldW, newW) -> rebuildEventsGrid(eventsGrid, newW.doubleValue()));
 
         HBox pagination = new HBox(8);
         pagination.setAlignment(Pos.CENTER);
@@ -387,13 +446,15 @@ public class EvenementPageView implements ViewInterface {
             paginationBtn(">", false)
         );
 
-        section.getChildren().addAll(top, grid, pagination);
+        section.getChildren().addAll(top, eventsGrid, pagination);
         return section;
     }
 
     private void rebuildEventsGrid(GridPane grid, double width) {
         grid.getChildren().clear();
         grid.getColumnConstraints().clear();
+
+        List<com.syndicati.models.entities.Evenement> events = evenementService.getAllEvents();
 
         // Use effective width to avoid early collapse to 1 column at minimum app size.
         double effectiveWidth = Math.max(width, grid.getWidth());
@@ -406,8 +467,8 @@ public class EvenementPageView implements ViewInterface {
             grid.getColumnConstraints().add(c);
         }
 
-        for (int i = 0; i < EVENTS.length; i++) {
-            VBox card = eventCard(EVENTS[i]);
+        for (int i = 0; i < events.size(); i++) {
+            VBox card = eventCard(events.get(i));
             GridPane.setFillWidth(card, true);
             card.setMaxWidth(Double.MAX_VALUE);
             card.setMinWidth(260);
@@ -415,7 +476,7 @@ public class EvenementPageView implements ViewInterface {
         }
     }
 
-    private VBox eventCard(String[] e) {
+    private VBox eventCard(com.syndicati.models.entities.Evenement e) {
         VBox card = new VBox();
         card.setMinWidth(280);
         card.setStyle(
@@ -442,7 +503,7 @@ public class EvenementPageView implements ViewInterface {
         );
         StackPane.setAlignment(image, Pos.CENTER);
 
-        StackPane typeTag = tag(e[3]);
+        StackPane typeTag = tag(e.getTypeEvent() != null ? e.getTypeEvent() : "Event");
         StackPane.setAlignment(typeTag, Pos.TOP_RIGHT);
         StackPane.setMargin(typeTag, new Insets(18, 18, 0, 0));
         image.getChildren().add(typeTag);
@@ -451,12 +512,12 @@ public class EvenementPageView implements ViewInterface {
         body.setPadding(new Insets(20));
 
         HBox meta = new HBox(14,
-            text(e[1], 12, false, textMuted()),
-            text(e[2], 12, false, textMuted())
+            text(e.getDateEvent() != null ? e.getDateEvent().toString() : "", 12, false, textMuted()),
+            text(e.getLieuEvent(), 12, false, textMuted())
         );
-        Text title = text(e[0], 24, true, tm.getTextColor());
+        Text title = text(e.getTitreEvent(), 24, true, tm.getTextColor());
         title.wrappingWidthProperty().bind(card.widthProperty().subtract(52));
-        Text desc = text(e[5], 14, false, textSoft());
+        Text desc = text(e.getDescriptionEvent(), 14, false, textSoft());
         desc.wrappingWidthProperty().bind(card.widthProperty().subtract(52));
         Region pushFooter = new Region();
         VBox.setVgrow(pushFooter, Priority.ALWAYS);
@@ -472,12 +533,20 @@ public class EvenementPageView implements ViewInterface {
             "-fx-border-radius: 20px;"
         );
         VBox avail = new VBox(2,
-            text(e[4], 18, true, tm.getTextColor()),
+            text(String.valueOf(e.getNbRestants()), 18, true, tm.getTextColor()),
             text("Places Left", 11, false, textMuted())
         );
+
+        HBox actions = new HBox(8);
+        Button editBtn = iconButton("✎");
+        editBtn.setOnAction(ev -> prepareEdit(e));
+        Button deleteBtn = iconButton("🗑");
+        deleteBtn.setStyle(deleteBtn.getStyle() + "-fx-text-fill: #ff4d4d;");
+        deleteBtn.setOnAction(ev -> handleDelete(e));
+
         Button details = gradientButton("View Details", 11, new Insets(8, 14, 8, 14));
         details.setOnAction(ev -> switchFace(mainFace, detailsFace));
-        footer.getChildren().addAll(avail, spacer(), details);
+        footer.getChildren().addAll(avail, spacer(), editBtn, deleteBtn, details);
 
         body.getChildren().addAll(meta, title, desc, pushFooter, footer);
         mainFace.getChildren().addAll(image, body);
@@ -495,13 +564,29 @@ public class EvenementPageView implements ViewInterface {
             "-fx-background-radius: 16px;"
         );
 
+        Button joinBtn = gradientButton("Join Now", 12, new Insets(10, 14, 10, 14));
+        joinBtn.setOnAction(ev -> {
+            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+            if (!sm.isLoggedIn()) {
+                System.err.println("Error: You must be logged in to join an event.");
+                return;
+            }
+
+            if (e.getNbRestants() <= 0) {
+                System.err.println("Error: No places left for this event.");
+                return;
+            }
+
+            showParticipationForm(e, joinBtn);
+        });
+
         detailsFace.getChildren().addAll(
             detailsHead,
             detailImage,
-            text(e[0], 20, true, tm.getTextColor()),
-            text(e[5], 13, false, textSoft()),
-            text("Hosted by Community Team", 12, false, textMuted()),
-            gradientButton("Join Now", 12, new Insets(10, 14, 10, 14))
+            text(e.getTitreEvent(), 20, true, tm.getTextColor()),
+            text(e.getDescriptionEvent(), 13, false, textSoft()),
+            text("Hosted by " + (e.getUser() != null ? e.getUser().getFirstName() + " " + e.getUser().getLastName() : "Community Team"), 12, false, textMuted()),
+            joinBtn
         );
 
         switcher.getChildren().addAll(mainFace, detailsFace);
@@ -615,21 +700,128 @@ public class EvenementPageView implements ViewInterface {
         return b;
     }
 
-    private VBox formRow(String label, String value) {
+    private Node addFormInput(VBox container, String label, String placeholder) {
+        return addFormInput(container, label, placeholder, false);
+    }
+
+    private Node addFormInput(VBox container, String label, String placeholder, boolean area) {
         VBox row = new VBox(4);
         Text l = text(label, 11, true, textSoft());
-        StackPane field = new StackPane(text(value, 12, false, tm.getTextColor()));
-        field.setAlignment(Pos.CENTER_LEFT);
-        field.setPadding(new Insets(10, 12, 10, 12));
-        field.setStyle(
-            "-fx-background-color: " + surfaceSoft() + ";" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-background-radius: 16px;" +
-            "-fx-border-radius: 16px;"
-        );
+        TextInputControl field = area ? new TextArea() : new TextField();
+        field.setPromptText(placeholder);
+        if (area) {
+            ((TextArea) field).setPrefRowCount(3);
+            ((TextArea) field).setWrapText(true);
+        }
+        applyInputStyle(field);
         row.getChildren().addAll(l, field);
-        return row;
+        if (container != null) container.getChildren().add(row);
+        return field;
+    }
+
+    private void applyInputStyle(TextInputControl field) {
+        field.setStyle(
+            "-fx-background-color: #1a1a1a;" +
+            "-fx-border-color: #333333;" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-radius: 12px;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: #8a8a8a;" +
+            "-fx-padding: 10px 14px;"
+        );
+    }
+
+    private void handleSaveEvent(Node from, Node to) {
+        try {
+            // Basic validation
+            if (titreField.getText().trim().isEmpty()) {
+                System.err.println("Error: Event title is required.");
+                return;
+            }
+            if (lieuField.getText().trim().isEmpty()) {
+                System.err.println("Error: Location is required.");
+                return;
+            }
+            if (datePicker.getValue() == null) {
+                System.err.println("Error: Date is required.");
+                return;
+            }
+            if (nbPlacesField.getText().trim().isEmpty()) {
+                System.err.println("Error: Number of places is required.");
+                return;
+            }
+
+            int nbPlaces;
+            try {
+                nbPlaces = Integer.parseInt(nbPlacesField.getText().trim());
+            } catch (NumberFormatException nfe) {
+                System.err.println("Error: Number of places must be a valid number.");
+                return;
+            }
+
+            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+            if (!sm.isLoggedIn()) {
+                System.err.println("Error: You must be logged in to host an event.");
+                return; // Stop here to avoid NPE
+            }
+
+            com.syndicati.models.entities.Evenement e = (editingEvent != null) ? editingEvent : new com.syndicati.models.entities.Evenement();
+            e.setTitreEvent(titreField.getText());
+            e.setDescriptionEvent(descArea.getText());
+            e.setLieuEvent(lieuField.getText());
+            e.setTypeEvent(typeField.getText());
+            if (datePicker.getValue() != null) {
+                e.setDateEvent(datePicker.getValue().atStartOfDay());
+            }
+            e.setNbPlaces(nbPlaces);
+            e.setUser(sm.getCurrentUser()); // Associate current user
+            
+            if (editingEvent == null) {
+                e.setNbRestants(e.getNbPlaces());
+                boolean ok = evenementService.createEvent(e);
+                if (ok) System.out.println("✅ Event created successfully with ID: " + e.getIdEvent());
+            } else {
+                boolean ok = evenementService.updateEvent(e);
+                if (ok) System.out.println("✅ Event updated successfully.");
+            }
+            
+            clearForm();
+            switchFace(from, to);
+            refreshContent();
+        } catch (Exception ex) {
+            System.err.println("❌ Error saving event: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    private void prepareEdit(com.syndicati.models.entities.Evenement e) {
+        editingEvent = e;
+        titreField.setText(e.getTitreEvent());
+        descArea.setText(e.getDescriptionEvent());
+        lieuField.setText(e.getLieuEvent());
+        typeField.setText(e.getTypeEvent());
+        if (e.getDateEvent() != null) {
+            datePicker.setValue(e.getDateEvent().toLocalDate());
+        }
+        nbPlacesField.setText(String.valueOf(e.getNbPlaces()));
+        
+        switchFace(mainFace, extraFace);
+    }
+
+    private void handleDelete(com.syndicati.models.entities.Evenement e) {
+        evenementService.deleteEvent(e.getIdEvent());
+        refreshContent();
+    }
+
+    private void clearForm() {
+        editingEvent = null;
+        titreField.clear();
+        descArea.clear();
+        lieuField.clear();
+        typeField.clear();
+        datePicker.setValue(null);
+        nbPlacesField.clear();
     }
 
     private String surfaceStrong() {
@@ -688,6 +880,128 @@ public class EvenementPageView implements ViewInterface {
             "-fx-border-radius: " + radius + "px;"
         );
         return pane;
+    }
+
+    private void showParticipationForm(com.syndicati.models.entities.Evenement e, Button joinBtn) {
+        VBox overlay = new VBox(20);
+        overlay.setAlignment(Pos.CENTER);
+        overlay.setPadding(new Insets(40));
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.85); -fx-background-radius: 32px;");
+
+        VBox form = new VBox(15);
+        form.setMinWidth(450);
+        form.setPadding(new Insets(34));
+        form.setStyle(
+            "-fx-background-color: " + surfaceStrong().split(";")[0] + ";" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-radius: 20px;"
+        );
+
+        Text titleText = text("Join Event: " + e.getTitreEvent(), 26, true, tm.getAccentHex());
+        Text subText = text("Confirm your participation and add companions if any.", 14, false, textMuted());
+
+        TextField companionsField = new TextField("0");
+        applyInputStyle(companionsField);
+        VBox companionsBox = new VBox(6, text("Number of companions", 11, true, textSoft()), companionsField);
+
+        TextArea commentArea = new TextArea();
+        commentArea.setPromptText("Any special requests or comments?");
+        commentArea.setPrefRowCount(3);
+        applyInputStyle(commentArea);
+        VBox commentBox = new VBox(6, text("Comment", 11, true, textSoft()), commentArea);
+
+        HBox actions = new HBox(12);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        Button cancel = iconButton("Cancel");
+        Button confirm = gradientButton("Confirm Registration", 13, new Insets(10, 20, 10, 20));
+
+        actions.getChildren().addAll(cancel, confirm);
+
+        form.getChildren().addAll(titleText, subText, companionsBox, commentBox, actions);
+        overlay.getChildren().add(form);
+
+        // Find root stack to add overlay
+        Pane viewContainer = (Pane) root.getParent();
+        if (viewContainer instanceof StackPane) {
+            ((StackPane) viewContainer).getChildren().add(overlay);
+        } else {
+            // If not found, try to find the absolute root
+            root.getChildren().add(overlay);
+        }
+
+        cancel.setOnAction(ev -> {
+            if (overlay.getParent() instanceof Pane) {
+                ((Pane) overlay.getParent()).getChildren().remove(overlay);
+            }
+        });
+
+        confirm.setOnAction(ev -> {
+            try {
+                String companionsText = companionsField.getText().trim();
+                if (companionsText.isEmpty()) companionsText = "0";
+                int nb = Integer.parseInt(companionsText);
+                if (nb < 0) throw new NumberFormatException();
+                
+                int totalNeeded = 1 + nb;
+                if (totalNeeded > e.getNbRestants()) {
+                    showErrorAlert("Not Enough Places", "Only " + e.getNbRestants() + " places left, but you requested " + totalNeeded + ".");
+                    return;
+                }
+
+                com.syndicati.models.entities.User user = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+                com.syndicati.models.entities.Participation p = new com.syndicati.models.entities.Participation();
+                p.setEvenement(e);
+                p.setUser(user);
+                p.setNbAccompagnants(nb);
+                p.setCommentaireParticipation(commentArea.getText());
+                p.setDateParticipation(java.time.LocalDateTime.now());
+                p.setStatutParticipation("en_attente");
+
+                // Format JSON data similar to the web project
+                String jsonData = String.format(
+                    "{\"user_name\":\"%s %s\",\"email\":\"%s\",\"nb_accompagnants\":%d,\"commentaire\":\"%s\",\"event_title\":\"%s\",\"created_at\":\"%s\"}",
+                    user.getFirstName(), user.getLastName(), user.getEmailUser(),
+                    nb, p.getCommentaireParticipation().replace("\"", "\\\""),
+                    e.getTitreEvent().replace("\"", "\\\""),
+                    java.time.LocalDateTime.now().toString()
+                );
+                p.setFormulaireData(jsonData);
+
+                boolean ok = participationService.registerParticipation(p);
+                if (ok) {
+                    showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. A confirmation email has been sent.");
+                    joinBtn.setText("Registered!");
+                    joinBtn.setDisable(true);
+                    if (overlay.getParent() instanceof Pane) {
+                        ((Pane) overlay.getParent()).getChildren().remove(overlay);
+                    }
+                    refreshContent();
+                } else {
+                    showErrorAlert("Registration Failed", "An error occurred while saving your participation. Please try again later.");
+                }
+            } catch (NumberFormatException nfe) {
+                showErrorAlert("Invalid Input", "Please enter a valid positive number for companions.");
+            }
+        });
+    }
+
+    private void showSuccessAlert(String title, String content) {
+        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.getDialogPane().setStyle("-fx-background-color: " + surfaceStrong().split(";")[0] + "; -fx-text-fill: white;");
+        alert.showAndWait();
+    }
+
+    private void showErrorAlert(String title, String content) {
+        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.getDialogPane().setStyle("-fx-background-color: " + surfaceStrong().split(";")[0] + "; -fx-text-fill: white;");
+        alert.showAndWait();
     }
 
     private Text text(String value, int size, boolean bold, String color) {
