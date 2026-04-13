@@ -2,6 +2,7 @@ package com.syndicati.views.frontend.services;
 
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
+import com.syndicati.models.entities.Publication;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.beans.binding.Bindings;
 import javafx.animation.FadeTransition;
@@ -44,6 +45,7 @@ public class ForumPageView implements ViewInterface {
     private VBox readFace;
     private VBox createFace;
     private VBox editFace;
+    private Publication currentPub;
 
     private java.util.List<com.syndicati.models.entities.Publication> allPublications = new java.util.ArrayList<>();
     private String currentFilter = "General";
@@ -58,6 +60,15 @@ public class ForumPageView implements ViewInterface {
     private Label selectedImageLabel;
     private Label createStatusLabel;
 
+    // Edit form fields
+    private Publication currentEditingPub;
+    private TextField editTitleField;
+    private ComboBox<String> editCategoryCombo;
+    private TextArea editDescriptionArea;
+    private java.io.File selectedEditImageFile;
+    private Label selectedEditImageLabel;
+    private Label editStatusLabel;
+
     private StackPane detailCategoryPill;
     private Text detailCategory;
     private Text detailDate;
@@ -66,6 +77,8 @@ public class ForumPageView implements ViewInterface {
     private Text detailDescription;
     private StackPane detailHero;
     private javafx.scene.image.ImageView detailImageView;
+    private Button detailEditBtn;
+    private Button detailDeleteBtn;
 
     public ForumPageView() {
         root = new VBox(20);
@@ -178,7 +191,7 @@ public class ForumPageView implements ViewInterface {
 
         readFace = buildReadFace();
         createFace = buildCreateFace();
-        editFace = buildEditorFace("Edit Post", "Edit title", "Edit category", "Edit description", "Save Changes");
+        editFace = buildEditFace();
 
         createFace.setVisible(false);
         editFace.setVisible(false);
@@ -296,14 +309,35 @@ public class ForumPageView implements ViewInterface {
         );
         commentsSection.getChildren().add(commentsCard);
 
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        detailEditBtn = ghostBtn("Edit", () -> {
+            if (currentPub != null) {
+                populateEditForm(currentPub);
+                switchFace(editFace);
+            }
+        });
+
+        detailDeleteBtn = ghostBtn("Delete", () -> {
+            if (currentPub != null) {
+                publicationController.deletePublication(currentPub.getId());
+            }
+        });
+        detailDeleteBtn.setStyle(detailDeleteBtn.getStyle() + "-fx-text-fill: #ef4444; -fx-border-color: rgba(239, 68, 68, 0.4);");
+
         HBox actionBar = new HBox(8,
             reactionBtn("Like"),
             reactionBtn("Dislike"),
             reactionBtn("Emoji"),
             reactionBtn("Bookmark"),
-            reactionBtn("Report")
+            reactionBtn("Report"),
+            spacer,
+            detailEditBtn,
+            detailDeleteBtn
         );
         actionBar.setPadding(new Insets(8));
+        actionBar.setAlignment(Pos.CENTER_LEFT);
         actionBar.setStyle(
             "-fx-background-color: rgba(255,255,255,0.03);" +
             "-fx-border-color: " + borderSoft() + ";" +
@@ -312,13 +346,7 @@ public class ForumPageView implements ViewInterface {
             "-fx-background-radius: 14px;"
         );
 
-        HBox faceButtons = new HBox(8,
-            ghostBtn("New Post", () -> switchFace(createFace)),
-            ghostBtn("Edit Post", () -> switchFace(editFace)),
-            ghostBtn("Back To Discussion", () -> switchFace(readFace))
-        );
-
-        body.getChildren().addAll(actionBar, detailDescription, commentsSection, faceButtons);
+        body.getChildren().addAll(actionBar, detailDescription, commentsSection);
 
         VBox scrollContent = new VBox(0, detailHero, body);
         scrollContent.setMaxWidth(Double.MAX_VALUE);
@@ -546,38 +574,173 @@ public class ForumPageView implements ViewInterface {
         return ta;
     }
 
-    private VBox buildEditorFace(String heading, String f1, String f2, String f3, String submitText) {
+    private VBox buildEditFace() {
         VBox face = new VBox(14);
         face.setPadding(new Insets(18));
         face.setStyle("-fx-background-color: transparent;");
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
-        Text t = sectionTitle(heading);
+        Text t = sectionTitle("Edit Publication");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         Button back = ghostBtn("Back", () -> switchFace(readFace));
         header.getChildren().addAll(t, spacer, back);
 
-        VBox formCard = new VBox(10);
-        formCard.setPadding(new Insets(16));
+        VBox formCard = new VBox(16);
+        formCard.setPadding(new Insets(24));
         formCard.setStyle(
             "-fx-background-color: rgba(255,255,255,0.03);" +
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
-            "-fx-background-radius: 16px;" +
-            "-fx-border-radius: 16px;"
+            "-fx-background-radius: 20px;" +
+            "-fx-border-radius: 20px;"
         );
+
+        editTitleField = createStyledTextField("Update title...");
+        editCategoryCombo = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(com.syndicati.models.entities.Publication.CATEGORIES));
+        editCategoryCombo.setPromptText("Select a category");
+        editCategoryCombo.setMaxWidth(Double.MAX_VALUE);
+        editCategoryCombo.setStyle(comboStyle());
+
+        editDescriptionArea = createStyledTextArea("Updated description...");
+        
+        selectedEditImageLabel = new Label("No image selected (Optional)");
+        selectedEditImageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 11px;");
+        
+        Button imageBtn = ghostBtn("Change Image", () -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Select Publication Image");
+            fc.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif")
+            );
+            java.io.File file = fc.showOpenDialog(com.syndicati.MainApplication.getInstance().getPrimaryStage());
+            if (file != null) {
+                selectedEditImageFile = file;
+                selectedEditImageLabel.setText("Selected: " + file.getName());
+                selectedEditImageLabel.setStyle("-fx-text-fill: #10b981; -fx-font-size: 11px;");
+            }
+        });
+
+        editStatusLabel = new Label();
+        editStatusLabel.setStyle("-fx-text-fill: #ef4444; -fx-font-size: 12px;");
+
+        Button updateBtn = filledAccentBtn("Update Publication", this::handleEdit);
+        updateBtn.setMaxWidth(Double.MAX_VALUE);
+
         formCard.getChildren().addAll(
-            inputMock(f1),
-            inputMock(f2),
-            areaMock(f3),
-            ghostBtn(submitText, null)
+            sectionLabel("TITLE"), editTitleField,
+            sectionLabel("CATEGORY"), editCategoryCombo,
+            sectionLabel("DESCRIPTION"), editDescriptionArea,
+            sectionLabel("IMAGE"), imageBtn, selectedEditImageLabel,
+            editStatusLabel,
+            updateBtn
         );
 
         face.getChildren().addAll(header, formCard);
         return face;
     }
+
+    private String savePublicationImage(java.io.File file) {
+        if (file == null) return null;
+        try {
+            java.io.File dir = new java.io.File("uploads/forum_images");
+            if (!dir.exists()) dir.mkdirs();
+
+            String fileName = System.currentTimeMillis() + "_" + file.getName();
+            java.io.File dest = new java.io.File(dir, fileName);
+
+            java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return fileName; 
+        } catch (Exception e) {
+            System.err.println("Error saving publication image: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void populateEditForm(com.syndicati.models.entities.Publication pub) {
+        currentEditingPub = pub;
+        editTitleField.setText(pub.getTitrePub());
+        editCategoryCombo.setValue(pub.getCategoriePub());
+        editDescriptionArea.setText(pub.getDescriptionPub());
+        selectedEditImageFile = null; // Reset to null unless user picks new one
+        if (pub.getImagePub() != null && !pub.getImagePub().isBlank()) {
+            selectedEditImageLabel.setText("Current: " + pub.getImagePub());
+        } else {
+            selectedEditImageLabel.setText("No image currently set");
+        }
+        editStatusLabel.setText("");
+    }
+
+    private void handleEdit() {
+        String title = editTitleField.getText();
+        String cat = editCategoryCombo.getValue();
+        String desc = editDescriptionArea.getText();
+
+        if (title == null || title.isBlank() || title.length() < 3) {
+            editStatusLabel.setText("Title must be at least 3 characters.");
+            return;
+        }
+        if (cat == null) {
+            editStatusLabel.setText("Please select a category.");
+            return;
+        }
+        if (desc == null || desc.length() < 10) {
+            editStatusLabel.setText("Description must be at least 10 characters.");
+            return;
+        }
+        String imageName = currentEditingPub.getImagePub();
+        if (selectedEditImageFile != null) {
+            String newImg = savePublicationImage(selectedEditImageFile);
+            if (newImg != null) imageName = newImg;
+        }
+
+        publicationController.updatePublication(
+            currentEditingPub.getId(),
+            title,
+            cat,
+            desc,
+            imageName,
+            currentEditingPub.getUserId()
+        );
+        
+        // Manual sync of current view so buttons/labels stay correct before sidebar refresh
+        currentEditingPub.setTitrePub(title);
+        currentEditingPub.setCategoriePub(cat);
+        currentEditingPub.setDescriptionPub(desc);
+        currentEditingPub.setImagePub(imageName);
+        updateDetailView(currentEditingPub);
+    }
+
+    public void updateDetailView(com.syndicati.models.entities.Publication pub) {
+        javafx.application.Platform.runLater(() -> {
+            detailTitle.setText(pub.getTitrePub());
+            detailDescription.setText(pub.getDescriptionPub());
+            detailCategory.setText(pub.getCategoriePub() != null ? pub.getCategoriePub() : "General");
+            detailCategoryPill.setStyle(categoryStyle(pub.getCategoriePub()));
+            
+            if (pub.getImagePub() != null && !pub.getImagePub().isEmpty()) {
+                String imgPath = "uploads/forum_images/" + pub.getImagePub();
+                try {
+                    javafx.scene.image.Image img = com.syndicati.utils.image.ImageLoaderUtil.loadImage(imgPath, false);
+                    if (img != null) {
+                        detailImageView.setImage(img);
+                    }
+                } catch (Exception ignored) {}
+            }
+            
+            // Refresh ownership check for buttons
+            try {
+                com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+                boolean isOwner = (currentUser != null && java.util.Objects.equals(pub.getUserId(), currentUser.getIdUser()));
+                detailEditBtn.setVisible(isOwner);
+                detailEditBtn.setManaged(isOwner);
+                detailDeleteBtn.setVisible(isOwner);
+                detailDeleteBtn.setManaged(isOwner);
+            } catch (Exception ignored) {}
+        });
+    }
+
 
     private VBox buildSidebarPane() {
         VBox side = new VBox();
@@ -742,6 +905,51 @@ public class ForumPageView implements ViewInterface {
             );
             b.setTranslateY(0);
         });
+        return b;
+    }
+
+    private Button filledAccentBtn(String text, Runnable action) {
+        Button b = new Button(text);
+        b.setStyle(
+            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+            "-fx-text-fill: white;" +
+            "-fx-background-radius: 14px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-font-size: 14px;" +
+            "-fx-cursor: hand;" +
+            "-fx-padding: 12 24;"
+        );
+
+        // Hover effect for premium feel
+        b.setOnMouseEntered(e -> {
+            b.setStyle(
+                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+                "-fx-text-fill: white;" +
+                "-fx-background-radius: 14px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-font-size: 14px;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 12 24;" +
+                "-fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.5) + ", 15, 0.4, 0, 0);"
+            );
+            b.setTranslateY(-1);
+        });
+        b.setOnMouseExited(e -> {
+            b.setStyle(
+                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+                "-fx-text-fill: white;" +
+                "-fx-background-radius: 14px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-font-size: 14px;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 12 24;"
+            );
+            b.setTranslateY(0);
+        });
+
+        if (action != null) {
+            b.setOnAction(e -> action.run());
+        }
         return b;
     }
 
@@ -922,6 +1130,17 @@ public class ForumPageView implements ViewInterface {
     public void setPublications(java.util.List<com.syndicati.models.entities.Publication> publications) {
         this.allPublications = new java.util.ArrayList<>(publications);
         applyFilter();
+        
+        // After reloading the list, check if the current publication we are viewing was updated
+        if (currentPub != null) {
+            for (com.syndicati.models.entities.Publication p : allPublications) {
+                if (java.util.Objects.equals(p.getId(), currentPub.getId())) {
+                    currentPub = p;
+                    updateDetailView(p);
+                    break;
+                }
+            }
+        }
     }
 
     private void applyFilter() {
@@ -936,20 +1155,29 @@ public class ForumPageView implements ViewInterface {
             filtered = allPublications.stream()
                 .filter(p -> p.getCategoriePub() != null && p.getCategoriePub().equalsIgnoreCase("Announcement"))
                 .collect(java.util.stream.Collectors.toList());
-        } else {
-            // "General" shows everything else
+        } else if (currentFilter.equals("General")) {
+            // General shows everything that is NOT an Announcement
             filtered = allPublications.stream()
                 .filter(p -> p.getCategoriePub() == null || !p.getCategoriePub().equalsIgnoreCase("Announcement"))
                 .collect(java.util.stream.Collectors.toList());
+        } else {
+            // Specific category filter
+            filtered = allPublications.stream()
+                .filter(p -> p.getCategoriePub() != null && p.getCategoriePub().equalsIgnoreCase(currentFilter))
+                .collect(java.util.stream.Collectors.toList());
         }
 
-        if (filtered.isEmpty()) {
-            sidebarList.getChildren().add(muted("No results for " + currentFilter));
-        } else {
-            for (com.syndicati.models.entities.Publication pub : filtered) {
-                sidebarList.getChildren().add(forumItemFromEntity(pub));
+            if (filtered.isEmpty()) {
+                sidebarList.getChildren().add(muted("No results for " + currentFilter));
+            } else {
+                for (com.syndicati.models.entities.Publication pub : filtered) {
+                    try {
+                        sidebarList.getChildren().add(forumItemFromEntity(pub));
+                    } catch (Exception e) {
+                        System.err.println("Error rendering sidebar item: " + e.getMessage());
+                    }
+                }
             }
-        }
     }
 
     private void updateFilterButtonStyle(Button b, boolean active) {
@@ -1007,6 +1235,7 @@ public class ForumPageView implements ViewInterface {
             detailCategoryPill.setStyle(categoryStyle(cat));
             detailDate.setText(date + ", " + pub.getDateCreationPub().getYear());
             detailAuthor.setText(author);
+            currentPub = pub;
             detailTitle.setText(pub.getTitrePub());
             detailDescription.setText(pub.getDescriptionPub());
 
@@ -1086,6 +1315,26 @@ public class ForumPageView implements ViewInterface {
                 detailImageView.setImage(null);
             }
 
+            // Check ownership to show/hide edit and delete buttons
+            try {
+                com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+                
+                Integer pubUserId = pub.getUserId();
+                Integer currentUserId = (currentUser != null) ? currentUser.getIdUser() : null;
+                
+                boolean isOwner = (pubUserId != null && currentUserId != null && pubUserId.equals(currentUserId));
+                
+                detailEditBtn.setVisible(isOwner);
+                detailEditBtn.setManaged(isOwner);
+                detailDeleteBtn.setVisible(isOwner);
+                detailDeleteBtn.setManaged(isOwner);
+            } catch (Exception ex) {
+                detailEditBtn.setVisible(false);
+                detailEditBtn.setManaged(false);
+                detailDeleteBtn.setVisible(false);
+                detailDeleteBtn.setManaged(false);
+            }
+
             switchFace(readFace);
         });
 
@@ -1127,9 +1376,13 @@ public class ForumPageView implements ViewInterface {
     }
 
     private String categoryStyle(String category) {
-        String key = category.toLowerCase();
+        if (category == null || category.isBlank()) {
+            return "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + "; -fx-background-radius: 12px; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.4) + "; -fx-border-width: 1px; -fx-border-radius: 12px;";
+        }
         
-        // Premium Palette (Muted tings from template)
+        String key = category.toLowerCase().trim();
+        
+        // Premium Palette (Muted tints from template)
         if (key.contains("announcement")) {
             return "-fx-background-color: rgba(239, 68, 68, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(239, 68, 68, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
@@ -1142,8 +1395,8 @@ public class ForumPageView implements ViewInterface {
         if (key.contains("sport")) {
             return "-fx-background-color: rgba(245, 158, 11, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(245, 158, 11, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
-        if (key.contains("meeting")) {
-            return "-fx-background-color: rgba(6, 182, 212, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(6, 182, 212, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
+        if (key.contains("nouveaut") || key.contains("new")) {
+            return "-fx-background-color: rgba(168, 85, 247, 0.15); -fx-background-radius: 12px; -fx-border-color: rgba(168, 85, 247, 0.4); -fx-border-width: 1px; -fx-border-radius: 12px;";
         }
         
         // Default (Accent-tinted)

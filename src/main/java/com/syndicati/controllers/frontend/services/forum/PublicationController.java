@@ -68,4 +68,41 @@ public class PublicationController {
             });
         }).start();
     }
+
+    public void updatePublication(int id, String title, String category, String description, String image, Integer userId) {
+        Publication pub = new Publication();
+        pub.setId(id);
+        pub.setTitrePub(title);
+        pub.setCategoriePub(category);
+        pub.setDescriptionPub(description);
+        pub.setImagePub(image);
+        pub.setUserId(userId);
+
+        new Thread(() -> {
+            boolean success = service.updatePublication(pub);
+            Platform.runLater(() -> {
+                if (success) {
+                    afficher(); // Refresh list
+                    view.switchFaceToRead();
+                } else {
+                    System.err.println("Failed to update publication.");
+                }
+            });
+        }).start();
+    }
+
+    public void deletePublication(int id) {
+        new Thread(() -> {
+            boolean success = service.deletePublication(id);
+            Platform.runLater(() -> {
+                if (success) {
+                    afficher(); // Refresh list
+                    view.switchFaceToRead();
+                    // Optionally clear the detail view if the deleted post was selected
+                } else {
+                    System.err.println("Failed to delete publication.");
+                }
+            });
+        }).start();
+    }
 }

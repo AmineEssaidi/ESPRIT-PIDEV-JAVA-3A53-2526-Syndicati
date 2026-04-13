@@ -122,6 +122,30 @@ public class PublicationRepository {
         return -1;
     }
 
+    public boolean update(Publication publication) {
+        String sql = "UPDATE publication SET titre_pub = ?, description_pub = ?, categorie_pub = ?, image_pub = ? WHERE id = ?";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return false;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, publication.getTitrePub());
+                ps.setString(2, publication.getDescriptionPub());
+                ps.setString(3, publication.getCategoriePub());
+                ps.setString(4, publication.getImagePub());
+                ps.setInt(5, publication.getId());
+
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            System.out.println("PublicationRepository.update error: " + e.getMessage());
+        }
+
+        return false;
+    }
+
     private Publication mapRow(ResultSet rs) throws SQLException {
         Publication pub = new Publication();
         pub.setId(rs.getInt("id"));
@@ -130,7 +154,16 @@ public class PublicationRepository {
         pub.setDateCreationPub(readLocalDateTime(rs, "date_creation_pub"));
         pub.setCategoriePub(rs.getString("categorie_pub"));
         pub.setImagePub(rs.getString("image_pub"));
-        pub.setUserId(rs.getInt("user_id"));
+        
+        int userId = rs.getInt("user_id");
+        if (!rs.wasNull()) {
+            pub.setUserId(userId);
+        }
+
+        // Fallback for null dates to prevent UI crashes
+        if (pub.getDateCreationPub() == null) {
+            pub.setDateCreationPub(LocalDateTime.now());
+        }
 
         // Author identity fields from JOIN
         try {
@@ -147,5 +180,24 @@ public class PublicationRepository {
     private LocalDateTime readLocalDateTime(ResultSet rs, String column) throws SQLException {
         Timestamp ts = rs.getTimestamp(column);
         return ts != null ? ts.toLocalDateTime() : null;
+    }
+
+    public boolean delete(int id) {
+        String sql = "DELETE FROM publication WHERE id = ?";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return false;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, id);
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            System.out.println("PublicationRepository.delete error: " + e.getMessage());
+        }
+
+        return false;
     }
 }

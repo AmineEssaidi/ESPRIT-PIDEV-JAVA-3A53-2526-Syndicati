@@ -26,4 +26,15 @@ public class PublicationService {
         }
         return false;
     }
+
+    public boolean updatePublication(Publication pub) {
+        if (pub.isValid() && pub.getId() != null) {
+            return repository.update(pub);
+        }
+        return false;
+    }
+
+    public boolean deletePublication(int id) {
+        return repository.delete(id);
+    }
 }
