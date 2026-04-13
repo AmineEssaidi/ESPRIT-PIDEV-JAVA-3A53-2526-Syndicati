@@ -173,11 +173,11 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.syndicati.Launcher</mainClass>
+                    <executable>${java.home}/bin/java</executable>
                     <options>
                         <option>--enable-native-access=ALL-UNNAMED</option>
                         <option>--enable-native-access=javafx.graphics,javafx.media</option>
                         <!-- Suppress sun.misc.Unsafe deprecation warnings from Guice 5.1.0 -->
-                        <option>--sun-misc-unsafe-memory-access=allow</option>
                     </options>
                 </configuration>
             </plugin>

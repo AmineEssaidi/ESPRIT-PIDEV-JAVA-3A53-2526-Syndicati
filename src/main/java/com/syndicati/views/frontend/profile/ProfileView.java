@@ -2102,11 +2102,23 @@ public class ProfileView implements ViewInterface {
         VBox card = cardShell();
         card.setPadding(new Insets(22));
         card.getChildren().add(text("Your Reclamations", 24, true, "#ffffff"));
-        card.getChildren().add(reclamationItem("Water leakage in block B corridor", "In progress", "Submitted on 10 Mar 2026"));
-        card.getChildren().add(reclamationItem("Parking gate sensor malfunction", "Confirmed", "Submitted on 05 Mar 2026"));
-        card.getChildren().add(reclamationItem("Elevator cabin lighting issue", "Active", "Submitted on 01 Mar 2026"));
+        
+        com.syndicati.services.ReclamationService rs = com.syndicati.services.ReclamationService.getInstance();
+        int userId = (currentUser != null && currentUser.getIdUser() != null) ? currentUser.getIdUser() : 6;
+        java.util.List<com.syndicati.models.entities.Reclamation> myReclamations = rs.getReclamationsByUserId(userId);
+        
+        if (myReclamations.isEmpty()) {
+            card.getChildren().add(text("No reclamations found.", 14, false, textMuted()));
+        } else {
+            for (com.syndicati.models.entities.Reclamation rec : myReclamations) {
+                String title = rec.getTitrereclamations();
+                String status = rec.getStatutreclamation();
+                String dateStr = (rec.getCreatedAt() != null) ? rec.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy")) : "";
+                card.getChildren().add(reclamationItem(title, status, "Submitted on " + dateStr));
+            }
+        }
 
-        HBox pagination = new HBox(8, pagePill("1", true), pagePill("2", false));
+        HBox pagination = new HBox(8, pagePill("1", true));
         pagination.setAlignment(Pos.CENTER);
         pagination.setPadding(new Insets(8));
         pagination.setMaxWidth(170);

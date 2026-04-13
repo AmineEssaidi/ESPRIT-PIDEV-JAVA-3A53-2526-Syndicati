@@ -20,6 +20,13 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 
+import javafx.application.Platform;
+import com.syndicati.controllers.frontend.services.syndicat.ReclamationController;
+import javafx.animation.PauseTransition;
+import java.io.File;
+import javafx.stage.FileChooser;
+import javafx.scene.layout.HBox;
+
 /**
  * Static Syndicat page mirroring frontend/syndicat/index.html.twig structure.
  */
@@ -27,8 +34,14 @@ public class SyndicatPageView implements ViewInterface {
 
     private final VBox root;
     private final ThemeManager tm = ThemeManager.getInstance();
+    private final ReclamationController reclamationController;
+    private VBox popupPreview;
+    private Text popupTitle;
+    private Text popupMessage;
+    private File selectedImageFile = null;
 
     public SyndicatPageView() {
+        reclamationController = new ReclamationController();
         root = new VBox(22);
         root.setAlignment(Pos.TOP_CENTER);
         root.setPadding(new Insets(20, 0, 40, 0));
@@ -37,7 +50,9 @@ public class SyndicatPageView implements ViewInterface {
 
         VBox form = buildFormCard();
         VBox.setMargin(form, new Insets(-90, 0, 0, 0));
-        root.getChildren().addAll(buildHero(), form, buildPopupPreview());
+        popupPreview = buildPopupPreview();
+        popupPreview.setVisible(false); // Hide by default
+        root.getChildren().addAll(buildHero(), form, popupPreview);
     }
 
     private StackPane buildHero() {
@@ -98,18 +113,42 @@ public class SyndicatPageView implements ViewInterface {
         Text sub = line("Fill in the details below. We'll get back to you shortly.", 15, false, textMuted());
 
         TextField subject = input("Subject: What is this regarding?");
-        DatePicker date = new DatePicker();
-        date.setPromptText("Date of Incident");
-        styleDate(date);
+
 
         TextArea description = new TextArea();
         description.setPromptText("Description");
         description.setPrefRowCount(4);
         styleArea(description);
 
-        StackPane attachmentZone = new StackPane(line("Attachments (optional) preview area", 12, false, tm.getSecondaryTextColor()));
+        HBox attachmentZone = new HBox(12);
+        attachmentZone.setAlignment(Pos.CENTER_LEFT);
         attachmentZone.setPadding(new Insets(18));
         attachmentZone.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 14px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 14px; -fx-border-width: 1px;");
+        
+        Button chooseImageBtn = new Button("Choose Image");
+        chooseImageBtn.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8 16 8 16;");
+        addButtonPulse(chooseImageBtn);
+        
+        Text selectedFileTxt = line("No image selected (optional)", 12, false, tm.getSecondaryTextColor());
+        
+        chooseImageBtn.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Select Image");
+            fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.bmp")
+            );
+            
+            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
+            File file = fileChooser.showOpenDialog(stage);
+            
+            if (file != null) {
+                selectedImageFile = file;
+                selectedFileTxt.setText(file.getName());
+                selectedFileTxt.setFill(Color.web(tm.getTextColor()));
+            }
+        });
+        
+        attachmentZone.getChildren().addAll(chooseImageBtn, selectedFileTxt);
 
         Button submit = new Button("Submit Reclamation");
         submit.setStyle(
@@ -122,8 +161,36 @@ public class SyndicatPageView implements ViewInterface {
         );
         submit.setMaxWidth(Double.MAX_VALUE);
         addButtonPulse(submit);
+        
+        submit.setOnAction(e -> {
+            submit.setDisable(true);
+            submit.setText("Submitting...");
+            
+            reclamationController.handleSubmit(
+                subject.getText(), 
 
-        form.getChildren().addAll(title, sub, label("Subject"), subject, label("Date of Incident"), date, label("Description"), description, label("Attachments"), attachmentZone, submit);
+                description.getText(), 
+                selectedImageFile,
+                () -> Platform.runLater(() -> {
+                    showPopup("Success", "Your reclamation has been submitted successfully.", true);
+                    submit.setDisable(false);
+                    submit.setText("Submit Reclamation");
+                    subject.clear();
+
+                    description.clear();
+                    selectedImageFile = null;
+                    selectedFileTxt.setText("No image selected (optional)");
+                    selectedFileTxt.setFill(Color.web(tm.getSecondaryTextColor()));
+                }), 
+                (errorMsg) -> Platform.runLater(() -> {
+                    showPopup("Error", errorMsg, false);
+                    submit.setDisable(false);
+                    submit.setText("Submit Reclamation");
+                })
+            );
+        });
+
+        form.getChildren().addAll(title, sub, label("Subject"), subject, label("Description"), description, label("Attachments"), attachmentZone, submit);
         return form;
     }
 
@@ -133,11 +200,30 @@ public class SyndicatPageView implements ViewInterface {
         popup.setMaxWidth(700);
         popup.setPadding(new Insets(20));
         popup.setStyle(shell(20, "rgba(255,255,255,0.02)", 1.2));
-        popup.getChildren().addAll(
-            line("Cool Popup Preview", 18, true, tm.getTextColor()),
-            line("Success/error popup system placeholder duplicated from Twig structure.", 12, false, tm.getSecondaryTextColor())
-        );
+        
+        popupTitle = line("Notification", 18, true, tm.getTextColor());
+        popupMessage = line("Message goes here", 14, false, tm.getSecondaryTextColor());
+        popupMessage.setWrappingWidth(600);
+        
+        popup.getChildren().addAll(popupTitle, popupMessage);
         return popup;
+    }
+    
+    private void showPopup(String title, String message, boolean isSuccess) {
+        popupTitle.setText(title);
+        popupMessage.setText(message);
+        
+        if (isSuccess) {
+            popupTitle.setFill(Color.web("#10b981")); // Success color (Green)
+        } else {
+            popupTitle.setFill(Color.web("#ef4444")); // Danger color (Red)
+        }
+        
+        popupPreview.setVisible(true);
+        
+        PauseTransition delay = new PauseTransition(Duration.seconds(4));
+        delay.setOnFinished(e -> popupPreview.setVisible(false));
+        delay.play();
     }
 
     private TextField input(String prompt) {
