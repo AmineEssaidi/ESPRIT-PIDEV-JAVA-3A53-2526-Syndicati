@@ -15,7 +15,8 @@ import java.util.regex.Pattern;
  */
 public class AuthController {
 
-    private static final Pattern NAME_PATTERN = Pattern.compile("^[a-zA-ZÃ€-Ã¿\\s-]+$");
+    // Accept letters from all locales, spaces, apostrophes, and hyphens.
+    private static final Pattern NAME_PATTERN = Pattern.compile("^[\\p{L}\\s'-]+$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final Pattern UPPERCASE_PATTERN = Pattern.compile(".*[A-Z].*");
     private static final Pattern SPECIAL_PATTERN = Pattern.compile(".*[!@#$%^&*(),.?\":{}|<>].*");

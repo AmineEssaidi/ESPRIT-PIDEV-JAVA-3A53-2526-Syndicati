@@ -1,8 +1,5 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.user.onboarding.OnboardingController;
-import com.syndicati.controllers.user.profile.ProfileController;
-import com.syndicati.controllers.user.user.UserController;
 import com.syndicati.models.user.Onboarding;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
@@ -29,17 +26,17 @@ import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.services.dashboard.DashboardAdminService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Consumer;
 import javafx.scene.image.Image;
 import javafx.scene.paint.ImagePattern;
@@ -52,28 +49,28 @@ import javafx.scene.paint.ImagePattern;
 public class DashboardView implements ViewInterface {
 
     private final HBox root;
-    private String activeSection = "general";
+    String activeSection = "general";
     private final Map<String, Button> sectionButtons = new HashMap<>();
-    private VBox contentArea;
-    private Runnable exitCallback;
+    VBox contentArea;
+    Runnable exitCallback;
     private final Runnable accentRefreshListener;
-    private boolean sidebarExpanded = true;
-    private Popup profilePopup;
-    private Popup notificationPopup;
-    private PauseTransition notificationHideDelay;
-    private final UserController userController;
-    private final ProfileController profileController;
-    private final OnboardingController onboardingController;
+    boolean sidebarExpanded = true;
+    Popup profilePopup;
+    Popup notificationPopup;
+    PauseTransition notificationHideDelay;
+    private final DashboardAdminService dashboardAdminService;
     private static final DateTimeFormatter DASHBOARD_DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public DashboardView() {
         this.root = new HBox();
         this.accentRefreshListener = this::refreshAccentStyling;
-        this.userController = new UserController();
-        this.profileController = new ProfileController();
-        this.onboardingController = new OnboardingController();
+        this.dashboardAdminService = new DashboardAdminService();
         setupLayout();
         ThemeManager.getInstance().addAccentChangeListener(accentRefreshListener);
+    }
+
+    DashboardAdminService dashboardAdminService() {
+        return dashboardAdminService;
     }
 
     public void setExitCallback(Runnable cb) { this.exitCallback = cb; }
@@ -89,9 +86,9 @@ public class DashboardView implements ViewInterface {
         sectionButtons.clear();
 
         root.getChildren().clear();
-        VBox sidebar  = createSidebar();
+        VBox sidebar  = DashboardShell.buildSidebar(this);
         sidebar.setPrefWidth(sidebarWidth()); sidebar.setMinWidth(sidebarWidth()); sidebar.setMaxWidth(sidebarWidth());
-        VBox mainArea = createMainArea();
+        VBox mainArea = DashboardShell.buildMainArea(this);
         HBox.setHgrow(mainArea, Priority.ALWAYS);
         root.getChildren().addAll(sidebar, mainArea);
 
@@ -102,14 +99,14 @@ public class DashboardView implements ViewInterface {
 
     private ThemeManager theme() { return ThemeManager.getInstance(); }
     private String accentHex() { return theme().getAccentHex(); }
-    private String accentGradient() { return theme().getEffectiveAccentGradient(); }
-    private String accentRgba(double alpha) { return theme().toRgba(accentHex(), alpha); }
-    private boolean isDark() { return theme().isDarkMode(); }
+    String accentGradient() { return theme().getEffectiveAccentGradient(); }
+    String accentRgba(double alpha) { return theme().toRgba(accentHex(), alpha); }
+    boolean isDark() { return theme().isDarkMode(); }
     private Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
     private Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
     private Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
 
-    private String currentDisplayName() {
+    String currentDisplayName() {
         User user = SessionManager.getInstance().getCurrentUser();
         if (user == null) {
             return "Admin User";
@@ -121,7 +118,7 @@ public class DashboardView implements ViewInterface {
         return fullName.isEmpty() ? "User" : fullName;
     }
 
-    private String currentEmail() {
+    String currentEmail() {
         User user = SessionManager.getInstance().getCurrentUser();
         if (user == null || user.getEmailUser() == null || user.getEmailUser().isBlank()) {
             return "contact@syndicati.tn";
@@ -129,7 +126,7 @@ public class DashboardView implements ViewInterface {
         return user.getEmailUser();
     }
 
-    private String currentRoleLabel() {
+    String currentRoleLabel() {
         User user = SessionManager.getInstance().getCurrentUser();
         if (user == null || user.getRoleUser() == null || user.getRoleUser().isBlank()) {
             return "Administrateur";
@@ -141,7 +138,7 @@ public class DashboardView implements ViewInterface {
         return role;
     }
 
-    private String currentInitial() {
+    String currentInitial() {
         String name = currentDisplayName();
         if (!name.isBlank()) {
             return name.substring(0, 1).toUpperCase();
@@ -150,7 +147,7 @@ public class DashboardView implements ViewInterface {
         return email.isBlank() ? "U" : email.substring(0, 1).toUpperCase();
     }
 
-    private boolean applyAvatarFill(Circle avatarCircle) {
+    boolean applyAvatarFill(Circle avatarCircle) {
         Profile profile = SessionManager.getInstance().getCurrentProfile();
         String avatarPath = profile == null ? null : profile.getAvatar();
 
@@ -195,10 +192,10 @@ public class DashboardView implements ViewInterface {
         );
         root.setPadding(new Insets(40, 0, 0, 0));   // 40px = window-bar height
 
-        VBox sidebar  = createSidebar();
+        VBox sidebar  = DashboardShell.buildSidebar(this);
         sidebar.setPrefWidth(sidebarWidth()); sidebar.setMinWidth(sidebarWidth()); sidebar.setMaxWidth(sidebarWidth());
 
-        VBox mainArea = createMainArea();
+        VBox mainArea = DashboardShell.buildMainArea(this);
         HBox.setHgrow(mainArea, Priority.ALWAYS);
         root.getChildren().addAll(sidebar, mainArea);
     }
@@ -207,7 +204,7 @@ public class DashboardView implements ViewInterface {
         return sidebarExpanded ? 250 : 96;
     }
 
-    private void toggleSidebar() {
+    void toggleSidebar() {
         sidebarExpanded = !sidebarExpanded;
         refreshAccentStyling();
     }
@@ -217,115 +214,12 @@ public class DashboardView implements ViewInterface {
     //   .admin-sidebar-top | .admin-sidebar-nav | .admin-sidebar-bottom
     //   each: backdrop-blur glass, border-radius 24px, transparent gap
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox createSidebar() {
-        // Outer wrapper: transparent, no background Ã¢â‚¬â€œ only the three pills show
-        VBox sb = new VBox(10);
-        sb.setAlignment(Pos.TOP_CENTER);
-        sb.setFillWidth(true);
-        VBox.setVgrow(sb, Priority.ALWAYS);
-        sb.setStyle("-fx-background-color:transparent;");
-        sb.setPadding(new Insets(12, 10, 12, 10));
-
-        // Ã¢â€â‚¬Ã¢â€â‚¬ TOP PILL: logo Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-        VBox topPill = glassPill(Pos.CENTER);
-        topPill.setPadding(new Insets(12, 10, 12, 10));
-        topPill.setSpacing(8);
-
-        // Logo circle with "S" initial (mimics logo-img)
-        StackPane logoMark = new StackPane();
-        logoMark.setPrefSize(44, 44);
-        logoMark.setStyle(
-            "-fx-background-color:" + accentGradient() + ";" +
-            "-fx-background-radius:14px;" +
-            "-fx-effect:dropshadow(gaussian," + accentRgba(0.45) + ",18,0.4,0,4);"
-        );
-        Text sLetter = t("S", boldFont(), FontWeight.BOLD, 26); sLetter.setFill(Color.WHITE);
-        logoMark.getChildren().add(sLetter);
-
-        VBox logoText = new VBox(1);
-        logoText.setAlignment(Pos.CENTER_LEFT);
-        Text logoT = t("SYNDICATI", boldFont(), FontWeight.BOLD, 15); logoT.setFill(Color.WHITE);
-        Text adminT = t("Admin Panel", lightFont(), FontWeight.NORMAL, 12); adminT.setFill(isDark() ? Color.web("rgba(255,255,255,0.4)") : Color.web("rgba(15,23,42,0.55)"));
-        logoT.setFill(isDark() ? Color.WHITE : Color.web("#111827"));
-        logoText.getChildren().addAll(logoT, adminT);
-
-        HBox logoRow = new HBox(10); logoRow.setAlignment(Pos.CENTER_LEFT);
-        if (sidebarExpanded) {
-            logoRow.getChildren().addAll(logoMark, logoText);
-        } else {
-            logoRow.setAlignment(Pos.CENTER);
-            logoRow.getChildren().add(logoMark);
-        }
-
-        Button toggle = new Button(sidebarExpanded ? "<" : ">");
-        toggle.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
-        toggle.setPadding(new Insets(7, 10, 7, 10));
-        toggle.setMaxWidth(sidebarExpanded ? Double.MAX_VALUE : Region.USE_PREF_SIZE);
-        toggle.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.8)" : "rgba(15,23,42,0.84)") + ";" +
-            "-fx-cursor:hand;"
-        );
-        toggle.setOnAction(e -> toggleSidebar());
-        Tooltip.install(toggle, new Tooltip(sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"));
-
-        topPill.getChildren().addAll(logoRow, toggle);
-
-        // Ã¢â€â‚¬Ã¢â€â‚¬ NAV PILL: main items Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-        VBox navPill = glassPill(Pos.TOP_CENTER);
-        navPill.setPadding(new Insets(14, sidebarExpanded ? 10 : 6, 14, sidebarExpanded ? 10 : 6));
-        navPill.setSpacing(4);
-        VBox.setVgrow(navPill, Priority.ALWAYS);
-
-        navPill.getChildren().addAll(
-            sidebarItem("\uD83D\uDCCA", "Dashboard",  "general"),
-            pillSep(),
-            sidebarItem("\uD83D\uDC65", "Users",      "users"),
-            sidebarItem("\uD83D\uDCAC", "Forum",      "forum"),
-            sidebarItem("\uD83C\uDFDB\uFE0F", "Syndicat",  "syndicat"),
-            sidebarItem("\uD83C\uDFE2", "Residence",  "residence"),
-            sidebarItem("\uD83C\uDF89", "Evenement",  "evenement")
-        );
-
-        // Ã¢â€â‚¬Ã¢â€â‚¬ BOTTOM PILL: back to app + sign out Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-        VBox bottomPill = glassPill(Pos.CENTER);
-        bottomPill.setPadding(new Insets(10, sidebarExpanded ? 10 : 6, 10, sidebarExpanded ? 10 : 6));
-        bottomPill.setSpacing(8);
-
-        Button back = new Button(sidebarExpanded ? "\u2302  Back to App" : "\u2302");
-        back.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
-        back.setMaxWidth(Double.MAX_VALUE);
-        back.setPadding(new Insets(10, 14, 10, 14));
-        back.setAlignment(sidebarExpanded ? Pos.CENTER_LEFT : Pos.CENTER);
-        styleBackButton(back, false);
-        back.setOnMouseEntered(e -> styleBackButton(back, true));
-        back.setOnMouseExited(e  -> styleBackButton(back, false));
-        back.setOnAction(e -> { if (exitCallback != null) exitCallback.run(); });
-        if (!sidebarExpanded) Tooltip.install(back, new Tooltip("Back to App"));
-
-        Button signOut = new Button(sidebarExpanded ? "\u23FB  Sign out" : "\u23FB");
-        signOut.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
-        signOut.setMaxWidth(Double.MAX_VALUE);
-        signOut.setPadding(new Insets(10, 14, 10, 14));
-        signOut.setAlignment(sidebarExpanded ? Pos.CENTER_LEFT : Pos.CENTER);
-        styleSignOutButton(signOut, false);
-        signOut.setOnMouseEntered(e -> styleSignOutButton(signOut, true));
-        signOut.setOnMouseExited(e  -> styleSignOutButton(signOut, false));
-        signOut.setOnAction(e -> com.syndicati.MainApplication.getInstance().logout());
-        if (!sidebarExpanded) Tooltip.install(signOut, new Tooltip("Sign out"));
-
-        bottomPill.getChildren().addAll(back, signOut);
-
-        sb.getChildren().addAll(topPill, navPill, bottomPill);
-        return sb;
+    VBox createSidebar() {
+        return DashboardShell.buildSidebar(this);
     }
 
     /** Shared glass pill container Ã¢â‚¬â€ three of these make up the sidebar. */
-    private VBox glassPill(Pos alignment) {
+    VBox glassPill(Pos alignment) {
         VBox pill = new VBox(0);
         pill.setAlignment(alignment);
         pill.setFillWidth(true);
@@ -333,28 +227,28 @@ public class DashboardView implements ViewInterface {
         return pill;
     }
 
-    private void styleBackButton(Button b, boolean h) {
+    void styleBackButton(Button b, boolean h) {
         b.setStyle(h
             ? "-fx-background-color:" + (isDark() ? accentRgba(0.22) : "rgba(15,23,42,0.12)") + ";-fx-background-radius:12px;-fx-text-fill:" + (isDark() ? "#e5e7eb" : "#111827") + ";-fx-cursor:hand;"
             : "-fx-background-color:transparent;-fx-background-radius:12px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.5)" : "rgba(15,23,42,0.55)") + ";-fx-cursor:hand;"
         );
     }
 
-    private void styleSignOutButton(Button b, boolean h) {
+    void styleSignOutButton(Button b, boolean h) {
         b.setStyle(h
             ? "-fx-background-color:#800020;-fx-background-radius:12px;-fx-text-fill:#ffffff;-fx-cursor:hand;"
             : "-fx-background-color:rgba(128,0,32,0.85);-fx-background-radius:12px;-fx-text-fill:#ffe4ea;-fx-cursor:hand;"
         );
     }
 
-    private Region pillSep() {
+    Region pillSep() {
         Region r = new Region(); r.setPrefHeight(1); r.setMaxHeight(1);
         r.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.10)") + ";");
         VBox.setMargin(r, new Insets(6, 0, 6, 0));
         return r;
     }
 
-    private Button sidebarItem(String icon, String label, String section) {
+    Button sidebarItem(String icon, String label, String section) {
         HBox inner = new HBox(10);
         inner.setAlignment(sidebarExpanded ? Pos.CENTER_LEFT : Pos.CENTER);
         inner.setMouseTransparent(true);
@@ -444,7 +338,7 @@ public class DashboardView implements ViewInterface {
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // MAIN AREA
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox createMainArea() {
+    VBox createMainArea() {
         VBox area = new VBox(0);
         area.setFillWidth(true);
         area.setStyle("-fx-background-color:" + (isDark() ? "#050505" : "#f3f4f6") + ";");
@@ -460,448 +354,40 @@ public class DashboardView implements ViewInterface {
         scroll.setStyle("-fx-background-color:transparent;-fx-background:transparent;");
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        area.getChildren().addAll(createAdminHeader(), scroll);
+        area.getChildren().addAll(DashboardShell.buildHeader(this), scroll);
         return area;
     }
 
-    private HBox createAdminHeader() {
-        HBox h = new HBox(14);
-        h.setAlignment(Pos.CENTER_LEFT);
-        h.setPadding(new Insets(12, 24, 12, 24));
-        h.setMinHeight(58); h.setMaxHeight(58);
-        h.setStyle("-fx-background-color:" + (isDark() ? "rgba(0,0,0,0.98)" : "rgba(255,255,255,0.98)") + ";-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:0 0 1 0;");
-
-        HBox searchBar = new HBox(8);
-        searchBar.setAlignment(Pos.CENTER_LEFT);
-        searchBar.setPadding(new Insets(7, 14, 7, 14));
-        searchBar.setPrefWidth(280);
-        searchBar.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.04)") + ";-fx-background-radius:10px;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:10px;");
-        Text sch = new Text(" Search admin..."); sch.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13)); sch.setFill(isDark() ? Color.web("rgba(255,255,255,0.60)") : Color.web("rgba(15,23,42,0.62)"));
-        searchBar.getChildren().add(sch);
-
-        Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
-
-        StackPane bell = buildNotificationTrigger();
-
-        // User pill
-        HBox up = new HBox(8); up.setAlignment(Pos.CENTER); up.setPadding(new Insets(5,12,5,6));
-        up.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";-fx-background-radius:20px;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:1;-fx-border-radius:20px;-fx-cursor:hand;");
-        Circle av = new Circle(14);
-        boolean hasAvatarImage = applyAvatarFill(av);
-        Text ini = t(currentInitial(), boldFont(), FontWeight.BOLD, 12); ini.setFill(Color.WHITE);
-        ini.setVisible(!hasAvatarImage);
-        ini.setManaged(!hasAvatarImage);
-        StackPane avStack = new StackPane(av, ini);
-        VBox ui = new VBox(1);
-        Text nm = t(currentDisplayName(), boldFont(), FontWeight.BOLD, 12); nm.setFill(isDark() ? Color.WHITE : Color.web("#111827"));
-        Text rl = t(currentRoleLabel(), lightFont(), FontWeight.NORMAL, 12); rl.setFill(isDark() ? Color.web("rgba(255,255,255,0.4)") : Color.web("rgba(15,23,42,0.52)"));
-        ui.getChildren().addAll(nm, rl);
-        Text chevron = t("v", boldFont(), FontWeight.BOLD, 13); chevron.setFill(isDark() ? Color.web("rgba(255,255,255,0.65)") : Color.web("rgba(15,23,42,0.65)"));
-        up.getChildren().addAll(avStack, ui);
-        up.getChildren().add(chevron);
-
-        attachProfileDropdown(up);
-
-        h.getChildren().addAll(searchBar, sp, bell, up);
-        return h;
+    HBox createAdminHeader() {
+        return DashboardShell.buildHeader(this);
     }
 
-    private StackPane buildNotificationTrigger() {
-        StackPane bell = new StackPane();
-        bell.setPrefSize(38, 38);
-        bell.setMaxSize(38, 38);
-        bell.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";" +
-            "-fx-background-radius:19;" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:19;" +
-            "-fx-cursor:hand;"
-        );
+    private StackPane buildNotificationTrigger() { return DashboardShell.buildNotificationTrigger(this); }
 
-        Text bellIc = t("\uD83D\uDD14", boldFont(), FontWeight.BOLD, 13);
-        bellIc.setFill(isDark() ? Color.web("rgba(255,255,255,0.88)") : Color.web("rgba(15,23,42,0.84)"));
+    private VBox buildNotificationDropdownCard() { return DashboardShell.buildNotificationDropdownCard(this); }
 
-        Circle badgeDot = new Circle(4.5, Color.web("#ff3b30"));
-        StackPane.setAlignment(badgeDot, Pos.TOP_RIGHT);
-        StackPane.setMargin(badgeDot, new Insets(6, 6, 0, 0));
+    private VBox notificationRow(String title, String body, String time) { return DashboardShell.notificationRow(this, title, body, time); }
 
-        VBox dropdownCard = buildNotificationDropdownCard();
+    private void scheduleCloseNotificationPopup(StackPane anchor, VBox card) { DashboardShell.scheduleCloseNotificationPopup(this, anchor, card); }
 
-        Runnable showPopup = () -> {
-            cancelNotificationCloseDelay();
-            if (profilePopup != null && profilePopup.isShowing()) {
-                profilePopup.hide();
-            }
-            showNotificationPopupInsideStage(bell, dropdownCard);
-        };
+    private void cancelNotificationCloseDelay() { DashboardShell.cancelNotificationCloseDelay(this); }
 
-        bell.setOnMouseEntered(e -> showPopup.run());
-        bell.setOnMouseExited(e -> scheduleCloseNotificationPopup(bell, dropdownCard));
+    private void showNotificationPopupInsideStage(StackPane bell, VBox card) { DashboardShell.showNotificationPopupInsideStage(this, bell, card); }
 
-        dropdownCard.setOnMouseEntered(e -> cancelNotificationCloseDelay());
-        dropdownCard.setOnMouseExited(e -> {
-            if (!bell.isHover()) {
-                scheduleCloseNotificationPopup(bell, dropdownCard);
-            }
-        });
+    private void attachProfileDropdown(HBox profilePill) { DashboardShell.attachProfileDropdown(this, profilePill); }
 
-        bell.setOnMouseClicked(e -> {
-            if (notificationPopup != null && notificationPopup.isShowing()) {
-                notificationPopup.hide();
-            } else {
-                showPopup.run();
-            }
-        });
+    private void showProfilePopupInsideStage(HBox profilePill, VBox card) { DashboardShell.showProfilePopupInsideStage(this, profilePill, card); }
 
-        bell.getChildren().addAll(bellIc, badgeDot);
-        return bell;
-    }
+    private Button dropdownItem(String icon, String label, Runnable action) { return DashboardShell.dropdownItem(this, icon, label, action); }
 
-    private VBox buildNotificationDropdownCard() {
-        VBox box = new VBox();
-        box.setPadding(new Insets(0));
-        box.setSpacing(0);
-        box.setPrefWidth(300);
-        box.setMinWidth(300);
-        box.setMaxWidth(300);
-        box.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(12,12,18,0.94)" : "rgba(255,255,255,0.98)") + ";" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-background-radius:16px;" +
-            "-fx-border-radius:16px;" +
-            "-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
-        );
+    private Button dropdownItemWithBadge(String icon, String label, String badge, Runnable action) { return DashboardShell.dropdownItemWithBadge(this, icon, label, badge, action); }
 
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(18, 20, 14, 20));
-
-        Text title = t("Notifications", boldFont(), FontWeight.BOLD, 14);
-        title.setFill(isDark() ? Color.web("#f3f4f6") : Color.web("#111827"));
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Button close = new Button("x");
-        close.setPadding(new Insets(4, 10, 4, 10));
-        close.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
-        close.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";" +
-            "-fx-background-radius:999;" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:999;" +
-            "-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.88)" : "rgba(15,23,42,0.84)") + ";" +
-            "-fx-cursor:hand;"
-        );
-        close.setOnAction(e -> {
-            cancelNotificationCloseDelay();
-            if (notificationPopup != null) {
-                notificationPopup.hide();
-            }
-        });
-
-        VBox rows = new VBox();
-        rows.setPadding(new Insets(8));
-        rows.setSpacing(6);
-        rows.getChildren().addAll(
-            notificationRow("Syndicati", "Your community dashboard is synced", "now"),
-            notificationRow("Forum", "A new reply landed in your discussion", "5 min"),
-            notificationRow("Residence", "A maintenance update is ready", "1 h")
-        );
-
-        header.getChildren().addAll(title, spacer, close);
-        box.getChildren().addAll(header, rows);
-        return box;
-    }
-
-    private VBox notificationRow(String title, String body, String time) {
-        VBox row = new VBox();
-        row.setPadding(new Insets(10, 12, 10, 12));
-        row.setSpacing(2);
-
-        Text tTitle = t(title, boldFont(), FontWeight.BOLD, 12);
-        tTitle.setFill(isDark() ? Color.web("#f3f4f6") : Color.web("#111827"));
-        Text tBody = t(body, lightFont(), FontWeight.NORMAL, 12);
-        tBody.setFill(isDark() ? Color.web("#d4d4d8") : Color.web("#334155"));
-        Text tTime = t(time, lightFont(), FontWeight.NORMAL, 11);
-        tTime.setFill(isDark() ? Color.web("#a1a1aa") : Color.web("#64748b"));
-
-        row.getChildren().addAll(tTitle, tBody, tTime);
-        row.setStyle("-fx-background-color:transparent;-fx-background-radius:14px;");
-        row.setOnMouseEntered(e -> row.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:14px;"));
-        row.setOnMouseExited(e -> row.setStyle("-fx-background-color:transparent;-fx-background-radius:14px;"));
-        return row;
-    }
-
-    private void scheduleCloseNotificationPopup(StackPane anchor, VBox card) {
-        cancelNotificationCloseDelay();
-        notificationHideDelay = new PauseTransition(Duration.millis(180));
-        notificationHideDelay.setOnFinished(e -> {
-            if (notificationPopup != null && notificationPopup.isShowing() && !anchor.isHover() && !card.isHover()) {
-                notificationPopup.hide();
-            }
-        });
-        notificationHideDelay.playFromStart();
-    }
-
-    private void cancelNotificationCloseDelay() {
-        if (notificationHideDelay != null) {
-            notificationHideDelay.stop();
-        }
-    }
-
-    private void showNotificationPopupInsideStage(StackPane bell, VBox card) {
-        if (notificationPopup == null) {
-            notificationPopup = new Popup();
-            notificationPopup.setAutoHide(true);
-            notificationPopup.setHideOnEscape(true);
-            notificationPopup.setAutoFix(false);
-            notificationPopup.getContent().setAll(card);
-        }
-
-        var bellBounds = bell.localToScreen(bell.getBoundsInLocal());
-        if (bellBounds == null) return;
-
-        Window window = bell.getScene() != null ? bell.getScene().getWindow() : null;
-        if (window == null) return;
-
-        double width = 300;
-        double margin = 8;
-        double desiredX = bellBounds.getMaxX() - width;
-        double desiredY = bellBounds.getMaxY() + 12;
-
-        if (!notificationPopup.isShowing()) {
-            notificationPopup.show(bell, desiredX, desiredY);
-        }
-
-        double popupW = notificationPopup.getWidth() > 0 ? notificationPopup.getWidth() : width;
-        double popupH = notificationPopup.getHeight() > 0 ? notificationPopup.getHeight() : Math.max(220, card.prefHeight(width));
-
-        double minX = window.getX() + margin;
-        double maxX = window.getX() + window.getWidth() - popupW - margin;
-        double clampedX = Math.max(minX, Math.min(desiredX, maxX));
-
-        double minY = window.getY() + margin;
-        double maxY = window.getY() + window.getHeight() - popupH - margin;
-
-        double y = desiredY;
-        if (y > maxY) {
-            y = bellBounds.getMinY() - popupH - 10;
-        }
-        double clampedY = Math.max(minY, Math.min(y, maxY));
-
-        notificationPopup.setX(clampedX);
-        notificationPopup.setY(clampedY);
-    }
-
-    private void attachProfileDropdown(HBox profilePill) {
-        VBox card = new VBox(8);
-        card.setPrefWidth(280);
-        card.setPadding(new Insets(14, 12, 10, 12));
-        card.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(12,12,18,0.90)" : "rgba(255,255,255,0.98)") + ";" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-background-radius:16px;" +
-            "-fx-border-radius:16px;" +
-            "-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
-        );
-
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(0, 2, 8, 2));
-
-        Circle av = new Circle(20);
-        boolean hasAvatarImage = applyAvatarFill(av);
-        Text init = t(currentInitial(), boldFont(), FontWeight.BOLD, 16); init.setFill(Color.WHITE);
-        init.setVisible(!hasAvatarImage);
-        init.setManaged(!hasAvatarImage);
-        StackPane avatar = new StackPane(av, init);
-
-        VBox info = new VBox(2);
-        Text name = t(currentDisplayName(), boldFont(), FontWeight.BOLD, 15); name.setFill(isDark() ? Color.WHITE : Color.web("#111827"));
-        Text mail = t(currentEmail(), lightFont(), FontWeight.NORMAL, 13); mail.setFill(isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(15,23,42,0.55)"));
-        info.getChildren().addAll(name, mail);
-        header.getChildren().addAll(avatar, info);
-
-        Region sep1 = new Region();
-        sep1.setPrefHeight(1);
-        sep1.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.10)") + ";");
-
-        VBox items = new VBox(4);
-        items.getChildren().addAll(
-            dropdownItem("\uD83D\uDC64", "My Profile", () -> openFrontendPage("profile")),
-            dropdownItem("\u2302", "Main Home", () -> { if (exitCallback != null) exitCallback.run(); }),
-            dropdownItem("\u2699", "Settings", () -> openFrontendPage("settings")),
-            dropdownItemWithBadge("\uD83D\uDCB3", "Billing", "4", () -> openFrontendPage("profile"))
-        );
-
-        Region sep2 = new Region();
-        sep2.setPrefHeight(1);
-        sep2.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.10)") + ";");
-
-        Button logout = dropdownItem("\u23FB", "Log Out", () -> com.syndicati.MainApplication.getInstance().logout());
-        logout.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:#ef4444;" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        );
-        logout.setOnMouseEntered(e -> logout.setStyle(
-            "-fx-background-color:rgba(239,68,68,0.12);" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:#ef4444;" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
-        logout.setOnMouseExited(e -> logout.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:#ef4444;" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
-
-        card.getChildren().addAll(header, sep1, items, sep2, logout);
-
-        profilePopup = new Popup();
-        profilePopup.setAutoHide(true);
-        profilePopup.setHideOnEscape(true);
-        profilePopup.setAutoFix(false);
-        profilePopup.getContent().setAll(card);
-
-        PauseTransition hideDelay = new PauseTransition(Duration.millis(170));
-        hideDelay.setOnFinished(e -> {
-            if (profilePopup != null && profilePopup.isShowing() && !profilePill.isHover() && !card.isHover()) {
-                profilePopup.hide();
-            }
-        });
-
-        Runnable showPopup = () -> {
-            hideDelay.stop();
-            if (notificationPopup != null && notificationPopup.isShowing()) {
-                notificationPopup.hide();
-            }
-            showProfilePopupInsideStage(profilePill, card);
-        };
-
-        profilePill.setOnMouseEntered(e -> showPopup.run());
-        profilePill.setOnMouseExited(e -> hideDelay.playFromStart());
-
-        card.setOnMouseEntered(e -> hideDelay.stop());
-        card.setOnMouseExited(e -> {
-            if (!profilePill.isHover()) {
-                hideDelay.playFromStart();
-            }
-        });
-
-        // Keep click toggle as a fallback interaction.
-        profilePill.setOnMouseClicked(e -> {
-            if (profilePopup != null && profilePopup.isShowing()) {
-                profilePopup.hide();
-            } else {
-                showPopup.run();
-            }
-        });
-    }
-
-    private void showProfilePopupInsideStage(HBox profilePill, VBox card) {
-        if (profilePopup == null) return;
-
-        var pillBounds = profilePill.localToScreen(profilePill.getBoundsInLocal());
-        if (pillBounds == null) return;
-
-        Window window = profilePill.getScene() != null ? profilePill.getScene().getWindow() : null;
-        if (window == null) return;
-
-        double margin = 8;
-        double desiredX = pillBounds.getMaxX() - 280;
-        double desiredY = pillBounds.getMaxY() + 12;
-
-        if (!profilePopup.isShowing()) {
-            profilePopup.show(profilePill, desiredX, desiredY);
-        }
-
-        double popupW = profilePopup.getWidth() > 0 ? profilePopup.getWidth() : 280;
-        double popupH = profilePopup.getHeight() > 0 ? profilePopup.getHeight() : Math.max(260, card.prefHeight(280));
-
-        double minX = window.getX() + margin;
-        double maxX = window.getX() + window.getWidth() - popupW - margin;
-        double clampedX = Math.max(minX, Math.min(desiredX, maxX));
-
-        double minY = window.getY() + margin;
-        double maxY = window.getY() + window.getHeight() - popupH - margin;
-
-        double y = desiredY;
-        if (y > maxY) {
-            y = pillBounds.getMinY() - popupH - 10;
-        }
-        double clampedY = Math.max(minY, Math.min(y, maxY));
-
-        profilePopup.setX(clampedX);
-        profilePopup.setY(clampedY);
-    }
-
-    private Button dropdownItem(String icon, String label, Runnable action) {
-        Button b = new Button(icon + "   " + label);
-        b.setMaxWidth(Double.MAX_VALUE);
-        b.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
-        b.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.9)" : "rgba(15,23,42,0.88)") + ";" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        );
-        b.setOnMouseEntered(e -> b.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.07)") + ";" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:" + (isDark() ? "rgba(255,255,255,1)" : "rgba(15,23,42,1)") + ";" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
-        b.setOnMouseExited(e -> b.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.9)" : "rgba(15,23,42,0.88)") + ";" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
-        b.setOnAction(e -> {
-            if (profilePopup != null) profilePopup.hide();
-            if (notificationPopup != null) notificationPopup.hide();
-            action.run();
-        });
-        return b;
-    }
-
-    private Button dropdownItemWithBadge(String icon, String label, String badge, Runnable action) {
-        Button b = dropdownItem(icon, label, action);
-        b.setText(icon + "   " + label + "          " + badge);
-        return b;
-    }
-
-    private void openFrontendPage(String page) {
-        if (exitCallback != null) {
-            exitCallback.run();
-        }
-        Platform.runLater(() -> NavigationManager.getInstance().navigateTo(page));
-    }
+    private void openFrontendPage(String page) { DashboardShell.openFrontendPage(this, page); }
 
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // SECTION DISPATCHER
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildSection(String section) {
+    VBox buildSection(String section) {
         switch (section) {
             case "users":     return buildUsersSection();
             case "forum":     return buildForumSection();
@@ -915,7 +401,7 @@ public class DashboardView implements ViewInterface {
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // GENERAL section
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildGeneralSection() {
+    VBox buildGeneralSection() {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
         VBox subContent = new VBox(20); subContent.setFillWidth(true);
         HBox subBar = subTabBar(new String[]{"Overview","Engagement","System"}, "Overview", key -> {
@@ -1072,357 +558,40 @@ public class DashboardView implements ViewInterface {
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // USERS section (Twig: switcher Users/Profile/Onboarding)
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildUsersSection() {
-        VBox s = moduleShell("Users", "\uD83D\uDC65");
-        VBox body = new VBox(16);
-        HBox sub = moduleModeSwitcher(new String[]{"Users", "Profile", "Onboarding"}, "Users", key -> {
-            body.getChildren().setAll(
-                "Profile".equals(key) ? usersProfilePane() :
-                "Onboarding".equals(key) ? usersOnboardingPane() :
-                usersTablePane()
-            );
-        });
-        body.getChildren().add(usersTablePane());
-        s.getChildren().addAll(sub, body);
-        return s;
-    }
+    VBox buildUsersSection() { return DashboardUsersSection.build(this); }
 
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // FORUM section (Twig: Publications/Commentaires/Reactions)
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildForumSection() {
-        VBox s = moduleShell("Forum", "\uD83D\uDCAC");
-        VBox body = new VBox(16);
-        HBox sub = moduleModeSwitcher(new String[]{"Publications", "Commentaires", "Reactions"}, "Publications", key -> {
-            body.getChildren().setAll(
-                "Commentaires".equals(key) ? forumCommentsPane() :
-                "Reactions".equals(key) ? forumReactionsPane() :
-                forumPublicationsPane()
-            );
-        });
-        body.getChildren().add(forumPublicationsPane());
-        s.getChildren().addAll(sub, body);
-        return s;
-    }
+    VBox buildForumSection() { return DashboardForumSection.build(this); }
 
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // SYNDICAT section (Twig: Reclamations/Responses)
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildSyndicatSection() {
-        VBox s = moduleShell("Syndicat", "\uD83C\uDFDB\uFE0F");
-        VBox body = new VBox(16);
-        HBox sub = moduleModeSwitcher(new String[]{"Reclamations", "Responses"}, "Reclamations", key -> {
-            body.getChildren().setAll("Responses".equals(key) ? syndicatResponsesPane() : syndicatReclamationsPane());
-        });
-        body.getChildren().add(syndicatReclamationsPane());
-        s.getChildren().addAll(sub, body);
-        return s;
-    }
+    VBox buildSyndicatSection() { return DashboardSyndicatSection.build(this); }
 
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // RESIDENCE section (Twig: Residences/Appartements/Maintenance)
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildResidenceSection() {
-        VBox s = moduleShell("Residence", "\uD83C\uDFE2");
-        VBox body = new VBox(16);
-        HBox sub = moduleModeSwitcher(new String[]{"Residences", "Appartements", "Maintenance"}, "Residences", key -> {
-            body.getChildren().setAll(
-                "Appartements".equals(key) ? residenceApartmentsPane() :
-                "Maintenance".equals(key) ? residenceMaintenancePane() :
-                residenceTablePane()
-            );
-        });
-        body.getChildren().add(residenceTablePane());
-        s.getChildren().addAll(sub, body);
-        return s;
-    }
+    VBox buildResidenceSection() { return DashboardResidenceSection.build(this); }
 
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // EVENEMENT section (Twig: Evenements/Participations)
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox buildEvenementSection() {
-        VBox s = moduleShell("Evenement", "\uD83C\uDF89");
-        VBox body = new VBox(16);
-        HBox sub = moduleModeSwitcher(new String[]{"Evenements", "Participations"}, "Evenements", key -> {
-            body.getChildren().setAll("Participations".equals(key) ? eventParticipationsPane() : eventTablePane());
-        });
-        body.getChildren().add(eventTablePane());
-        s.getChildren().addAll(sub, body);
-        return s;
-    }
+    VBox buildEvenementSection() { return DashboardEvenementSection.build(this); }
 
-    private VBox usersTablePane() {
-        VBox wrap = new VBox(16);
-        List<User> users = userController.users();
-
-        int registered = users.size();
-        int verified = 0;
-        int pending = 0;
-        int active7Day = 0;
-        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
-
-        for (User user : users) {
-            if (user.isVerified()) {
-                verified++;
-            } else {
-                pending++;
-            }
-
-            LocalDateTime updatedAt = user.getUpdatedAt();
-            if (updatedAt != null && updatedAt.isAfter(sevenDaysAgo)) {
-                active7Day++;
-            }
-        }
-
-        HBox stats = new HBox(16); stats.setFillHeight(true);
-        addStatCards(stats,
-            new String[]{"USR", "VER", "PEN", "ACT"},
-            new String[]{"Registered", "Verified", "Pending", "7-Day Active"},
-            new String[]{String.valueOf(registered), String.valueOf(verified), String.valueOf(pending), String.valueOf(active7Day)},
-            new String[]{"#60a5fa", "#34d399", "#fbbf24", "#a78bfa"}
-        );
-
-        String[][] userRows;
-        if (users.isEmpty()) {
-            userRows = new String[][]{{"No users found", "-", "-", "-", "-"}};
-        } else {
-            userRows = new String[users.size()][5];
-            for (int i = 0; i < users.size(); i++) {
-                User u = users.get(i);
-                String fullName = ((u.getFirstName() == null ? "" : u.getFirstName()) + " " + (u.getLastName() == null ? "" : u.getLastName())).trim();
-                if (fullName.isEmpty()) {
-                    fullName = "User #" + (u.getIdUser() == null ? "-" : u.getIdUser());
-                }
-                String status = u.isDisabled() ? "Disabled" : (u.isVerified() ? "Active" : "Pending");
-
-                userRows[i][0] = fullName;
-                userRows[i][1] = safe(u.getEmailUser());
-                userRows[i][2] = safe(u.getRoleUser());
-                userRows[i][3] = u.isVerified() ? "Yes" : "No";
-                userRows[i][4] = status;
-            }
-        }
-
-        wrap.getChildren().addAll(stats, dataTableWithCrud("Users Table", "User",
-            new String[]{"Name", "Email", "Role", "Verified", "Status"},
-            userRows, true, true
-        ));
-        return wrap;
-    }
-
-    private VBox usersProfilePane() {
-        VBox wrap = new VBox(16);
-        List<Profile> profiles = profileController.profiles();
-        
-        // Statistics cards
-        HBox stats = new HBox(16);
-        stats.setFillHeight(true);
-        int totalProfiles = profiles.size();
-        int withAvatar = (int) profiles.stream().filter(p -> p.getAvatar() != null && !p.getAvatar().isEmpty()).count();
-        int withDescription = (int) profiles.stream().filter(p -> p.getDescriptionProfile() != null && !p.getDescriptionProfile().isEmpty()).count();
-        
-        addStatCards(stats,
-            new String[]{"PFL", "AVT", "BIO", "LOC"},
-            new String[]{"Total Profiles", "With Avatar", "With Bio", "Locales Set"},
-            new String[]{String.valueOf(totalProfiles), String.valueOf(withAvatar), String.valueOf(withDescription), "â€”"},
-            new String[]{"#60a5fa", "#34d399", "#a78bfa", "#fbbf24"}
-        );
-        
-        String[][] profileRows;
-        if (profiles.isEmpty()) {
-            profileRows = new String[][]{{"-", "-", "No profile data", "-", "-", "-"}};
-        } else {
-            profileRows = new String[profiles.size()][6];
-            for (int i = 0; i < profiles.size(); i++) {
-                Profile p = profiles.get(i);
-                profileRows[i][0] = String.valueOf(p.getIdProfile());
-                profileRows[i][1] = String.valueOf(p.getUserId());
-                profileRows[i][2] = safe(p.getLocale());
-                profileRows[i][3] = p.getTheme() == null ? "-" : String.valueOf(p.getTheme());
-                profileRows[i][4] = p.getTimezone() == null ? "-" : String.valueOf(p.getTimezone());
-                profileRows[i][5] = safe(p.getAvatar());
-            }
-        }
-
-        wrap.getChildren().addAll(stats, dataTableWithCrud("User Profile Data", "Profile",
-            new String[]{"Profile ID", "User ID", "Locale", "Theme", "Timezone", "Avatar"},
-            profileRows, false, true
-        ));
-        return wrap;
-    }
-
-    private VBox usersOnboardingPane() {
-        VBox wrap = new VBox(14);
-        List<Onboarding> onboardings = onboardingController.onboardings();
-        String[][] onboardingRows;
-
-        if (onboardings.isEmpty()) {
-            onboardingRows = new String[][]{{"-", "-", "-", "-", "No onboarding data", "-", "-"}};
-        } else {
-            onboardingRows = new String[onboardings.size()][7];
-            for (int i = 0; i < onboardings.size(); i++) {
-                Onboarding o = onboardings.get(i);
-                onboardingRows[i][0] = String.valueOf(o.getIdOnboarding());
-                onboardingRows[i][1] = String.valueOf(o.getUserId());
-                onboardingRows[i][2] = String.valueOf(o.getStep());
-                onboardingRows[i][3] = o.isCompleted() ? "Yes" : "No";
-                onboardingRows[i][4] = safe(o.getSelectedLocale());
-                onboardingRows[i][5] = safe(o.getSelectedTheme());
-                onboardingRows[i][6] = formatDateTime(o.getUpdatedAt());
-            }
-        }
-
-        wrap.getChildren().add(dataTableWithCrud("Onboarding Data", "Onboarding",
-            new String[]{"Onboarding ID", "User ID", "Step", "Completed", "Locale", "Theme", "Updated"},
-            onboardingRows, false, true
-        ));
-        return wrap;
-    }
-
-    private String safe(String value) {
+    String safe(String value) {
         return value == null || value.isBlank() ? "-" : value;
     }
 
-    private String formatDateTime(LocalDateTime value) {
+    String formatDateTime(LocalDateTime value) {
         return value == null ? "-" : value.format(DASHBOARD_DATE_TIME_FMT);
-    }
-
-    private VBox forumPublicationsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Forum Publications", "Publication",
-            new String[]{"Title", "Author", "Category", "Comments", "Date"},
-            new String[][]{
-                {"Reunion copropriete - Batiment A", "Ahmed B.", "Announcements", "12", "Mar 11"},
-                {"Question sur les charges communes", "Leila M.", "General", "7", "Mar 10"},
-                {"Electricite cage d'escalier", "Karim S.", "Issues", "4", "Mar 9"},
-                {"Nouveau reglement interieur", "Sara A.", "Announcements", "18", "Mar 8"}
-            }, true, true
-        ));
-        return wrap;
-    }
-
-    private VBox forumCommentsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Forum Comments", "Comment",
-            new String[]{"Publication", "Author", "Snippet", "Likes", "Date"},
-            new String[][]{
-                {"Reunion copropriete", "Leila M.", "Merci pour le compte rendu.", "6", "Mar 11"},
-                {"Charges communes", "Omar Z.", "Peut-on avoir le detail ?", "2", "Mar 10"},
-                {"Reglement", "Karim S.", "C'est valide pour mon bloc.", "3", "Mar 9"}
-            }, false, true
-        ));
-        return wrap;
-    }
-
-    private VBox forumReactionsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Forum Reactions", "Reaction",
-            new String[]{"User", "Target", "Type", "Count", "Updated"},
-            new String[][]{
-                {"Ahmed B.", "Publication #88", "Like", "24", "Mar 11"},
-                {"Sara A.", "Comment #143", "Love", "9", "Mar 10"},
-                {"Leila M.", "Publication #86", "Like", "17", "Mar 9"}
-            }, false, true
-        ));
-        return wrap;
-    }
-
-    private VBox syndicatReclamationsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Reclamations", "Reclamation",
-            new String[]{"Reference", "Resident", "Type", "Status", "Date"},
-            new String[][]{
-                {"REC-2024-0156", "Ahmed B.", "Maintenance", "Pending", "Mar 11"},
-                {"REC-2024-0155", "Leila M.", "Noise", "Resolved", "Mar 10"},
-                {"REC-2024-0154", "Karim S.", "Elevator", "Urgent", "Mar 9"}
-            }, false, true
-        ));
-        return wrap;
-    }
-
-    private VBox syndicatResponsesPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Responses", "Response",
-            new String[]{"Reclamation", "Agent", "Response", "Sent", "State"},
-            new String[][]{
-                {"REC-2024-0155", "Syndic Team", "Inspection completed", "Mar 10", "Delivered"},
-                {"REC-2024-0152", "Syndic Team", "Technician scheduled", "Mar 8", "Delivered"},
-                {"REC-2024-0149", "Support", "Need more details", "Mar 7", "Awaiting Reply"}
-            }, false, false
-        ));
-        return wrap;
-    }
-
-    private VBox residenceTablePane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Residences", "Residence",
-            new String[]{"Residence", "Address", "Units", "Syndic", "Status"},
-            new String[][]{
-                {"Residence Jasmin", "Bardo", "120", "Ahmed B.", "Active"},
-                {"Residence Mimosa", "Lac 2", "86", "Leila M.", "Active"},
-                {"Residence Olive", "Menzah", "64", "Karim S.", "Maintenance"}
-            }, true, true
-        ));
-        return wrap;
-    }
-
-    private VBox residenceApartmentsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Appartements", "Appartement",
-            new String[]{"Unit", "Residence", "Resident", "Floor", "State"},
-            new String[][]{
-                {"A-101", "Jasmin", "Ahmed B.", "1", "Occupied"},
-                {"A-202", "Jasmin", "Leila M.", "2", "Occupied"},
-                {"B-105", "Mimosa", "-", "1", "Available"},
-                {"C-401", "Olive", "-", "4", "Available"}
-            }, true, true
-        ));
-        return wrap;
-    }
-
-    private VBox residenceMaintenancePane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Maintenance", "Maintenance Ticket",
-            new String[]{"Ticket", "Residence", "Issue", "Priority", "Status"},
-            new String[][]{
-                {"MNT-301", "Jasmin", "Water Pump", "High", "In Progress"},
-                {"MNT-298", "Mimosa", "Garage Lighting", "Medium", "Open"},
-                {"MNT-296", "Olive", "Lift Noise", "Low", "Scheduled"}
-            }, false, false
-        ));
-        return wrap;
-    }
-
-    private VBox eventTablePane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Evenements", "Event",
-            new String[]{"Title", "Type", "Date", "Enrolled", "Status"},
-            new String[][]{
-                {"Assemblee Generale 2024", "Meeting", "Mar 20", "47", "Open"},
-                {"Fete de quartier", "Social", "Apr 5", "120", "Open"},
-                {"Formation securite incendie", "Training", "Apr 12", "30", "Limited"}
-            }, true, true
-        ));
-        return wrap;
-    }
-
-    private VBox eventParticipationsPane() {
-        VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Participations", "Participation",
-            new String[]{"Event", "Resident", "Seat", "Checked-in", "Date"},
-            new String[][]{
-                {"Assemblee Generale 2024", "Ahmed B.", "A12", "No", "Mar 20"},
-                {"Fete de quartier", "Leila M.", "B03", "No", "Apr 5"},
-                {"Formation securite incendie", "Omar Z.", "C08", "No", "Apr 12"}
-            }, false, true
-        ));
-        return wrap;
     }
 
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // SHARED HELPERS
     // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    private VBox moduleShell(String name, String icon) {
+    VBox moduleShell(String name, String icon) {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
         HBox heading = new HBox(10); heading.setAlignment(Pos.CENTER_LEFT);
         Text ic = new Text(icon); ic.setFont(Font.font(20));
@@ -1432,7 +601,7 @@ public class DashboardView implements ViewInterface {
         return s;
     }
 
-    private void addStatCards(HBox row, String[] icons, String[] labels, String[] values, String[] colors) {
+    void addStatCards(HBox row, String[] icons, String[] labels, String[] values, String[] colors) {
         for (int i = 0; i < labels.length; i++) {
             VBox card = statCard(icons[i], labels[i], values[i], colors[i]);
             HBox.setHgrow(card, Priority.ALWAYS);
@@ -1518,7 +687,11 @@ public class DashboardView implements ViewInterface {
         return card;
     }
 
-    private VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, boolean allowEdit) {
+    VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, boolean allowEdit) {
+        return dataTableWithCrud(title, entityLabel, cols, rows, allowAdd, allowEdit, null);
+    }
+
+    VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, boolean allowEdit, Node headerControls) {
         CrudSpec spec = crudSpec(title, entityLabel);
         
         StackPane faceContainer = new StackPane();
@@ -1541,6 +714,18 @@ public class DashboardView implements ViewInterface {
         VBox card = glassCard();
         card.setPadding(new Insets(16, 16, 14, 16));
 
+        final int pageSize = 10;
+        final String[][] sourceRows = rows == null ? new String[0][] : rows;
+
+        final class PagerState {
+            int page = 1;
+            String searchTerm = "";
+            String filterKey = "all";
+        }
+        final PagerState pagerState = new PagerState();
+
+        final Runnable[] refreshTable = new Runnable[1];
+
         HBox head = new HBox(10);
         head.setAlignment(Pos.CENTER_LEFT);
         Text tt = t(title, boldFont(), FontWeight.BOLD, 18); tt.setFill(textPrimaryColor());
@@ -1549,7 +734,72 @@ public class DashboardView implements ViewInterface {
         VBox titleWrap = new VBox(2, tt, sub);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        head.getChildren().addAll(titleWrap, spacer);
+        head.getChildren().add(titleWrap);
+
+        if ("Users Table".equals(title) && headerControls == null) {
+            TextField usersSearch = new TextField();
+            usersSearch.setPromptText("Search users...");
+            usersSearch.setPrefWidth(240);
+            usersSearch.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
+            usersSearch.setStyle(
+                "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
+                "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
+                "-fx-border-width:1;" +
+                "-fx-border-radius:10px;" +
+                "-fx-background-radius:10px;" +
+                "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
+                "-fx-prompt-text-fill:" + (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
+            );
+
+            HBox usersFilters = new HBox(6);
+            usersFilters.setAlignment(Pos.CENTER_LEFT);
+
+            String[][] usersFilterDefs = new String[][]{
+                {"all", "All"},
+                {"verified", "Verified"},
+                {"pending", "Pending"},
+                {"active", "Active"},
+                {"disabled", "Disabled"}
+            };
+
+            Map<String, Button> usersFilterButtons = new LinkedHashMap<>();
+            for (String[] def : usersFilterDefs) {
+                String key = def[0];
+                Button b = pillAction(def[1], "all".equals(key));
+                b.setOnAction(e -> {
+                    pagerState.filterKey = key;
+                    pagerState.page = 1;
+                    usersFilterButtons.forEach((k, btn) -> {
+                        btn.setStyle(k.equals(pagerState.filterKey)
+                            ? "-fx-background-color:" + accentRgba(0.24) + ";-fx-border-color:" + accentRgba(0.34) + ";-fx-border-width:1;-fx-background-radius:100px;-fx-border-radius:100px;-fx-text-fill:white;-fx-cursor:hand;"
+                            : "-fx-background-color:transparent;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)") + ";-fx-border-width:1;-fx-background-radius:100px;-fx-border-radius:100px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)") + ";-fx-cursor:hand;"
+                        );
+                    });
+                    refreshTable[0].run();
+                });
+                usersFilterButtons.put(key, b);
+                usersFilters.getChildren().add(b);
+            }
+
+            usersSearch.textProperty().addListener((obs, oldVal, newVal) -> {
+                pagerState.searchTerm = newVal == null ? "" : newVal;
+                pagerState.page = 1;
+                refreshTable[0].run();
+            });
+
+            VBox usersControls = new VBox(6, usersSearch, usersFilters);
+            usersControls.setAlignment(Pos.CENTER_LEFT);
+            head.getChildren().add(usersControls);
+        }
+
+        if (headerControls != null) {
+            if (headerControls instanceof Region) {
+                ((Region) headerControls).setMinWidth(Region.USE_PREF_SIZE);
+            }
+            head.getChildren().add(headerControls);
+        }
+
+        head.getChildren().add(spacer);
 
         if (allowAdd) {
             Button addBtn = pillAction(spec.addButtonLabel, true);
@@ -1561,6 +811,8 @@ public class DashboardView implements ViewInterface {
         tbl.setHgap(0);
         tbl.setVgap(0);
         tbl.setMaxWidth(Double.MAX_VALUE);
+        VBox tableWrap = new VBox(tbl);
+        tableWrap.setFillWidth(true);
 
         int displayCols = cols.length + 1;
         for (int c = 0; c < displayCols; c++) {
@@ -1569,6 +821,17 @@ public class DashboardView implements ViewInterface {
             cc.setFillWidth(true);
             tbl.getColumnConstraints().add(cc);
         }
+        HBox pagerInfo = new HBox(8);
+        pagerInfo.setAlignment(Pos.CENTER_LEFT);
+        Text pageLabel = t("", lightFont(), FontWeight.NORMAL, 12);
+        pageLabel.setFill(textMutedColor());
+        Button prevBtn = pillAction("<", false);
+        Button nextBtn = pillAction(">", false);
+        HBox pageNumberBox = new HBox(6);
+        pageNumberBox.setAlignment(Pos.CENTER);
+        HBox pager = new HBox(8, prevBtn, pageNumberBox, nextBtn, pageLabel);
+        pager.setAlignment(Pos.CENTER);
+        pager.setPadding(new Insets(8, 0, 0, 0));
 
         for (int c = 0; c < cols.length; c++) {
             Text col = t(cols[c].toUpperCase(), boldFont(), FontWeight.BOLD, 12);
@@ -1585,44 +848,132 @@ public class DashboardView implements ViewInterface {
         actionHeader.setStyle("-fx-border-color:rgba(255,255,255,0.06);-fx-border-width:0 0 1 0;");
         tbl.add(actionHeader, cols.length, 0);
 
-        for (int r = 0; r < rows.length; r++) {
-            String bg = (r % 2 == 0) ? "transparent" : "rgba(255,255,255,0.01)";
-            for (int c = 0; c < rows[r].length; c++) {
-                Text tx = t(rows[r][c], lightFont(), FontWeight.NORMAL, 14);
-                tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
-                HBox cb = new HBox(tx);
-                cb.setPadding(new Insets(10,12,10,12));
-                cb.setStyle("-fx-background-color:" + bg + ";");
-                cb.setOnMouseEntered(e -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
-                cb.setOnMouseExited(e -> cb.setStyle("-fx-background-color:" + bg + ";"));
-                tbl.add(cb, c, r + 1);
+        refreshTable[0] = () -> {
+            tbl.getChildren().removeIf(node -> GridPane.getRowIndex(node) != null && GridPane.getRowIndex(node) > 0);
+
+            List<String[]> workingRows = new ArrayList<>();
+            for (String[] row : sourceRows) {
+                if (row == null) {
+                    continue;
+                }
+
+                if ("Users Table".equals(title)) {
+                    String q = pagerState.searchTerm == null ? "" : pagerState.searchTerm.trim().toLowerCase();
+                    if (!q.isEmpty()) {
+                        boolean match = false;
+                        for (String cell : row) {
+                            if (cell != null && cell.toLowerCase().contains(q)) {
+                                match = true;
+                                break;
+                            }
+                        }
+                        if (!match) {
+                            continue;
+                        }
+                    }
+
+                    String key = pagerState.filterKey == null ? "all" : pagerState.filterKey;
+                    if ("verified".equals(key) && (row.length < 4 || !"Yes".equalsIgnoreCase(row[3]))) {
+                        continue;
+                    }
+                    if ("pending".equals(key) && (row.length < 5 || !"Pending".equalsIgnoreCase(row[4]))) {
+                        continue;
+                    }
+                    if ("active".equals(key) && (row.length < 5 || !"Active".equalsIgnoreCase(row[4]))) {
+                        continue;
+                    }
+                    if ("disabled".equals(key) && (row.length < 5 || !"Disabled".equalsIgnoreCase(row[4]))) {
+                        continue;
+                    }
+                }
+
+                workingRows.add(row);
             }
 
-            HBox rowActions = new HBox(6);
-            rowActions.setAlignment(Pos.CENTER_LEFT);
-            rowActions.setPadding(new Insets(8, 12, 8, 12));
-            rowActions.setStyle("-fx-background-color:" + bg + ";");
+            int totalRows = workingRows.size();
+            int totalPages = Math.max(1, (int) Math.ceil(totalRows / (double) pageSize));
 
-            String[] rowData = rows[r];
-            Button viewBtn = pillAction("View", false);
-            viewBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
-            rowActions.getChildren().add(viewBtn);
+            if (totalRows == 0) {
+                HBox emptyCell = new HBox(t("No records found", lightFont(), FontWeight.NORMAL, 14));
+                emptyCell.setPadding(new Insets(12, 12, 12, 12));
+                emptyCell.setStyle("-fx-border-color:rgba(255,255,255,0.06);-fx-border-width:0 0 1 0;");
+                tbl.add(emptyCell, 0, 1, cols.length + 1, 1);
+                pageLabel.setText("Page 1 / 1 | 0 records");
+                prevBtn.setDisable(true);
+                nextBtn.setDisable(true);
+                prevBtn.setOpacity(0.55);
+                nextBtn.setOpacity(0.55);
+                return;
+            }
 
-            tbl.add(rowActions, cols.length, r + 1);
-        }
+            int safePage = Math.max(1, Math.min(pagerState.page, totalPages));
+            pagerState.page = safePage;
+            int fromIndex = (safePage - 1) * pageSize;
+            int toIndex = Math.min(fromIndex + pageSize, totalRows);
 
-        HBox pager = new HBox(8);
-        pager.setAlignment(Pos.CENTER);
-        pager.setPadding(new Insets(8, 0, 0, 0));
-        pager.getChildren().addAll(
-            pagerBtn("<", false),
-            pagerBtn("1", true),
-            pagerBtn("2", false),
-            pagerBtn("3", false),
-            pagerBtn(">", false)
-        );
+            for (int r = fromIndex; r < toIndex; r++) {
+                String bg = ((r - fromIndex) % 2 == 0) ? "transparent" : "rgba(255,255,255,0.01)";
+                String[] rowData = workingRows.get(r);
+                for (int c = 0; c < rowData.length; c++) {
+                    Text tx = t(rowData[c], lightFont(), FontWeight.NORMAL, 14);
+                    tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
+                    HBox cb = new HBox(tx);
+                    cb.setPadding(new Insets(10,12,10,12));
+                    cb.setStyle("-fx-background-color:" + bg + ";");
+                    cb.setOnMouseEntered(e -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
+                    cb.setOnMouseExited(e -> cb.setStyle("-fx-background-color:" + bg + ";"));
+                    tbl.add(cb, c, (r - fromIndex) + 1);
+                }
 
-        card.getChildren().addAll(head, tbl, pager);
+                HBox rowActions = new HBox(6);
+                rowActions.setAlignment(Pos.CENTER_LEFT);
+                rowActions.setPadding(new Insets(8, 12, 8, 12));
+                rowActions.setStyle("-fx-background-color:" + bg + ";");
+
+                Button viewBtn = pillAction("View", false);
+                viewBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
+                rowActions.getChildren().add(viewBtn);
+
+                tbl.add(rowActions, cols.length, (r - fromIndex) + 1);
+            }
+
+            pageLabel.setText("Page " + safePage + " / " + totalPages + " | " + totalRows + " records");
+            prevBtn.setDisable(safePage <= 1);
+            nextBtn.setDisable(safePage >= totalPages);
+            prevBtn.setOpacity(prevBtn.isDisable() ? 0.55 : 1.0);
+            nextBtn.setOpacity(nextBtn.isDisable() ? 0.55 : 1.0);
+
+            pageNumberBox.getChildren().clear();
+            int maxButtons = 3;
+            int start = Math.max(1, safePage - 1);
+            int end = Math.min(totalPages, start + maxButtons - 1);
+            start = Math.max(1, end - maxButtons + 1);
+
+            for (int pageNum = start; pageNum <= end; pageNum++) {
+                final int targetPage = pageNum;
+                Button pageBtn = pagerBtn(String.valueOf(pageNum), pageNum == safePage);
+                pageBtn.setDisable(pageNum == safePage);
+                pageBtn.setOpacity(pageNum == safePage ? 1.0 : 0.95);
+                pageBtn.setOnAction(e -> {
+                    pagerState.page = targetPage;
+                    refreshTable[0].run();
+                });
+                pageNumberBox.getChildren().add(pageBtn);
+            }
+        };
+
+        prevBtn.setOnAction(e -> {
+            pagerState.page--;
+            refreshTable[0].run();
+        });
+        nextBtn.setOnAction(e -> {
+            pagerState.page++;
+            refreshTable[0].run();
+        });
+
+        refreshTable[0].run();
+
+        card.getChildren().addAll(head, tableWrap, pager);
         tableCard.getChildren().add(card);
         
         StackPane.setAlignment(tableCard, Pos.TOP_CENTER);
@@ -1762,7 +1113,7 @@ public class DashboardView implements ViewInterface {
         return s;
     }
 
-    private Button pillAction(String text, boolean primary) {
+    Button pillAction(String text, boolean primary) {
         Button b = new Button(text);
         b.setFont(Font.font(lightFont(), FontWeight.NORMAL, 10));
         b.setPadding(new Insets(4, 10, 4, 10));
@@ -1818,7 +1169,7 @@ public class DashboardView implements ViewInterface {
             if (spec.viewDeleteLabel != null) {
                 Button del = dangerAction(spec.viewDeleteLabel);
                 del.setOnAction(e -> {
-                    if (handleDeleteAction(entityLabel, rowData)) {
+                    if (dashboardAdminService.deleteEntity(entityLabel, rowData)) {
                         switchSection(activeSection);
                     } else {
                         switchToTableFace(container);
@@ -1833,7 +1184,7 @@ public class DashboardView implements ViewInterface {
             String saveLabel = "add".equals(mode) ? spec.saveAddLabel : spec.saveEditLabel;
             Button save = pillAction(saveLabel, true);
             save.setOnAction(e -> {
-                if (handleSaveAction(entityLabel, mode, cols, rowData, fields)) {
+                if (dashboardAdminService.saveEntity(entityLabel, mode, rowData, fields)) {
                     switchSection(activeSection);
                 } else {
                     switchToTableFace(container);
@@ -1858,202 +1209,6 @@ public class DashboardView implements ViewInterface {
         
         tableCard.setVisible(true);
         modalFace.setVisible(false);
-    }
-
-    private boolean handleSaveAction(String entityLabel, String mode, String[] cols, String[] originalRowData, VBox fields) {
-        if ("User".equalsIgnoreCase(entityLabel)) {
-            return handleUserSave(mode, originalRowData, fields);
-        } else if ("Profile".equalsIgnoreCase(entityLabel)) {
-            return handleProfileSave(mode, originalRowData, fields);
-        }
-        return false;
-    }
-
-    private boolean handleUserSave(String mode, String[] originalRowData, VBox fields) {
-        Map<String, String> values = readEditableFieldValues(fields);
-        String name = safe(values.get("Name"));
-        String email = safe(values.get("Email"));
-        String role = safe(values.get("Role")).toUpperCase();
-        String verifiedText = safe(values.get("Verified"));
-        String statusText = safe(values.get("Status"));
-
-        if ("-".equals(name) || "-".equals(email) || "-".equals(role)) {
-            return false;
-        }
-
-        String[] splitName = splitName(name);
-        boolean verified = isTruthy(verifiedText);
-        boolean disabled = "DISABLED".equalsIgnoreCase(statusText);
-
-        if ("add".equals(mode)) {
-            User user = new User();
-            user.setFirstName(splitName[0]);
-            user.setLastName(splitName[1]);
-            user.setEmailUser(email);
-            user.setRoleUser(role);
-            user.setVerified(verified);
-            user.setDisabled(disabled);
-            user.setPasswordUser("ChangeMe#2026");
-            return userController.userAdd(user) > 0;
-        }
-
-        if ("edit".equals(mode)) {
-            String oldEmail = (originalRowData != null && originalRowData.length > 1) ? originalRowData[1] : email;
-            Optional<User> existingOpt = userController.userByEmail(oldEmail);
-            if (existingOpt.isEmpty()) {
-                existingOpt = userController.userByEmail(email);
-            }
-            if (existingOpt.isEmpty()) {
-                return false;
-            }
-
-            User existing = existingOpt.get();
-            existing.setFirstName(splitName[0]);
-            existing.setLastName(splitName[1]);
-            existing.setEmailUser(email);
-            existing.setRoleUser(role);
-            existing.setVerified(verified);
-            existing.setDisabled(disabled);
-            if (existing.getPasswordUser() == null || existing.getPasswordUser().isBlank()) {
-                existing.setPasswordUser("ChangeMe#2026");
-            }
-            return userController.userEdit(existing);
-        }
-
-        return false;
-    }
-
-    private boolean handleProfileSave(String mode, String[] originalRowData, VBox fields) {
-        Map<String, String> values = readEditableFieldValues(fields);
-        
-        if ("add".equals(mode)) {
-            // For adding profile, we need at least a User ID
-            String userIdStr = safe(values.get("User ID"));
-            if ("-".equals(userIdStr)) {
-                return false;
-            }
-            try {
-                int userId = Integer.parseInt(userIdStr);
-                Profile profile = new Profile();
-                profile.setUserId(userId);
-                profile.setLocale(safe(values.get("Locale")));
-                String themeStr = safe(values.get("Theme"));
-                profile.setTheme("-".equals(themeStr) ? null : Integer.parseInt(themeStr));
-                String tzStr = safe(values.get("Timezone"));
-                profile.setTimezone("-".equals(tzStr) ? null : Integer.parseInt(tzStr));
-                profile.setAvatar(null); // Avatar upload handled separately
-                profile.setDescriptionProfile(safe(values.get("Bio")));
-                
-                Optional<Integer> createdIdOpt = profileController.profileCreate(profile);
-                return createdIdOpt.isPresent();
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if ("edit".equals(mode)) {
-            String profileIdStr = (originalRowData != null && originalRowData.length > 0) ? originalRowData[0] : "-";
-            if ("-".equals(profileIdStr)) {
-                return false;
-            }
-            try {
-                int profileId = Integer.parseInt(profileIdStr);
-                Optional<Profile> existingOpt = profileController.profileById(profileId);
-                if (existingOpt.isEmpty()) {
-                    return false;
-                }
-                
-                Profile existing = existingOpt.get();
-                existing.setLocale(safe(values.get("Locale")));
-                String themeStr = safe(values.get("Theme"));
-                existing.setTheme("-".equals(themeStr) ? null : Integer.parseInt(themeStr));
-                String tzStr = safe(values.get("Timezone"));
-                existing.setTimezone("-".equals(tzStr) ? null : Integer.parseInt(tzStr));
-                existing.setDescriptionProfile(safe(values.get("Bio")));
-                // Avatar update handled separately
-                
-                return profileController.profileUpdate(existing);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        
-        return false;
-    }
-
-    private boolean handleDeleteAction(String entityLabel, String[] rowData) {
-        if ("User".equalsIgnoreCase(entityLabel)) {
-            return handleUserDelete(rowData);
-        } else if ("Profile".equalsIgnoreCase(entityLabel)) {
-            return handleProfileDelete(rowData);
-        }
-        return false;
-    }
-
-    private boolean handleUserDelete(String[] rowData) {
-        if (rowData == null || rowData.length < 2) {
-            return false;
-        }
-
-        String email = rowData[1];
-        Optional<User> existing = userController.userByEmail(email);
-        return existing.filter(user -> user.getIdUser() != null)
-            .map(user -> userController.userDelete(user.getIdUser()))
-            .orElse(false);
-    }
-
-    private boolean handleProfileDelete(String[] rowData) {
-        if (rowData == null || rowData.length < 1) {
-            return false;
-        }
-
-        String profileIdStr = rowData[0];
-        try {
-            int profileId = Integer.parseInt(profileIdStr);
-            return profileController.profileDelete(profileId);
-        } catch (NumberFormatException e) {
-            return false;
-        }
-    }
-
-    private Map<String, String> readEditableFieldValues(VBox fields) {
-        Map<String, String> values = new LinkedHashMap<>();
-        for (Node node : fields.getChildren()) {
-            if (!(node instanceof VBox)) {
-                continue;
-            }
-            VBox row = (VBox) node;
-            if (row.getChildren().size() < 2) {
-                continue;
-            }
-            Node labelNode = row.getChildren().get(0);
-            Node inputNode = row.getChildren().get(1);
-            if (labelNode instanceof Text && inputNode instanceof TextField) {
-                String label = ((Text) labelNode).getText();
-                String value = ((TextField) inputNode).getText();
-                values.put(label, value);
-            }
-        }
-        return values;
-    }
-
-    private String[] splitName(String fullName) {
-        String normalized = fullName == null ? "" : fullName.trim();
-        if (normalized.isEmpty()) {
-            return new String[]{"Unknown", "User"};
-        }
-
-        String[] parts = normalized.split("\\s+", 2);
-        if (parts.length == 1) {
-            return new String[]{parts[0], parts[0]};
-        }
-        return new String[]{parts[0], parts[1]};
-    }
-
-    private boolean isTruthy(String value) {
-        String normalized = value == null ? "" : value.trim();
-        return "yes".equalsIgnoreCase(normalized)
-            || "true".equalsIgnoreCase(normalized)
-            || "1".equalsIgnoreCase(normalized)
-            || "verified".equalsIgnoreCase(normalized);
     }
 
     private VBox buildModalFields(CrudSpec spec, String mode, String[] cols, String[] rowData, boolean editable) {
@@ -2261,7 +1416,7 @@ public class DashboardView implements ViewInterface {
     }
 
     /** Switcher used inside module pages (Users/Profile/Onboarding, etc.). */
-    private HBox moduleModeSwitcher(String[] labels, String activeLabel, Consumer<String> onSelect) {
+    HBox moduleModeSwitcher(String[] labels, String activeLabel, Consumer<String> onSelect) {
         HBox wrap = new HBox();
         wrap.setAlignment(Pos.CENTER);
 
@@ -2374,14 +1529,14 @@ public class DashboardView implements ViewInterface {
         return r;
     }
 
-    private Text t(String s, String family, FontWeight w, double size) {
+    Text t(String s, String family, FontWeight w, double size) {
         Text tx = new Text(s);
         tx.setFont(Font.font(family, w, size));
         tx.setFill(textPrimaryColor());
         return tx;
     }
-    private String boldFont()  { return com.syndicati.MainApplication.getInstance().getBoldFontFamily();  }
-    private String lightFont() { return com.syndicati.MainApplication.getInstance().getLightFontFamily(); }
+    String boldFont()  { return com.syndicati.MainApplication.getInstance().getBoldFontFamily();  }
+    String lightFont() { return com.syndicati.MainApplication.getInstance().getLightFontFamily(); }
 }
 
 
