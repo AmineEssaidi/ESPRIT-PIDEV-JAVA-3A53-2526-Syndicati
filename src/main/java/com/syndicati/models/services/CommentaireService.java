@@ -21,14 +21,14 @@ public class CommentaireService {
     }
 
     public int addComment(Commentaire comment) {
-        if (comment.getDescriptionCommentaire() == null || comment.getDescriptionCommentaire().trim().isEmpty()) {
+        if (!comment.isValid()) {
             return -1;
         }
         return repository.create(comment);
     }
 
     public boolean updateComment(Commentaire comment) {
-        if (comment.getIdCommentaire() == null || comment.getDescriptionCommentaire() == null || comment.getDescriptionCommentaire().trim().isEmpty()) {
+        if (!comment.isValid()) {
             return false;
         }
         return repository.update(comment);

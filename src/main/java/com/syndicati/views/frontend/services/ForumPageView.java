@@ -86,6 +86,8 @@ public class ForumPageView implements ViewInterface {
     private Button detailDeleteBtn;
 
     private VBox commentListContainer;
+    private VBox commentFormContainer;
+    private VBox commentsCardContainer;
     private TextArea commentTextArea;
     private java.io.File commentImageFile;
     private boolean isCommentAnonymous = false;
@@ -306,9 +308,9 @@ public class ForumPageView implements ViewInterface {
             "-fx-background-radius: 14px;" +
             "-fx-border-insets: 0 0 0 0;"
         );
-        VBox commentsCard = new VBox(20);
-        commentsCard.setPadding(new Insets(14));
-        commentsCard.setStyle(
+        commentsCardContainer = new VBox(20);
+        commentsCardContainer.setPadding(new Insets(14));
+        commentsCardContainer.setStyle(
             "-fx-background-color: rgba(255,255,255,0.02);" +
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
@@ -319,12 +321,14 @@ public class ForumPageView implements ViewInterface {
         commentListContainer = new VBox(20);
         commentListContainer.setPadding(new Insets(10, 0, 10, 0));
 
-        commentsCard.getChildren().addAll(
+        commentFormContainer = buildCommentForm();
+
+        commentsCardContainer.getChildren().addAll(
             sectionTitle("Discussion"),
-            buildCommentForm(),
+            commentFormContainer,
             commentListContainer
         );
-        commentsSection.getChildren().add(commentsCard);
+        commentsSection.getChildren().add(commentsCardContainer);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -1055,6 +1059,14 @@ public class ForumPageView implements ViewInterface {
             // 3.5 Load Comments
             commentaireController.afficher(pub.getId());
             
+            // 3.6 Disable comments for Announcements
+            if (commentsCardContainer != null) {
+                String catLower = pub.getCategoriePub() != null ? pub.getCategoriePub().toLowerCase() : "";
+                boolean isAnnouncement = catLower.contains("announcement") || catLower.contains("annonce");
+                commentsCardContainer.setVisible(!isAnnouncement);
+                commentsCardContainer.setManaged(!isAnnouncement);
+            }
+            
             // 4. Ownership check for Edit/Delete buttons
             try {
                 com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
@@ -1599,10 +1611,11 @@ public class ForumPageView implements ViewInterface {
 
     private String resolveAvatarPath(String dbValue) {
         if (dbValue == null || dbValue.isBlank()) return null;
+        if (dbValue.startsWith("uploads/")) return dbValue;
         if (dbValue.startsWith("profile_images/") || dbValue.startsWith("uploads/profile_images/")) {
             return dbValue;
         }
-        return "profile_images/" + dbValue;
+        return "uploads/profile_avatars/" + dbValue;
     }
 
     private String comboStyle() {
@@ -1935,17 +1948,6 @@ public class ForumPageView implements ViewInterface {
         
         item.getChildren().set(index, editArea);
         item.getChildren().add(index + 1, editControls);
-    }
-
-    private String resolveAvatarPath(String path) {
-        if (path == null) return null;
-        if (path.startsWith("uploads/")) return path;
-        return "uploads/profile_avatars/" + path;
-    }
-
-    private void showImageLightbox(javafx.scene.image.Image img) {
-        // Placeholder for future lightbox implementation
-        System.out.println("Image Lightbox triggered.");
     }
 
     @Override

@@ -39,6 +39,13 @@ public class CommentaireController {
      */
     public void ajouterCommentaire(int pubId, String content, String image, int visibility) {
         if (content == null || content.trim().isEmpty()) {
+            view.showNotification("Comment content cannot be empty.", "error");
+            return;
+        }
+
+        // Quick check for start characters
+        if (!Character.isLetterOrDigit(content.trim().charAt(0))) {
+            view.showNotification("Comment must start with a letter or number (no symbols like . , ? ;)", "error");
             return;
         }
 
@@ -55,6 +62,11 @@ public class CommentaireController {
         c.setImageCommentaire(image);
         c.setVisibility(visibility);
 
+        if (!c.isValid()) {
+            view.showNotification("Invalid comment content. Please avoid starting with symbols.", "error");
+            return;
+        }
+
         new Thread(() -> {
             int newId = service.addComment(c);
             Platform.runLater(() -> {
@@ -70,6 +82,11 @@ public class CommentaireController {
     }
 
     public void modifierCommentaire(int commentId, int pubId, String newContent, String image, int visibility) {
+        if (newContent == null || newContent.trim().isEmpty() || !Character.isLetterOrDigit(newContent.trim().charAt(0))) {
+            view.showNotification("Comment must be non-empty and start with a letter/number.", "error");
+            return;
+        }
+
         Commentaire c = new Commentaire();
         c.setIdCommentaire(commentId);
         c.setIdPub(pubId);

@@ -125,4 +125,17 @@ public class Commentaire {
         String initials = fn + ln;
         return initials.isEmpty() ? "?" : initials;
     }
+
+    /**
+     * Input validation (Contrôle de saisie)
+     * Description should not be empty and should not start with symbols like . , ? ; etc.
+     */
+    public boolean isValid() {
+        if (descriptionCommentaire == null || descriptionCommentaire.trim().isEmpty()) {
+            return false;
+        }
+        char firstChar = descriptionCommentaire.trim().charAt(0);
+        // Ensure it starts with a letter or digit
+        return Character.isLetterOrDigit(firstChar);
+    }
 }
