@@ -2113,8 +2113,12 @@ public class ProfileView implements ViewInterface {
             for (com.syndicati.models.entities.Reclamation rec : myReclamations) {
                 String title = rec.getTitrereclamations();
                 String status = rec.getStatutreclamation();
+                String desc = rec.getDescreclamation() != null ? rec.getDescreclamation() : "";
+                if (desc.length() > 30) {
+                    desc = desc.substring(0, 30) + "...";
+                }
                 String dateStr = (rec.getCreatedAt() != null) ? rec.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy")) : "";
-                card.getChildren().add(reclamationItem(title, status, "Submitted on " + dateStr));
+                card.getChildren().add(reclamationItem(rec.getIdreclamations(), title, desc, status, "Submitted on " + dateStr));
             }
         }
 
@@ -2207,16 +2211,40 @@ public class ProfileView implements ViewInterface {
         return row;
     }
 
-    private VBox reclamationItem(String title, String status, String submitted) {
+    private VBox reclamationItem(int id, String title, String description, String status, String submitted) {
         VBox row = new VBox(8);
         row.setPadding(new Insets(16));
         row.setStyle(shell(16, "rgba(255,255,255,0.03)", 0.08));
 
-        HBox top = new HBox();
-        Text titleText = text(title, 14, true, "#ffffff");
+        HBox top = new HBox(12); // Spacing between elements
+        top.setAlignment(Pos.CENTER_LEFT);
+        
+        Text titleText = text(title, 14, true, textDefault());
+        top.getChildren().add(titleText);
+        
+        if (description != null && !description.isBlank()) {
+            Text descText = text(description, 13, false, textMuted());
+            top.getChildren().add(descText);
+        }
+        
         Text statusText = text(status, 11, true, tm.getAccentHex());
-        HBox.setHgrow(titleText, Priority.ALWAYS);
-        top.getChildren().addAll(titleText, statusText);
+        top.getChildren().add(statusText);
+        
+        javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        Button deleteBtn = new Button("Delete");
+        deleteBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #ef4444; -fx-font-weight: 800; -fx-border-color: #ef4444; -fx-border-radius: 6px; -fx-padding: 4 10 4 10;");
+        deleteBtn.setCursor(javafx.scene.Cursor.HAND);
+        deleteBtn.setOnAction(e -> {
+            if (com.syndicati.services.ReclamationService.getInstance().deleteReclamation(id)) {
+                refreshProfileContent();
+            } else {
+                showAlert("Error", "Could not delete reclamation.");
+            }
+        });
+
+        top.getChildren().addAll(spacer, deleteBtn);
 
         row.getChildren().addAll(top, text(submitted, 12, false, textMuted()));
         return row;
@@ -2955,7 +2983,7 @@ public class ProfileView implements ViewInterface {
         refreshProfileContent();
     }
 
-    private void refreshProfileContent() {
+    public void refreshProfileContent() {
         Platform.runLater(() -> {
             String activeMainPage = currentMainPageName;
             String activeDetailTab = currentDetailTabName;

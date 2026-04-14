@@ -128,6 +128,7 @@ public class NavigationManager {
             case "about":
                 return aboutView().getRoot();
             case "profile":
+                profileView().refreshProfileContent();
                 return profileView().getRoot();
             case "dashboard":
                 return dashboardView().getRoot();

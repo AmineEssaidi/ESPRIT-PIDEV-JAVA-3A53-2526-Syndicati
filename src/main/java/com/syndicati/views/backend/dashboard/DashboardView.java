@@ -4,6 +4,8 @@ import com.syndicati.controllers.backend.users.UserController;
 import com.syndicati.models.entities.Onboarding;
 import com.syndicati.models.entities.Profile;
 import com.syndicati.models.entities.User;
+import com.syndicati.models.entities.Reclamation;
+import com.syndicati.services.ReclamationService;
 import javafx.application.Platform;
 import javafx.animation.TranslateTransition;
 import javafx.animation.PauseTransition;
@@ -1323,26 +1325,92 @@ public class DashboardView implements ViewInterface {
 
     private VBox syndicatReclamationsPane() {
         VBox wrap = new VBox(14);
+        
+        java.util.List<Reclamation> reclamations = ReclamationService.getInstance().getAllReclamations();
+        java.util.List<User> users = userController.users();
+        
+        String[][] rows;
+        if (reclamations.isEmpty()) {
+            rows = new String[][]{{"-", "-", "-", "-", "-", "-"}};
+        } else {
+            rows = new String[reclamations.size()][6];
+            for (int i = 0; i < reclamations.size(); i++) {
+                Reclamation r = reclamations.get(i);
+                
+                String residentName = "User #" + r.getIdUser();
+                for (User u : users) {
+                    if (u.getIdUser() != null && u.getIdUser().equals(r.getIdUser())) {
+                        String first = u.getFirstName() == null ? "" : u.getFirstName().trim();
+                        String last = u.getLastName() == null ? "" : u.getLastName().trim();
+                        residentName = (first + " " + last).trim();
+                        if (residentName.isEmpty()) residentName = "User #" + r.getIdUser();
+                        break;
+                    }
+                }
+                
+                rows[i][0] = safe(r.getTitrereclamations());
+                rows[i][1] = residentName;
+                rows[i][2] = safe(r.getStatutreclamation());
+                rows[i][3] = formatDateTime(r.getCreatedAt());
+                rows[i][4] = safe(r.getDescreclamation());
+                rows[i][5] = String.valueOf(r.getIdreclamations());
+            }
+        }
+        
         wrap.getChildren().add(dataTableWithCrud("Reclamations", "Reclamation",
-            new String[]{"Reference", "Resident", "Type", "Status", "Date"},
-            new String[][]{
-                {"REC-2024-0156", "Ahmed B.", "Maintenance", "Pending", "Mar 11"},
-                {"REC-2024-0155", "Leila M.", "Noise", "Resolved", "Mar 10"},
-                {"REC-2024-0154", "Karim S.", "Elevator", "Urgent", "Mar 9"}
-            }, false, true
+            new String[]{"Title", "Resident", "Status", "Date"},
+            rows, false, true
         ));
         return wrap;
     }
 
     private VBox syndicatResponsesPane() {
         VBox wrap = new VBox(14);
+        
+        java.util.List<com.syndicati.models.entities.Reponse> reponses = com.syndicati.services.ReponseService.getInstance().getAllReponses();
+        java.util.List<com.syndicati.models.entities.Reclamation> reclamations = com.syndicati.services.ReclamationService.getInstance().getAllReclamations();
+        java.util.List<com.syndicati.models.entities.User> users = userController.users();
+        
+        String[][] rows;
+        if (reponses.isEmpty()) {
+            rows = new String[][]{{"-", "-", "-", "-", "-", "-", "-"}};
+        } else {
+            rows = new String[reponses.size()][7];
+            for (int i = 0; i < reponses.size(); i++) {
+                com.syndicati.models.entities.Reponse r = reponses.get(i);
+                
+                String reclamationName = "REC #" + r.getReclamationId();
+                for (com.syndicati.models.entities.Reclamation rec : reclamations) {
+                    if (rec.getIdreclamations() == r.getReclamationId()) {
+                        reclamationName = safe(rec.getTitrereclamations());
+                        break;
+                    }
+                }
+                
+                String agentName = "Admin #" + r.getIdUser();
+                for (com.syndicati.models.entities.User u : users) {
+                    if (u.getIdUser() != null && u.getIdUser().equals(r.getIdUser())) {
+                        String first = u.getFirstName() == null ? "" : u.getFirstName().trim();
+                        String last = u.getLastName() == null ? "" : u.getLastName().trim();
+                        agentName = (first + " " + last).trim();
+                        if (agentName.isEmpty()) agentName = "User #" + r.getIdUser();
+                        break;
+                    }
+                }
+                
+                rows[i][0] = reclamationName;
+                rows[i][1] = agentName;
+                rows[i][2] = safe(r.getTitrereponse());
+                rows[i][3] = safe(r.getMessagereponse());
+                rows[i][4] = formatDateTime(r.getCreatedAt());
+                rows[i][5] = "Delivered"; 
+                rows[i][6] = String.valueOf(r.getIdreponses());
+            }
+        }
+        
         wrap.getChildren().add(dataTableWithCrud("Responses", "Response",
-            new String[]{"Reclamation", "Agent", "Response", "Sent", "State"},
-            new String[][]{
-                {"REC-2024-0155", "Syndic Team", "Inspection completed", "Mar 10", "Delivered"},
-                {"REC-2024-0152", "Syndic Team", "Technician scheduled", "Mar 8", "Delivered"},
-                {"REC-2024-0149", "Support", "Need more details", "Mar 7", "Awaiting Reply"}
-            }, false, false
+            new String[]{"Reclamation", "Agent", "Title", "Message", "Sent", "State"},
+            rows, false, false
         ));
         return wrap;
     }
@@ -1581,7 +1649,7 @@ public class DashboardView implements ViewInterface {
 
         for (int r = 0; r < rows.length; r++) {
             String bg = (r % 2 == 0) ? "transparent" : "rgba(255,255,255,0.01)";
-            for (int c = 0; c < rows[r].length; c++) {
+            for (int c = 0; c < cols.length && c < rows[r].length; c++) {
                 Text tx = t(rows[r][c], lightFont(), FontWeight.NORMAL, 14);
                 tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
                 HBox cb = new HBox(tx);
@@ -1702,6 +1770,10 @@ public class DashboardView implements ViewInterface {
             case "Responses":
                 s.viewTitle = "Response Details";
                 s.viewSubtitle = "View response content and metadata.";
+                s.addTitle = "Create Response";
+                s.addSubtitle = "Reply to the chosen reclamation";
+                s.saveAddLabel = "Send Response";
+                s.cancelLabel = "Back to Reclamation";
                 break;
             case "Residences":
                 s.viewTitle = "Residence Details";
@@ -1792,7 +1864,7 @@ public class DashboardView implements ViewInterface {
         close.setOnAction(e -> switchToTableFace(container));
         head.getChildren().addAll(tWrap, spacer, close);
 
-        VBox fields = buildModalFields(spec, mode, cols, rowData, editable);
+        VBox fields = buildModalFields(spec, entityLabel, mode, cols, rowData, editable);
 
         ScrollPane formScroll = new ScrollPane(fields);
         formScroll.setFitToWidth(true);
@@ -1819,6 +1891,16 @@ public class DashboardView implements ViewInterface {
                     }
                 });
                 actions.getChildren().add(del);
+            }
+            if ("Reclamation".equals(entityLabel)) {
+                Button addResp = pillAction("Add Response", true);
+                addResp.setOnAction(e -> {
+                    String[] responseCols = new String[]{"Title", "Message"};
+                    // Pass reclamation ID in rowData[2] implicitly
+                    String[] responseData = new String[]{"", "", rowData[5]};
+                    switchToModalFace(container, crudSpec("Responses", "Response"), "Response", "add", responseCols, responseData);
+                });
+                actions.getChildren().add(addResp);
             }
             Button edit = pillAction("Edit", true);
             edit.setOnAction(e -> switchToModalFace(container, spec, entityLabel, "edit", cols, rowData));
@@ -1859,6 +1941,38 @@ public class DashboardView implements ViewInterface {
             return handleUserSave(mode, originalRowData, fields);
         } else if ("Profile".equalsIgnoreCase(entityLabel)) {
             return handleProfileSave(mode, originalRowData, fields);
+        } else if ("Response".equalsIgnoreCase(entityLabel)) {
+            return handleResponseSave(mode, originalRowData, fields);
+        }
+        return false;
+    }
+
+    private boolean handleResponseSave(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        
+        if ("add".equals(mode)) {
+            String title = safe(values.get("Title"));
+            String message = safe(values.get("Message"));
+            String recIdStr = (originalRowData != null && originalRowData.length > 2) ? originalRowData[2] : "-";
+            
+            if ("-".equals(recIdStr) || "-".equals(message)) return false;
+            
+            try {
+                int recId = Integer.parseInt(recIdStr);
+                com.syndicati.models.entities.Reponse r = new com.syndicati.models.entities.Reponse();
+                r.setTitrereponse("-".equals(title) ? "" : title);
+                r.setMessagereponse(message);
+                r.setReclamationId(recId);
+                r.setCreatedAt(java.time.LocalDateTime.now());
+                r.setUpdatedAt(java.time.LocalDateTime.now());
+                
+                com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+                r.setIdUser(currentUser != null && currentUser.getIdUser() != null ? currentUser.getIdUser() : 6);
+                
+                return com.syndicati.services.ReponseService.getInstance().createReponse(r);
+            } catch (NumberFormatException e) {
+                return false;
+            }
         }
         return false;
     }
@@ -1978,6 +2092,8 @@ public class DashboardView implements ViewInterface {
             return handleUserDelete(rowData);
         } else if ("Profile".equalsIgnoreCase(entityLabel)) {
             return handleProfileDelete(rowData);
+        } else if ("Reclamation".equalsIgnoreCase(entityLabel)) {
+            return handleReclamationDelete(rowData);
         }
         return false;
     }
@@ -2003,6 +2119,20 @@ public class DashboardView implements ViewInterface {
         try {
             int profileId = Integer.parseInt(profileIdStr);
             return userController.profileDelete(profileId);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private boolean handleReclamationDelete(String[] rowData) {
+        if (rowData == null || rowData.length < 6) {
+            return false;
+        }
+
+        String idStr = rowData[5];
+        try {
+            int id = Integer.parseInt(idStr);
+            return ReclamationService.getInstance().deleteReclamation(id);
         } catch (NumberFormatException e) {
             return false;
         }
@@ -2050,7 +2180,7 @@ public class DashboardView implements ViewInterface {
             || "verified".equalsIgnoreCase(normalized);
     }
 
-    private VBox buildModalFields(CrudSpec spec, String mode, String[] cols, String[] rowData, boolean editable) {
+    private VBox buildModalFields(CrudSpec spec, String entityLabel, String mode, String[] cols, String[] rowData, boolean editable) {
         VBox fields = new VBox(10);
 
         if ("view".equals(mode)) {
@@ -2065,6 +2195,10 @@ public class DashboardView implements ViewInterface {
         for (int i = 0; i < cols.length; i++) {
             String val = (rowData != null && i < rowData.length) ? rowData[i] : "";
             fields.getChildren().add(fieldRow(cols[i], val, editable));
+        }
+        
+        if ("Reclamation".equalsIgnoreCase(entityLabel) && rowData != null && rowData.length >= 5) {
+            fields.getChildren().add(fieldRow("Description", rowData[4], editable));
         }
 
         if ("edit".equals(mode) || "add".equals(mode)) {
@@ -2179,12 +2313,12 @@ public class DashboardView implements ViewInterface {
         b.setFont(Font.font(lightFont(), FontWeight.NORMAL, 10));
         b.setPadding(new Insets(5, 12, 5, 12));
         b.setStyle(
-            "-fx-background-color:rgba(239,68,68,0.18);" +
-            "-fx-border-color:rgba(239,68,68,0.45);" +
+            "-fx-background-color:rgba(220, 38, 38, 0.9);" +
+            "-fx-border-color:rgba(239, 68, 68, 1.0);" +
             "-fx-border-width:1;" +
             "-fx-background-radius:999;" +
             "-fx-border-radius:999;" +
-            "-fx-text-fill:#fecaca;" +
+            "-fx-text-fill:white;" +
             "-fx-cursor:hand;"
         );
         return b;

@@ -54,11 +54,14 @@ public class ReclamationController {
             }
         }
 
+        com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+        int userId = (currentUser != null && currentUser.getIdUser() != null) ? currentUser.getIdUser() : 6;
+
         Reclamation reclamation = new Reclamation(
             subject.trim(), 
             desc.trim(), 
             java.time.LocalDateTime.now(), 
-            6 // hardcoded user_id per instruction
+            userId
         );
         reclamation.setImagereclamation(savedImageName);
         

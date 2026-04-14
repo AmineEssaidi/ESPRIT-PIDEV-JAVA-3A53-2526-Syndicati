@@ -114,4 +114,77 @@ public class ReclamationService {
         }
         return list;
     }
+    
+    public java.util.List<Reclamation> getAllReclamations() {
+        java.util.List<Reclamation> list = new java.util.ArrayList<>();
+        String query = "SELECT * FROM reclamations ORDER BY created_at DESC";
+        
+        try (Connection connection = databaseService.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+             
+             try (java.sql.ResultSet rs = preparedStatement.executeQuery()) {
+                 while (rs.next()) {
+                     Reclamation rec = new Reclamation();
+                     rec.setIdreclamations(rs.getInt("idreclamations"));
+                     rec.setTitrereclamations(rs.getString("titrereclamations"));
+                     rec.setDescreclamation(rs.getString("descreclamation"));
+                     
+                     Timestamp dateRec = rs.getTimestamp("datereclamation");
+                     if (dateRec != null) rec.setDatereclamation(dateRec.toLocalDateTime());
+                     
+                     rec.setStatutreclamation(rs.getString("statutreclamation"));
+                     rec.setImagereclamation(rs.getString("imagereclamation"));
+                     rec.setIdUser(rs.getInt("id_user"));
+                     
+                     Timestamp created = rs.getTimestamp("created_at");
+                     if (created != null) rec.setCreatedAt(created.toLocalDateTime());
+                     
+                     Timestamp updated = rs.getTimestamp("updated_at");
+                     if (updated != null) rec.setUpdatedAt(updated.toLocalDateTime());
+                     
+                     list.add(rec);
+                 }
+             }
+        } catch (SQLException e) {
+            System.err.println("Error fetching all reclamations: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return list;
+    }
+    
+    public boolean deleteReclamation(int idreclamation) {
+        String deleteResponsesQuery = "DELETE FROM reponses WHERE reclamation_id = ?";
+        String deleteReclamationQuery = "DELETE FROM reclamations WHERE idreclamations = ?";
+
+        try (Connection connection = databaseService.getConnection()) {
+            if (connection == null) {
+                return false;
+            }
+
+            connection.setAutoCommit(false);
+
+            try (PreparedStatement deleteResponses = connection.prepareStatement(deleteResponsesQuery);
+                 PreparedStatement deleteReclamation = connection.prepareStatement(deleteReclamationQuery)) {
+
+                // Remove child responses first to satisfy FK constraints.
+                deleteResponses.setInt(1, idreclamation);
+                deleteResponses.executeUpdate();
+
+                deleteReclamation.setInt(1, idreclamation);
+                int rowsDeleted = deleteReclamation.executeUpdate();
+
+                connection.commit();
+                return rowsDeleted > 0;
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error deleting reclamation: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
 }

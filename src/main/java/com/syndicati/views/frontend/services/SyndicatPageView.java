@@ -237,8 +237,12 @@ public class SyndicatPageView implements ViewInterface {
         d.setStyle("-fx-background-color: " + inputBg() + "; -fx-text-fill: " + tm.getTextColor() + "; -fx-background-radius: 16px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 16px;");
     }
 
+    private String textAreaInnerBg() {
+        return tm.isDarkMode() ? "#1a1e28" : "#f1f5f9";
+    }
+
     private void styleArea(TextArea a) {
-        a.setStyle("-fx-background-color: " + inputBg() + "; -fx-text-fill: " + tm.getTextColor() + "; -fx-prompt-text-fill: " + textMuted() + "; -fx-background-radius: 16px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 16px;");
+        a.setStyle("-fx-control-inner-background: " + textAreaInnerBg() + "; -fx-background-color: " + inputBg() + "; -fx-text-fill: " + tm.getTextColor() + "; -fx-prompt-text-fill: " + textMuted() + "; -fx-background-radius: 16px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 16px;");
     }
 
     private Text label(String txt) {
