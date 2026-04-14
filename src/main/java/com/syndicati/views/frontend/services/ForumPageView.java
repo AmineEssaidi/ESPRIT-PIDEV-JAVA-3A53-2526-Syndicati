@@ -317,8 +317,8 @@ public class ForumPageView implements ViewInterface {
 
         commentsCard.getChildren().addAll(
             sectionTitle("Discussion"),
-            commentListContainer,
-            buildCommentForm()
+            buildCommentForm(),
+            commentListContainer
         );
         commentsSection.getChildren().add(commentsCard);
 
