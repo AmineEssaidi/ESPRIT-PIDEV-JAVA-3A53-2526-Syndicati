@@ -6,7 +6,6 @@ import com.syndicati.models.services.ServiceAppartement;
 import com.syndicati.models.services.ServiceMaintenance;
 import com.syndicati.models.services.ServiceResidence;
 import javafx.application.Platform;
-import javafx.animation.TranslateTransition;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;
 import javafx.stage.Stage;
@@ -23,7 +22,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.*;
 import javafx.stage.Popup;
-import javafx.stage.Stage;
 import javafx.stage.Window;
 import javafx.util.Duration;
 import com.syndicati.interfaces.ViewInterface;
@@ -36,9 +34,6 @@ import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
@@ -1642,7 +1637,15 @@ public class DashboardView implements ViewInterface {
 
             String[] rowData = rows[r];
             Button viewBtn = pillAction("View", false);
-            viewBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
+            if ("Residence".equals(entityLabel)) {
+                viewBtn.setOnAction(e -> {
+                    Stage stage = (Stage) faceContainer.getScene().getWindow();
+                    Scene previousScene = faceContainer.getScene();
+                    new ResidenceShow(stage, previousScene, rowData).show();
+                });
+            } else {
+                viewBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
+            }
             rowActions.getChildren().add(viewBtn);
 
             tbl.add(rowActions, cols.length, r + 1);
@@ -1676,7 +1679,7 @@ public class DashboardView implements ViewInterface {
         testBtn.setOnAction(e -> {
             Stage stage = (Stage) faceContainer.getScene().getWindow();
             Scene previousScene = faceContainer.getScene();
-            new AddResidence(stage, previousScene).show();
+            new ResidenceAdd(stage, previousScene).show();
         });
         head.getChildren().add(testBtn);
 
@@ -2470,7 +2473,7 @@ public class DashboardView implements ViewInterface {
     private void switchToTestPage(StackPane container) {
         Stage stage = (Stage) container.getScene().getWindow();
         Scene previousScene = container.getScene();
-        new AddResidence(stage, previousScene).show();
+        new ResidenceAdd(stage, previousScene).show();
     }
 
     private void styleSubTab(Button b, boolean active) {

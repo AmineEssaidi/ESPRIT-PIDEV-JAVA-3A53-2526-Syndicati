@@ -110,7 +110,7 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
 
     public Residence TrouverResidenceParId(int id)
     {
-        String requete= "SELECT * FROM RESIDENCE WHERE id_residence = ? ;";
+        String requete= "SELECT * FROM RESIDENCE WHERE id_residence = ? ";
         Residence Residence=null;
         try
         {
@@ -125,7 +125,38 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
                 rs.getString("date_ajout"),
                 rs.getInt("n_appartements"),
                 rs.getInt("n_etages"),
-                rs.getString("n_blocs")
+                rs.getString("n_blocs"),
+                rs.getInt("id_residence")
+                );
+
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return Residence;
+    }
+
+    public Residence TrouverResidenceParNom(String nom)
+    {
+        String requete= "SELECT * FROM RESIDENCE WHERE nom_r = ? ;";
+        Residence Residence=null;
+        try
+        {
+            PreparedStatement ps= connection.prepareStatement(requete);
+            ps.setString(1, nom);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Residence=new Residence(
+                        rs.getString("nom_r"),
+                        rs.getString("adresse"),
+                        rs.getString("image_r"),
+                        rs.getString("date_ajout"),
+                        rs.getInt("n_appartements"),
+                        rs.getInt("n_etages"),
+                        rs.getString("n_blocs"),
+                        rs.getInt("id_residence")
+
                 );
 
             }
@@ -137,3 +168,4 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
     }
 
 }
+

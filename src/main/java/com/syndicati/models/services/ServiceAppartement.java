@@ -156,5 +156,36 @@ public class ServiceAppartement implements IServiceSyndicati<Appartement> {
         }
         return AppartementList;
     }
+    public Appartement TrouverAppartementParId(int id)
+    {
+        String requete= "SELECT * FROM APPARTEMENT WHERE id_app = ? ";
+        Appartement Appartement=null;
+        try
+        {
+            PreparedStatement ps= connection.prepareStatement(requete);
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Appartement=new Appartement(
+                        rs.getInt("residence_id"),
+                        rs.getInt("id_user"),
+                        rs.getInt("parking"),
+                        rs.getInt("disponible"),
+                        rs.getString("image_a"),
+                        rs.getString("type_a"),
+                        rs.getString("appartement_info"),
+                        rs.getInt("superficie"),
+                        rs.getInt("prix_location"),
+                        rs.getInt("prix_vente"),
+                        rs.getString("date_construction")
+                );
+
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return Appartement;
+    }
 
 }
