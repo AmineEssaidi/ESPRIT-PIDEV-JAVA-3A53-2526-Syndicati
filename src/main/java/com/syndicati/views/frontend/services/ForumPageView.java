@@ -39,6 +39,7 @@ public class ForumPageView implements ViewInterface {
     private final VBox root;
     private final ThemeManager tm = ThemeManager.getInstance();
     private com.syndicati.controllers.frontend.services.forum.PublicationController publicationController;
+    private com.syndicati.controllers.frontend.services.forum.CommentaireController commentaireController;
     private VBox sidebarList;
 
     private final StackPane faceStack = new StackPane();
@@ -84,6 +85,9 @@ public class ForumPageView implements ViewInterface {
     private Button detailEditBtn;
     private Button detailDeleteBtn;
 
+    private VBox commentListContainer;
+    private TextArea commentTextArea;
+
     public ForumPageView() {
         root = new VBox(20);
         root.setAlignment(Pos.TOP_CENTER);
@@ -95,6 +99,7 @@ public class ForumPageView implements ViewInterface {
 
         this.publicationController = new com.syndicati.controllers.frontend.services.forum.PublicationController(this);
         this.publicationController.afficher();
+        this.commentaireController = new com.syndicati.controllers.frontend.services.forum.CommentaireController(this);
     }
 
     private StackPane buildHero() {
@@ -297,7 +302,7 @@ public class ForumPageView implements ViewInterface {
             "-fx-background-radius: 14px;" +
             "-fx-border-insets: 0 0 0 0;"
         );
-        VBox commentsCard = new VBox(10);
+        VBox commentsCard = new VBox(20);
         commentsCard.setPadding(new Insets(14));
         commentsCard.setStyle(
             "-fx-background-color: rgba(255,255,255,0.02);" +
@@ -306,10 +311,14 @@ public class ForumPageView implements ViewInterface {
             "-fx-background-radius: 14px;" +
             "-fx-border-radius: 14px;"
         );
+
+        commentListContainer = new VBox(20);
+        commentListContainer.setPadding(new Insets(10, 0, 10, 0));
+
         commentsCard.getChildren().addAll(
             sectionTitle("Discussion"),
-            muted("Comment thread placeholder"),
-            muted("Comment form placeholder")
+            commentListContainer,
+            buildCommentForm()
         );
         commentsSection.getChildren().add(commentsCard);
 
@@ -1034,6 +1043,9 @@ public class ForumPageView implements ViewInterface {
                 detailImageView.setImage(null);
             }
             
+            // 3.5 Load Comments
+            commentaireController.afficher(pub.getId());
+            
             // 4. Ownership check for Edit/Delete buttons
             try {
                 com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
@@ -1619,6 +1631,111 @@ public class ForumPageView implements ViewInterface {
         
         // Default (Accent-tinted)
         return "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + "; -fx-background-radius: 12px; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.4) + "; -fx-border-width: 1px; -fx-border-radius: 12px;";
+    }
+
+    public void setComments(java.util.List<com.syndicati.models.entities.Commentaire> comments) {
+        commentListContainer.getChildren().clear();
+        if (comments == null || comments.isEmpty()) {
+            commentListContainer.getChildren().add(muted("No comments yet. Be the first to start the discussion!"));
+            return;
+        }
+
+        for (com.syndicati.models.entities.Commentaire c : comments) {
+            commentListContainer.getChildren().add(buildCommentItem(c));
+        }
+    }
+
+    private VBox buildCommentItem(com.syndicati.models.entities.Commentaire c) {
+        VBox item = new VBox(10);
+        item.setPadding(new Insets(12));
+        item.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.03);" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-width: 0 0 1px 0;"
+        );
+
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        // Avatar
+        StackPane avatarPane = new StackPane();
+        avatarPane.setPrefSize(28, 28);
+        avatarPane.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 14px;");
+        
+        Text initial = new Text(c.getAuthorInitials());
+        initial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 10));
+        initial.setFill(Color.WHITE);
+        avatarPane.getChildren().add(initial);
+
+        if (c.getAuthorAvatar() != null && !c.getAuthorAvatar().isEmpty()) {
+             String avPath = resolveAvatarPath(c.getAuthorAvatar());
+             javafx.scene.image.Image avImg = com.syndicati.utils.image.ImageLoaderUtil.loadProfileAvatar(avPath, true);
+             if (avImg != null) {
+                 javafx.scene.image.ImageView avView = new javafx.scene.image.ImageView(avImg);
+                 avView.setFitWidth(28);
+                 avView.setFitHeight(28);
+                 javafx.scene.shape.Circle clip = new javafx.scene.shape.Circle(14, 14, 14);
+                 avView.setClip(clip);
+                 avatarPane.getChildren().setAll(avView);
+             }
+        }
+
+        VBox meta = new VBox(2);
+        Text name = new Text(c.getAuthorFullName());
+        name.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        name.setFill(Color.WHITE);
+
+        Text date = new Text(c.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm")));
+        date.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 10));
+        date.setFill(Color.web(textSoft()));
+        
+        meta.getChildren().addAll(name, date);
+        header.getChildren().addAll(avatarPane, meta);
+
+        Text body = new Text(c.getDescriptionCommentaire());
+        body.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 13));
+        body.setFill(Color.web("#d1d1d6"));
+        body.setWrappingWidth(500); // Adjust as needed
+
+        item.getChildren().addAll(header, body);
+        return item;
+    }
+
+    private VBox buildCommentForm() {
+        VBox form = new VBox(12);
+        
+        commentTextArea = new TextArea();
+        commentTextArea.setPromptText("Write a comment...");
+        commentTextArea.setPrefRowCount(3);
+        commentTextArea.setWrapText(true);
+        commentTextArea.setStyle(
+            "-fx-control-inner-background: #1a1a2e;" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: gray;" +
+            "-fx-background-color: #1a1a2e;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-radius: 10px;"
+        );
+
+        Button postBtn = filledBtn("Post Comment", () -> {
+            if (currentPub != null) {
+                commentaireController.ajouterCommentaire(currentPub.getId(), commentTextArea.getText());
+            } else {
+                showNotification("Please select a publication first.", "error");
+            }
+        });
+        postBtn.setPrefWidth(140);
+
+        form.getChildren().addAll(commentTextArea, postBtn);
+        return form;
+    }
+
+    public void clearCommentForm() {
+        if (commentTextArea != null) {
+            commentTextArea.clear();
+        }
     }
 
     @Override
