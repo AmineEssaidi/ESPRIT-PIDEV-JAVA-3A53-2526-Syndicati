@@ -338,7 +338,7 @@ public class ForumPageView implements ViewInterface {
 
         detailDeleteBtn = ghostBtn("Delete", () -> {
             if (currentPub != null) {
-                showDeleteConfirmation(() -> {
+                showDeleteConfirmation("Delete Publication", "Are you sure you want to delete this publication?\nThis action cannot be undone.", () -> {
                     publicationController.deletePublication(currentPub.getId());
                 });
             }
@@ -424,7 +424,7 @@ public class ForumPageView implements ViewInterface {
         ft.play();
     }
 
-    private void showDeleteConfirmation(Runnable onConfirm) {
+    private void showDeleteConfirmation(String titleText, String msgText, Runnable onConfirm) {
         StackPane overlay = new StackPane();
         overlay.setStyle("-fx-background-color: rgba(0,0,0,0.7);");
         overlay.setOpacity(0);
@@ -441,13 +441,13 @@ public class ForumPageView implements ViewInterface {
             "-fx-background-radius: 20px;"
         );
 
-        Text title = new Text("Delete Publication");
-        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
-        title.setFill(Color.WHITE);
+        Text title = new Text(titleText);
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 20));
+        title.setFill(javafx.scene.paint.Color.WHITE);
 
-        Text msg = new Text("Are you sure you want to delete this publication?\nThis action cannot be undone.");
-        msg.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 14));
-        msg.setFill(Color.web("rgba(255,255,255,0.8)"));
+        Text msg = new Text(msgText);
+        msg.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 14));
+        msg.setFill(javafx.scene.paint.Color.web("rgba(255,255,255,0.8)"));
         msg.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
         Button cancelBtn = ghostBtn("Cancel", () -> hideLightbox(overlay));
@@ -948,6 +948,11 @@ public class ForumPageView implements ViewInterface {
                 detailEditBtn.setManaged(false);
                 detailDeleteBtn.setVisible(false);
                 detailDeleteBtn.setManaged(false);
+                
+                // Clear comments
+                if (commentListContainer != null) {
+                    commentListContainer.getChildren().clear();
+                }
             });
             return;
         }
@@ -1699,14 +1704,12 @@ public class ForumPageView implements ViewInterface {
         meta.getChildren().addAll(name, date);
         header.getChildren().addAll(avatarPane, meta);
 
-        // Ownership check for Edit (Authors can edit even if anonymous)
+        // Ownership check for Edit & Delete (Authors can edit even if anonymous)
         com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
         if (currentUser != null && currentUser.getIdUser().equals(c.getIdUser())) {
              Button editIcon = new Button("✎");
              editIcon.setStyle("-fx-background-color: transparent; -fx-text-fill: #94a3b8; -fx-cursor: hand; -fx-padding: 0 0 0 10;");
-             Text bodyRef = new Text(c.getDescriptionCommentaire()); // Re-creating or using existing
              editIcon.setOnAction(e -> {
-                 // We need to find the body Text in the item children
                  for (javafx.scene.Node node : item.getChildren()) {
                      if (node instanceof Text && ((Text)node).getText().equals(c.getDescriptionCommentaire())) {
                          startCommentEdit(item, (Text)node, c);
@@ -1714,7 +1717,16 @@ public class ForumPageView implements ViewInterface {
                      }
                  }
              });
-             header.getChildren().add(editIcon);
+
+             Button deleteIcon = new Button("🗑");
+             deleteIcon.setStyle("-fx-background-color: transparent; -fx-text-fill: #ef4444; -fx-cursor: hand; -fx-padding: 0 0 0 10; -fx-font-size: 14px;");
+             deleteIcon.setOnAction(e -> {
+                 showDeleteConfirmation("Delete Comment", "Are you sure you want to delete this comment permanently?", () -> {
+                     commentaireController.supprimerCommentaire(c.getIdCommentaire(), c.getIdPub());
+                 });
+             });
+
+             header.getChildren().addAll(editIcon, deleteIcon);
         }
 
         Text body = new Text(c.getDescriptionCommentaire());

@@ -38,21 +38,15 @@ public class CommentaireController {
      * Adds a new comment and refreshes the list on success.
      */
     public void ajouterCommentaire(int pubId, String content, String image, int visibility) {
-        System.out.println("DEBUG: ajouterCommentaire called for pubId: " + pubId);
-        
         if (content == null || content.trim().isEmpty()) {
-            System.err.println("DEBUG: Content is empty");
             return;
         }
 
         User currentUser = SessionManager.getInstance().getCurrentUser();
         if (currentUser == null) {
-            System.err.println("DEBUG: Current user is NULL");
             view.showNotification("You must be logged in to comment.", "error");
             return;
         }
-
-        System.out.println("DEBUG: Current user ID: " + currentUser.getIdUser());
 
         Commentaire c = new Commentaire();
         c.setIdPub(pubId);
@@ -62,21 +56,17 @@ public class CommentaireController {
         c.setVisibility(visibility);
 
         new Thread(() -> {
-            System.out.println("DEBUG: Starting addComment thread...");
             int newId = service.addComment(c);
-            System.out.println("DEBUG: Service.addComment returned ID: " + newId);
-            
             Platform.runLater(() -> {
                 if (newId > 0) {
-                    System.out.println("DEBUG: Success! Refreshing comments for pub: " + pubId);
                     afficher(pubId); // Refresh comments
                     view.showNotification("Comment added!", "success");
                     view.clearCommentForm(); 
                 } else {
-                    System.err.println("DEBUG: Failed to post comment. Repository returned -1");
-                    view.showNotification("Failed to post comment. Check server logs.", "error");
+                    view.showNotification("Failed to post comment.", "error");
                 }
             });
+        }).start();
     }
 
     public void modifierCommentaire(int commentId, int pubId, String newContent, String image, int visibility) {
@@ -95,6 +85,20 @@ public class CommentaireController {
                     view.showNotification("Comment updated!", "success");
                 } else {
                     view.showNotification("Failed to update comment.", "error");
+                }
+            });
+        }).start();
+    }
+
+    public void supprimerCommentaire(int commentId, int pubId) {
+        new Thread(() -> {
+            boolean success = service.deleteComment(commentId);
+            Platform.runLater(() -> {
+                if (success) {
+                    afficher(pubId);
+                    view.showNotification("Comment deleted.", "success");
+                } else {
+                    view.showNotification("Failed to delete comment.", "error");
                 }
             });
         }).start();

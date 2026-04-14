@@ -33,4 +33,8 @@ public class CommentaireService {
         }
         return repository.update(comment);
     }
+
+    public boolean deleteComment(int id) {
+        return repository.delete(id);
+    }
 }

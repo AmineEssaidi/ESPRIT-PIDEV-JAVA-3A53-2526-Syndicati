@@ -136,6 +136,23 @@ public class CommentaireRepository {
         return false;
     }
 
+    public boolean delete(int id) {
+        String sql = "DELETE FROM `commentaire` WHERE `id_commentaire` = ?";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return false;
+            conn.setAutoCommit(true);
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, id);
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("SQL ERROR in CommentaireRepository.delete: " + e.getMessage());
+        }
+        return false;
+    }
+
     private Commentaire mapRow(ResultSet rs) throws SQLException {
         Commentaire c = new Commentaire();
         c.setIdCommentaire(rs.getInt("id_commentaire"));
