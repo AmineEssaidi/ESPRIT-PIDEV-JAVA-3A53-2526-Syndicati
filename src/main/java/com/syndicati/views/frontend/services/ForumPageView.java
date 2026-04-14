@@ -1699,6 +1699,24 @@ public class ForumPageView implements ViewInterface {
         meta.getChildren().addAll(name, date);
         header.getChildren().addAll(avatarPane, meta);
 
+        // Ownership check for Edit (Authors can edit even if anonymous)
+        com.syndicati.models.entities.User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null && currentUser.getIdUser().equals(c.getIdUser())) {
+             Button editIcon = new Button("✎");
+             editIcon.setStyle("-fx-background-color: transparent; -fx-text-fill: #94a3b8; -fx-cursor: hand; -fx-padding: 0 0 0 10;");
+             Text bodyRef = new Text(c.getDescriptionCommentaire()); // Re-creating or using existing
+             editIcon.setOnAction(e -> {
+                 // We need to find the body Text in the item children
+                 for (javafx.scene.Node node : item.getChildren()) {
+                     if (node instanceof Text && ((Text)node).getText().equals(c.getDescriptionCommentaire())) {
+                         startCommentEdit(item, (Text)node, c);
+                         break;
+                     }
+                 }
+             });
+             header.getChildren().add(editIcon);
+        }
+
         Text body = new Text(c.getDescriptionCommentaire());
         body.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 13));
         body.setFill(javafx.scene.paint.Color.web("#d1d1d6"));
@@ -1821,6 +1839,101 @@ public class ForumPageView implements ViewInterface {
         if (anonymousToggleBtn != null) {
             anonymousToggleBtn.setStyle(ghostBtn("Comment Anonymously", null).getStyle() + "-fx-font-size: 11px;");
         }
+    }
+
+    private void startCommentEdit(VBox item, Text body, com.syndicati.models.entities.Commentaire c) {
+        int index = item.getChildren().indexOf(body);
+        if (index == -1) return;
+
+        // Local state for the edit session
+        final java.io.File[] editFile = {null};
+        final boolean[] editAnonyme = {c.getVisibility() == 0};
+        final String[] currentImgName = {c.getImageCommentaire()};
+
+        TextArea editArea = new TextArea(c.getDescriptionCommentaire());
+        editArea.setWrapText(true);
+        editArea.setPrefRowCount(3);
+        editArea.setStyle("-fx-control-inner-background: #1a1a2e; -fx-text-fill: white; -fx-background-radius: 8px; -fx-font-size: 13px;");
+
+        VBox editControls = new VBox(8);
+        editControls.setPadding(new Insets(5, 0, 0, 0));
+
+        HBox toolBar = new HBox(10);
+        toolBar.setAlignment(Pos.CENTER_LEFT);
+
+        Label imgStatus = new Label(currentImgName[0] != null ? "Current: " + currentImgName[0] : "No image");
+        imgStatus.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 11px;");
+
+        Button chgImgBtn = ghostBtn("📷 Update Photo", () -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+            java.io.File selected = fc.showOpenDialog(root.getScene().getWindow());
+            if (selected != null) {
+                editFile[0] = selected;
+                imgStatus.setText("New: " + selected.getName());
+            }
+        });
+        chgImgBtn.setStyle(chgImgBtn.getStyle() + "-fx-font-size: 11px; -fx-padding: 3 8;");
+
+        Button rmImgBtn = ghostBtn("🗑 Remove", () -> {
+            editFile[0] = null;
+            currentImgName[0] = null;
+            imgStatus.setText("No image");
+        });
+        rmImgBtn.setStyle(rmImgBtn.getStyle() + "-fx-font-size: 11px; -fx-padding: 3 8; -fx-text-fill: #ef4444;");
+
+        Button anonBtn = ghostBtn(editAnonyme[0] ? "👻 Anonymous: ON" : "👤 Anonymous: OFF", null);
+        anonBtn.setOnAction(e -> {
+            editAnonyme[0] = !editAnonyme[0];
+            anonBtn.setText(editAnonyme[0] ? "👻 Anonymous: ON" : "👤 Anonymous: OFF");
+            if (editAnonyme[0]) {
+                anonBtn.setStyle(anonBtn.getStyle() + "-fx-background-color: rgba(99, 102, 241, 0.2); -fx-border-color: #6366f1;");
+            } else {
+                anonBtn.setStyle(ghostBtn("Anonymous", null).getStyle() + "-fx-font-size: 11px; -fx-padding: 3 8;");
+            }
+        });
+        if (editAnonyme[0]) anonBtn.setStyle(anonBtn.getStyle() + "-fx-background-color: rgba(99, 102, 241, 0.2); -fx-border-color: #6366f1;");
+        anonBtn.setStyle(anonBtn.getStyle() + "-fx-font-size: 11px; -fx-padding: 3 8;");
+
+        toolBar.getChildren().addAll(chgImgBtn, rmImgBtn, anonBtn, imgStatus);
+
+        HBox editActions = new HBox(10);
+        editActions.setAlignment(Pos.CENTER_RIGHT);
+        
+        Button saveBtn = filledBtn("Save Changes", () -> {
+            String finalImg = currentImgName[0];
+            if (editFile[0] != null) {
+                finalImg = saveCommentImage(editFile[0]);
+            }
+            int visibility = editAnonyme[0] ? 0 : 1;
+            commentaireController.modifierCommentaire(c.getIdCommentaire(), c.getIdPub(), editArea.getText(), finalImg, visibility);
+        });
+        saveBtn.setStyle(saveBtn.getStyle() + "-fx-font-size: 11px; -fx-padding: 4 12;");
+        
+        Button cancelBtn = ghostBtn("Cancel", () -> {
+            item.getChildren().setAll(item.getChildren().get(0), body); // Keep header, restore body
+            // This is a bit brittle if the header moves, better to refresh discussion
+            commentaireController.afficher(c.getIdPub());
+        });
+        cancelBtn.setStyle(cancelBtn.getStyle() + "-fx-font-size: 11px; -fx-padding: 4 12;");
+
+        editActions.getChildren().addAll(cancelBtn, saveBtn);
+        
+        editControls.getChildren().addAll(toolBar, editActions);
+        
+        item.getChildren().set(index, editArea);
+        item.getChildren().add(index + 1, editControls);
+    }
+
+    private String resolveAvatarPath(String path) {
+        if (path == null) return null;
+        if (path.startsWith("uploads/")) return path;
+        return "uploads/profile_avatars/" + path;
+    }
+
+    private void showImageLightbox(javafx.scene.image.Image img) {
+        // Placeholder for future lightbox implementation
+        System.out.println("Image Lightbox triggered.");
     }
 
     @Override

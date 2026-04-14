@@ -113,6 +113,29 @@ public class CommentaireRepository {
         return -1;
     }
 
+    public boolean update(Commentaire comment) {
+        String sql = "UPDATE `commentaire` SET `description_commentaire` = ?, `image_commentaire` = ?, `visibility` = ?, `updated_at` = ? " +
+                     "WHERE `id_commentaire` = ?";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return false;
+            conn.setAutoCommit(true);
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, comment.getDescriptionCommentaire());
+                ps.setString(2, comment.getImageCommentaire());
+                ps.setInt(3, comment.getVisibility());
+                ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
+                ps.setInt(5, comment.getIdCommentaire());
+
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("SQL ERROR in CommentaireRepository.update: " + e.getMessage());
+        }
+        return false;
+    }
+
     private Commentaire mapRow(ResultSet rs) throws SQLException {
         Commentaire c = new Commentaire();
         c.setIdCommentaire(rs.getInt("id_commentaire"));

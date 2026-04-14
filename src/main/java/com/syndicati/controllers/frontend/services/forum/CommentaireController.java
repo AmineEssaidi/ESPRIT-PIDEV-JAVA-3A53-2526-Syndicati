@@ -77,6 +77,26 @@ public class CommentaireController {
                     view.showNotification("Failed to post comment. Check server logs.", "error");
                 }
             });
+    }
+
+    public void modifierCommentaire(int commentId, int pubId, String newContent, String image, int visibility) {
+        Commentaire c = new Commentaire();
+        c.setIdCommentaire(commentId);
+        c.setIdPub(pubId);
+        c.setDescriptionCommentaire(newContent);
+        c.setImageCommentaire(image);
+        c.setVisibility(visibility);
+
+        new Thread(() -> {
+            boolean success = service.updateComment(c);
+            Platform.runLater(() -> {
+                if (success) {
+                    afficher(pubId);
+                    view.showNotification("Comment updated!", "success");
+                } else {
+                    view.showNotification("Failed to update comment.", "error");
+                }
+            });
         }).start();
     }
 }

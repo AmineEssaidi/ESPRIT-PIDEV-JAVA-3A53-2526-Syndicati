@@ -26,4 +26,11 @@ public class CommentaireService {
         }
         return repository.create(comment);
     }
+
+    public boolean updateComment(Commentaire comment) {
+        if (comment.getIdCommentaire() == null || comment.getDescriptionCommentaire() == null || comment.getDescriptionCommentaire().trim().isEmpty()) {
+            return false;
+        }
+        return repository.update(comment);
+    }
 }
