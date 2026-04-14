@@ -27,7 +27,7 @@ public class CommentaireRepository {
                      "FROM commentaire c " +
                      "LEFT JOIN user u ON c.id_user = u.id_user " +
                      "LEFT JOIN profile pr ON u.id_user = pr.user_id " +
-                     "WHERE c.id_pub = ? AND c.visibility = 1 " +
+                     "WHERE c.id_pub = ? " +
                      "ORDER BY c.created_at ASC";
         
         List<Commentaire> comments = new ArrayList<>();
@@ -51,32 +51,64 @@ public class CommentaireRepository {
     }
 
     public int create(Commentaire comment) {
-        String sql = "INSERT INTO commentaire (description_commentaire, image_commentaire, created_at, updated_at, visibility, id_pub, id_user) " +
+        String sql = "INSERT INTO `commentaire` (`description_commentaire`, `image_commentaire`, `created_at`, `updated_at`, `visibility`, `id_pub`, `id_user`) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-        try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) return -1;
+        Connection conn = null;
+        try {
+            conn = databaseService.getConnection();
+            if (conn == null) {
+                System.err.println("DB_DIAG: Connection failed");
+                return -1;
+            }
+            
+            // Force immediate persistence
+            conn.setAutoCommit(true);
+            System.out.println("DB_DIAG: Attempting insert into `commentaire` for pub " + comment.getIdPub() + " user " + comment.getIdUser());
 
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 ps.setString(1, comment.getDescriptionCommentaire());
                 ps.setString(2, comment.getImageCommentaire());
-                ps.setTimestamp(3, Timestamp.valueOf(comment.getCreatedAt()));
-                ps.setTimestamp(4, Timestamp.valueOf(comment.getUpdatedAt()));
-                ps.setInt(5, comment.getVisibility());
+                
+                LocalDateTime now = LocalDateTime.now();
+                ps.setTimestamp(3, Timestamp.valueOf(comment.getCreatedAt() != null ? comment.getCreatedAt() : now));
+                ps.setTimestamp(4, Timestamp.valueOf(comment.getUpdatedAt() != null ? comment.getUpdatedAt() : now));
+                ps.setInt(5, comment.getVisibility() != null ? comment.getVisibility() : 1);
                 ps.setInt(6, comment.getIdPub());
                 ps.setInt(7, comment.getIdUser());
 
                 int affected = ps.executeUpdate();
+                System.out.println("DB_DIAG: Affected rows: " + affected);
+                
                 if (affected > 0) {
+                    int generatedId = -1;
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         if (keys.next()) {
-                            return keys.getInt(1);
+                            generatedId = keys.getInt(1);
                         }
                     }
+                    
+                    // VERIFICATION: Can we find it immediately?
+                    try (PreparedStatement check = conn.prepareStatement("SELECT COUNT(*) FROM `commentaire` WHERE `description_commentaire` = ? AND `id_pub` = ?")) {
+                        check.setString(1, comment.getDescriptionCommentaire());
+                        check.setInt(2, comment.getIdPub());
+                        try (ResultSet rs = check.executeQuery()) {
+                            if (rs.next()) {
+                                System.out.println("DB_DIAG: Verification count for this comment: " + rs.getInt(1));
+                            }
+                        }
+                    }
+                    
+                    return generatedId > 0 ? generatedId : 1;
                 }
             }
         } catch (SQLException e) {
-            System.err.println("CommentaireRepository.create error: " + e.getMessage());
+            System.err.println("DB_DIAG_ERROR: " + e.getMessage());
+            System.err.println("DB_DIAG_SQLSTATE: " + e.getSQLState());
+        } finally {
+            if (conn != null) {
+                try { conn.close(); } catch (SQLException ignored) {}
+            }
         }
         return -1;
     }

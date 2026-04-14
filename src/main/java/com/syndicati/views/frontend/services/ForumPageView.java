@@ -87,6 +87,10 @@ public class ForumPageView implements ViewInterface {
 
     private VBox commentListContainer;
     private TextArea commentTextArea;
+    private java.io.File commentImageFile;
+    private boolean isCommentAnonymous = false;
+    private Label selectedCommentImageLabel;
+    private Button anonymousToggleBtn;
 
     public ForumPageView() {
         root = new VBox(20);
@@ -1658,17 +1662,19 @@ public class ForumPageView implements ViewInterface {
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
 
+        boolean isAnonymous = (c.getVisibility() != null && c.getVisibility() == 0);
+
         // Avatar
         StackPane avatarPane = new StackPane();
         avatarPane.setPrefSize(28, 28);
-        avatarPane.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 14px;");
+        avatarPane.setStyle("-fx-background-color: " + (isAnonymous ? "#2d2d3d" : surfaceSoft()) + "; -fx-background-radius: 14px;");
         
-        Text initial = new Text(c.getAuthorInitials());
-        initial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 10));
-        initial.setFill(Color.WHITE);
+        Text initial = new Text(isAnonymous ? "👻" : c.getAuthorInitials());
+        initial.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, isAnonymous ? 14 : 10));
+        initial.setFill(javafx.scene.paint.Color.WHITE);
         avatarPane.getChildren().add(initial);
 
-        if (c.getAuthorAvatar() != null && !c.getAuthorAvatar().isEmpty()) {
+        if (!isAnonymous && c.getAuthorAvatar() != null && !c.getAuthorAvatar().isEmpty()) {
              String avPath = resolveAvatarPath(c.getAuthorAvatar());
              javafx.scene.image.Image avImg = com.syndicati.utils.image.ImageLoaderUtil.loadProfileAvatar(avPath, true);
              if (avImg != null) {
@@ -1682,23 +1688,47 @@ public class ForumPageView implements ViewInterface {
         }
 
         VBox meta = new VBox(2);
-        Text name = new Text(c.getAuthorFullName());
-        name.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
-        name.setFill(Color.WHITE);
+        Text name = new Text(isAnonymous ? "Anonyme" : c.getAuthorFullName());
+        name.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 12));
+        name.setFill(isAnonymous ? javafx.scene.paint.Color.web("#94a3b8") : javafx.scene.paint.Color.WHITE);
 
         Text date = new Text(c.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm")));
-        date.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 10));
-        date.setFill(Color.web(textSoft()));
+        date.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 10));
+        date.setFill(javafx.scene.paint.Color.web(textSoft()));
         
         meta.getChildren().addAll(name, date);
         header.getChildren().addAll(avatarPane, meta);
 
         Text body = new Text(c.getDescriptionCommentaire());
-        body.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 13));
-        body.setFill(Color.web("#d1d1d6"));
-        body.setWrappingWidth(500); // Adjust as needed
+        body.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 13));
+        body.setFill(javafx.scene.paint.Color.web("#d1d1d6"));
+        body.setWrappingWidth(500);
 
         item.getChildren().addAll(header, body);
+
+        // Comment Image
+        if (c.getImageCommentaire() != null && !c.getImageCommentaire().isEmpty()) {
+            String cImgPath = "uploads/comment_images/" + c.getImageCommentaire();
+            try {
+                javafx.scene.image.Image cImg = com.syndicati.utils.image.ImageLoaderUtil.loadImage(cImgPath, false);
+                if (cImg != null) {
+                    javafx.scene.image.ImageView cImgView = new javafx.scene.image.ImageView(cImg);
+                    cImgView.setFitWidth(300);
+                    cImgView.setPreserveRatio(true);
+                    cImgView.setStyle("-fx-background-radius: 10px;");
+                    javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
+                    clip.setArcWidth(20);
+                    clip.setArcHeight(20);
+                    clip.widthProperty().bind(cImgView.fitWidthProperty());
+                    clip.heightProperty().bind(cImgView.layoutBoundsProperty().map(b -> b.getHeight())); // Use layout bounds for height since it's preserveRatio
+                    // Simpler clip for dynamic height
+                    item.getChildren().add(cImgView);
+                    cImgView.setCursor(javafx.scene.Cursor.HAND);
+                    cImgView.setOnMouseClicked(e -> showImageLightbox(cImg));
+                }
+            } catch (Exception ignored) {}
+        }
+
         return item;
     }
 
@@ -1713,28 +1743,83 @@ public class ForumPageView implements ViewInterface {
             "-fx-control-inner-background: #1a1a2e;" +
             "-fx-text-fill: white;" +
             "-fx-prompt-text-fill: gray;" +
-            "-fx-background-color: #1a1a2e;" +
             "-fx-background-radius: 10px;" +
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-radius: 10px;"
         );
 
+        selectedCommentImageLabel = new Label();
+        selectedCommentImageLabel.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 11));
+        selectedCommentImageLabel.setTextFill(javafx.scene.paint.Color.web(tm.getAccentHex()));
+
+        HBox controls = new HBox(12);
+        controls.setAlignment(Pos.CENTER_LEFT);
+
+        Button attachBtn = ghostBtn("Attach Photo", () -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Select Image");
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+            java.io.File selected = fc.showOpenDialog(root.getScene().getWindow());
+            if (selected != null) {
+                commentImageFile = selected;
+                selectedCommentImageLabel.setText("Selected: " + selected.getName());
+            }
+        });
+        attachBtn.setStyle(attachBtn.getStyle() + "-fx-font-size: 11px;");
+
+        anonymousToggleBtn = ghostBtn("Comment Anonymously", () -> {
+            isCommentAnonymous = !isCommentAnonymous;
+            if (isCommentAnonymous) {
+                anonymousToggleBtn.setStyle(anonymousToggleBtn.getStyle() + "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.2) + "; -fx-border-color: " + tm.getAccentHex() + ";");
+            } else {
+                anonymousToggleBtn.setStyle(ghostBtn("Comment Anonymously", null).getStyle() + "-fx-font-size: 11px;");
+            }
+        });
+        anonymousToggleBtn.setStyle(anonymousToggleBtn.getStyle() + "-fx-font-size: 11px;");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
         Button postBtn = filledBtn("Post Comment", () -> {
             if (currentPub != null) {
-                commentaireController.ajouterCommentaire(currentPub.getId(), commentTextArea.getText());
+                String imgName = saveCommentImage(commentImageFile);
+                int visibility = isCommentAnonymous ? 0 : 1;
+                commentaireController.ajouterCommentaire(currentPub.getId(), commentTextArea.getText(), imgName, visibility);
             } else {
                 showNotification("Please select a publication first.", "error");
             }
         });
         postBtn.setPrefWidth(140);
 
-        form.getChildren().addAll(commentTextArea, postBtn);
+        controls.getChildren().addAll(attachBtn, selectedCommentImageLabel, anonymousToggleBtn, spacer, postBtn);
+        form.getChildren().addAll(commentTextArea, controls);
         return form;
+    }
+
+    private String saveCommentImage(java.io.File file) {
+        if (file == null) return null;
+        try {
+            java.io.File dir = new java.io.File("uploads/comment_images");
+            if (!dir.exists()) dir.mkdirs();
+            String fileName = System.currentTimeMillis() + "_comm_" + file.getName();
+            java.io.File dest = new java.io.File(dir, fileName);
+            java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return fileName; 
+        } catch (Exception e) {
+            System.err.println("Error saving comment image: " + e.getMessage());
+            return null;
+        }
     }
 
     public void clearCommentForm() {
         if (commentTextArea != null) {
             commentTextArea.clear();
+        }
+        commentImageFile = null;
+        selectedCommentImageLabel.setText("");
+        isCommentAnonymous = false;
+        if (anonymousToggleBtn != null) {
+            anonymousToggleBtn.setStyle(ghostBtn("Comment Anonymously", null).getStyle() + "-fx-font-size: 11px;");
         }
     }
 
