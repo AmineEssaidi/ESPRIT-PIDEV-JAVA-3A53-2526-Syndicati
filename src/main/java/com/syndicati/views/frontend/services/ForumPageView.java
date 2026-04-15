@@ -3,6 +3,7 @@ package com.syndicati.views.frontend.services;
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.entities.Publication;
+import com.syndicati.models.entities.PubCommentReaction;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.beans.binding.Bindings;
 import javafx.animation.FadeTransition;
@@ -40,6 +41,7 @@ public class ForumPageView implements ViewInterface {
     private final ThemeManager tm = ThemeManager.getInstance();
     private com.syndicati.controllers.frontend.services.forum.PublicationController publicationController;
     private com.syndicati.controllers.frontend.services.forum.CommentaireController commentaireController;
+    private com.syndicati.controllers.frontend.services.forum.PubCommentReactionController reactionController;
     private VBox sidebarList;
 
     private final StackPane faceStack = new StackPane();
@@ -94,18 +96,29 @@ public class ForumPageView implements ViewInterface {
     private Label selectedCommentImageLabel;
     private Button anonymousToggleBtn;
 
+    // Social Action Components (Publication)
+    private HBox socialActionsBox;
+    private Button btnLikePub;
+    private Button btnDislikePub;
+    private Button btnBookmarkPub;
+    private Button btnSignalPub;
+    private Label countLikePub;
+    private Label countDislikePub;
+    private Label countReportPub;
+
     public ForumPageView() {
         root = new VBox(20);
         root.setAlignment(Pos.TOP_CENTER);
         root.setPadding(new Insets(28, 0, 40, 0));
-        root.setMaxWidth(Double.MAX_VALUE);
         root.setStyle("-fx-background-color: transparent;");
+        root.setMaxWidth(Double.MAX_VALUE);
 
         root.getChildren().addAll(buildHero(), buildSplitContainer());
 
-        this.publicationController = new com.syndicati.controllers.frontend.services.forum.PublicationController(this);
-        this.publicationController.afficher();
-        this.commentaireController = new com.syndicati.controllers.frontend.services.forum.CommentaireController(this);
+        publicationController = new com.syndicati.controllers.frontend.services.forum.PublicationController(this);
+        publicationController.afficher();
+        commentaireController = new com.syndicati.controllers.frontend.services.forum.CommentaireController(this);
+        reactionController = new com.syndicati.controllers.frontend.services.forum.PubCommentReactionController(this);
     }
 
     private StackPane buildHero() {
@@ -330,9 +343,6 @@ public class ForumPageView implements ViewInterface {
         );
         commentsSection.getChildren().add(commentsCardContainer);
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
         detailEditBtn = ghostBtn("Edit", () -> {
             if (currentPub != null) {
                 populateEditForm(currentPub);
@@ -349,18 +359,49 @@ public class ForumPageView implements ViewInterface {
         });
         detailDeleteBtn.setStyle(detailDeleteBtn.getStyle() + "-fx-text-fill: #ef4444; -fx-border-color: rgba(239, 68, 68, 0.4);");
 
-        HBox actionBar = new HBox(8,
-            reactionBtn("Like"),
-            reactionBtn("Dislike"),
-            reactionBtn("Emoji"),
-            reactionBtn("Bookmark"),
-            reactionBtn("Report"),
-            spacer,
-            detailEditBtn,
-            detailDeleteBtn
-        );
-        actionBar.setPadding(new Insets(8));
+        HBox actionBar = new HBox(12);
+        actionBar.setPadding(new Insets(14, 20, 14, 20));
         actionBar.setAlignment(Pos.CENTER_LEFT);
+        actionBar.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.04);" +
+            "-fx-background-radius: 18px;" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 18px;"
+        );
+
+        // Social Actions HBox
+        countLikePub = new Label("0");
+        countDislikePub = new Label("0");
+        countReportPub = new Label("0");
+
+        btnLikePub = socialBtn("👍", countLikePub, () -> {
+            if (currentPub != null) reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_LIKE, null, null);
+        });
+        btnDislikePub = socialBtn("👎", countDislikePub, () -> {
+            if (currentPub != null) reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_DISLIKE, null, null);
+        });
+        btnBookmarkPub = socialBtn("🔖", "Bookmark", () -> {
+            if (currentPub != null) reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_BOOKMARK, null, null);
+        });
+        btnSignalPub = socialBtn("🚩", countReportPub, () -> {
+            if (currentPub != null) {
+                showReportDialog(reason -> {
+                    reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_REPORT, null, reason);
+                });
+            }
+        });
+
+        socialActionsBox = new HBox(8, btnLikePub, btnDislikePub, btnBookmarkPub, btnSignalPub);
+        socialActionsBox.setAlignment(Pos.CENTER_LEFT);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox ownerActions = new HBox(8, detailEditBtn, detailDeleteBtn);
+        ownerActions.setAlignment(Pos.CENTER_RIGHT);
+
+        actionBar.getChildren().addAll(socialActionsBox, spacer, ownerActions);
         actionBar.setStyle(
             "-fx-background-color: rgba(255,255,255,0.03);" +
             "-fx-border-color: " + borderSoft() + ";" +
@@ -426,6 +467,66 @@ public class ForumPageView implements ViewInterface {
         ft.setToValue(0);
         ft.setOnFinished(e -> faceStack.getChildren().remove(lightbox));
         ft.play();
+    }
+
+    public void refreshReactionsFor(Integer pubId, Integer commId) {
+        if (pubId != null && (currentPub != null && pubId.equals(currentPub.getId()))) {
+            updatePublicationReactions(pubId);
+        }
+        if (commId != null) {
+            // Comments are tricky as they are items in the list.
+            // For now, refreshing the whole comment list is easiest to ensure state consistency.
+            if (currentPub != null) commentaireController.afficher(currentPub.getId());
+        }
+    }
+
+    private void updatePublicationReactions(int pubId) {
+        javafx.application.Platform.runLater(() -> {
+            int likes = reactionController.getCount(pubId, null, PubCommentReaction.KIND_LIKE);
+            int dislikes = reactionController.getCount(pubId, null, PubCommentReaction.KIND_DISLIKE);
+            int reports = reactionController.getCount(pubId, null, PubCommentReaction.KIND_REPORT);
+
+            countLikePub.setText(String.valueOf(likes));
+            countDislikePub.setText(String.valueOf(dislikes));
+            countReportPub.setText(String.valueOf(reports));
+
+            // Update button states (active/inactive)
+            updateSocialBtnState(btnLikePub, reactionController.hasReacted(pubId, null, PubCommentReaction.KIND_LIKE), "#2ed573");
+            updateSocialBtnState(btnDislikePub, reactionController.hasReacted(pubId, null, PubCommentReaction.KIND_DISLIKE), "#ff4757");
+            updateSocialBtnState(btnBookmarkPub, reactionController.hasReacted(pubId, null, PubCommentReaction.KIND_BOOKMARK), "#00d2ff");
+            updateSocialBtnState(btnSignalPub, reactionController.hasReacted(pubId, null, PubCommentReaction.KIND_REPORT), "#ffa502");
+        });
+    }
+
+    private void updateSocialBtnState(Button btn, boolean active, String colorHex) {
+        if (active) {
+            btn.setStyle(btn.getStyle() + "-fx-border-color: " + colorHex + "; -fx-background-color: " + tm.toRgba(colorHex, 0.1) + ";");
+            ((Text)((HBox)btn.getGraphic()).getChildren().get(0)).setFill(javafx.scene.paint.Color.web(colorHex));
+        } else {
+            // Reset to default style (strip the active additions)
+            btn.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.03);" +
+                "-fx-border-color: rgba(255,255,255,0.05);" +
+                "-fx-border-radius: 10px;" +
+                "-fx-background-radius: 10px;" +
+                "-fx-cursor: hand;" +
+                "-fx-padding: 5 12 5 12;"
+            );
+            ((Text)((HBox)btn.getGraphic()).getChildren().get(0)).setFill(javafx.scene.paint.Color.web("rgba(255,255,255,0.6)"));
+        }
+    }
+
+    private void showReportDialog(java.util.function.Consumer<String> onReport) {
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog();
+        dialog.setTitle("Report Content");
+        dialog.setHeaderText("Why are you reporting this content?");
+        dialog.setContentText("Reason:");
+        
+        dialog.showAndWait().ifPresent(reason -> {
+            if (!reason.isBlank()) {
+                onReport.accept(reason);
+            }
+        });
     }
 
     private void showDeleteConfirmation(String titleText, String msgText, Runnable onConfirm) {
@@ -1066,6 +1167,9 @@ public class ForumPageView implements ViewInterface {
                 commentsCardContainer.setVisible(!isAnnouncement);
                 commentsCardContainer.setManaged(!isAnnouncement);
             }
+
+            // 3.7 Update Social Actions for Publication
+            updatePublicationReactions(pub.getId());
             
             // 4. Ownership check for Edit/Delete buttons
             try {
@@ -1452,6 +1556,36 @@ public class ForumPageView implements ViewInterface {
         return t;
     }
 
+    private Button socialBtn(String icon, Label counter, Runnable action) {
+        HBox box = new HBox(6);
+        box.setAlignment(Pos.CENTER);
+        Text iconText = new Text(icon);
+        iconText.setFill(Color.web("rgba(255,255,255,0.6)"));
+        counter.setTextFill(Color.web("rgba(255,255,255,0.5)"));
+        counter.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 12));
+        box.getChildren().addAll(iconText, counter);
+
+        Button btn = new Button();
+        btn.setGraphic(box);
+        btn.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.03);" +
+            "-fx-border-color: rgba(255,255,255,0.05);" +
+            "-fx-border-radius: 10px;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-cursor: hand;" +
+            "-fx-padding: 5 12 5 12;"
+        );
+        btn.setOnMouseEntered(e -> btn.setStyle(btn.getStyle() + "-fx-background-color: rgba(255,255,255,0.08);"));
+        btn.setOnMouseExited(e -> btn.setStyle(btn.getStyle().replace("-fx-background-color: rgba(255,255,255,0.08);", "-fx-background-color: rgba(255,255,255,0.03);")));
+        btn.setOnAction(e -> action.run());
+        return btn;
+    }
+
+    private Button socialBtn(String icon, String text, Runnable action) {
+        Label label = new Label(text);
+        return socialBtn(icon, label, action);
+    }
+
     private String surfaceStrong() {
         return tm.isDarkMode()
             ? "linear-gradient(from 0% 0% to 100% 100%, #020202 0%, #070707 55%, #0b0b0b 100%)"
@@ -1758,19 +1892,44 @@ public class ForumPageView implements ViewInterface {
                     javafx.scene.image.ImageView cImgView = new javafx.scene.image.ImageView(cImg);
                     cImgView.setFitWidth(300);
                     cImgView.setPreserveRatio(true);
-                    cImgView.setStyle("-fx-background-radius: 10px;");
+                    cImgView.setCursor(javafx.scene.Cursor.HAND);
+                    cImgView.setOnMouseClicked(e -> showImageLightbox(cImg));
+                    
                     javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
                     clip.setArcWidth(20);
                     clip.setArcHeight(20);
                     clip.widthProperty().bind(cImgView.fitWidthProperty());
-                    clip.heightProperty().bind(cImgView.layoutBoundsProperty().map(b -> b.getHeight())); // Use layout bounds for height since it's preserveRatio
-                    // Simpler clip for dynamic height
+                    clip.heightProperty().bind(cImgView.layoutBoundsProperty().map(b -> b.getHeight()));
+                    cImgView.setClip(clip);
+
                     item.getChildren().add(cImgView);
-                    cImgView.setCursor(javafx.scene.Cursor.HAND);
-                    cImgView.setOnMouseClicked(e -> showImageLightbox(cImg));
                 }
             } catch (Exception ignored) {}
         }
+
+        // Reaction Footer for Comments
+        HBox commentFooter = new HBox(10);
+        commentFooter.setAlignment(Pos.CENTER_LEFT);
+        commentFooter.setPadding(new Insets(4, 0, 0, 0));
+
+        Label cLikeCount = new Label(String.valueOf(reactionController.getCount(null, c.getIdCommentaire(), PubCommentReaction.KIND_LIKE)));
+        Label cDislikeCount = new Label(String.valueOf(reactionController.getCount(null, c.getIdCommentaire(), PubCommentReaction.KIND_DISLIKE)));
+
+        Button cLikeBtn = socialBtn("👍", cLikeCount, () -> reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_LIKE, null, null));
+        Button cDislikeBtn = socialBtn("👎", cDislikeCount, () -> reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_DISLIKE, null, null));
+        Button cSignalBtn = socialBtn("🚩", "", () -> {
+            showReportDialog(reason -> {
+                reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_REPORT, null, reason);
+            });
+        });
+
+        // Highlight active states
+        if (reactionController.hasReacted(null, c.getIdCommentaire(), PubCommentReaction.KIND_LIKE)) updateSocialBtnState(cLikeBtn, true, "#2ed573");
+        if (reactionController.hasReacted(null, c.getIdCommentaire(), PubCommentReaction.KIND_DISLIKE)) updateSocialBtnState(cDislikeBtn, true, "#ff4757");
+        if (reactionController.hasReacted(null, c.getIdCommentaire(), PubCommentReaction.KIND_REPORT)) updateSocialBtnState(cSignalBtn, true, "#ffa502");
+
+        commentFooter.getChildren().addAll(cLikeBtn, cDislikeBtn, cSignalBtn);
+        item.getChildren().add(commentFooter);
 
         return item;
     }
