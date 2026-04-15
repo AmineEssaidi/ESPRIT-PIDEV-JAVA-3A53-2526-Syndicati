@@ -50,6 +50,34 @@ public class CommentaireRepository {
         return comments;
     }
 
+    public Commentaire findById(int id) {
+        String sql = "SELECT c.*, " +
+                     "u.first_name AS author_fname, " +
+                     "u.last_name AS author_lname, " +
+                     "pr.avatar AS author_av " +
+                     "FROM commentaire c " +
+                     "LEFT JOIN user u ON c.id_user = u.id_user " +
+                     "LEFT JOIN profile pr ON u.id_user = pr.user_id " +
+                     "WHERE c.id_commentaire = ?";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return null;
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return mapRow(rs);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("CommentaireRepository.findById error: " + e.getMessage());
+        }
+
+        return null;
+    }
+
     public int create(Commentaire comment) {
         String sql = "INSERT INTO `commentaire` (`description_commentaire`, `image_commentaire`, `created_at`, `updated_at`, `visibility`, `id_pub`, `id_user`) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?)";

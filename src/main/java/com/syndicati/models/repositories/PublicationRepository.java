@@ -146,6 +146,35 @@ public class PublicationRepository {
         return false;
     }
 
+    public List<Publication> findAllBookmarkedByUserId(int userId) {
+        String sql = "SELECT p.*, " +
+                     "u.first_name AS author_fname, " +
+                     "u.last_name AS author_lname, " +
+                     "pr.avatar AS author_av " +
+                     "FROM publication p " +
+                     "JOIN reaction r ON p.id = r.publication_id " +
+                     "LEFT JOIN user u ON p.user_id = u.id_user " +
+                     "LEFT JOIN profile pr ON u.id_user = pr.user_id " +
+                     "WHERE r.user_id = ? AND r.kind = 'Bookmark' " +
+                     "ORDER BY p.date_creation_pub DESC";
+        List<Publication> publications = new ArrayList<>();
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return publications;
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        publications.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("PublicationRepository.findAllBookmarkedByUserId error: " + e.getMessage());
+        }
+        return publications;
+    }
+
     private Publication mapRow(ResultSet rs) throws SQLException {
         Publication pub = new Publication();
         pub.setId(rs.getInt("id"));

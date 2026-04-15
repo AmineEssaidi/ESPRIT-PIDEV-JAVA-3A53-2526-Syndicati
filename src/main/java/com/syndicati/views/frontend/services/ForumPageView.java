@@ -54,6 +54,7 @@ public class ForumPageView implements ViewInterface {
     private String currentFilter = "General";
     private Button btnGeneral;
     private Button btnAnnouncements;
+    private Button btnFavorites;
 
     // Creation form fields
     private TextField createTitleField;
@@ -382,12 +383,24 @@ public class ForumPageView implements ViewInterface {
             if (currentPub != null) reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_DISLIKE, null, null);
         });
         btnBookmarkPub = socialBtn("🔖", "Bookmark", () -> {
-            if (currentPub != null) reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_BOOKMARK, null, null);
+            if (currentPub != null) {
+                boolean alreadyBookmarked = reactionController.hasReacted(currentPub.getId(), null, PubCommentReaction.KIND_BOOKMARK);
+                String title = alreadyBookmarked ? "Retirer des favoris" : "Ajouter aux favoris";
+                String msg = alreadyBookmarked ? "Voulez-vous retirer cette publication de vos favoris ?" : "Voulez-vous ajouter cette publication à vos favoris ?";
+                
+                showBookmarkConfirmation(title, msg, () -> {
+                    reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_BOOKMARK, null, null);
+                });
+            }
         });
         btnSignalPub = socialBtn("🚩", countReportPub, () -> {
             if (currentPub != null) {
-                showReportDialog(reason -> {
-                    reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_REPORT, null, reason);
+                boolean alreadySignaled = reactionController.hasReacted(currentPub.getId(), null, PubCommentReaction.KIND_REPORT);
+                String title = alreadySignaled ? "Retirer le signalement" : "Signaler le contenu";
+                String msg = alreadySignaled ? "Voulez-vous retirer votre signalement sur cette publication ?" : "Voulez-vous vraiment signaler cette publication ?";
+                
+                showSignalConfirmation(title, msg, () -> {
+                    reactionController.handleReaction(currentPub.getId(), null, PubCommentReaction.KIND_REPORT, null, "Signaled");
                 });
             }
         });
@@ -474,10 +487,24 @@ public class ForumPageView implements ViewInterface {
             updatePublicationReactions(pubId);
         }
         if (commId != null) {
-            // Comments are tricky as they are items in the list.
-            // For now, refreshing the whole comment list is easiest to ensure state consistency.
-            if (currentPub != null) commentaireController.afficher(currentPub.getId());
+            refreshSingleComment(commId);
         }
+    }
+
+    private void refreshSingleComment(int commId) {
+        javafx.application.Platform.runLater(() -> {
+            com.syndicati.models.entities.Commentaire updated = commentaireController.getCommentById(commId);
+            if (updated == null) return;
+
+            for (int i = 0; i < commentListContainer.getChildren().size(); i++) {
+                javafx.scene.Node node = commentListContainer.getChildren().get(i);
+                if (node instanceof javafx.scene.layout.VBox && ("comment-" + commId).equals(node.getId())) {
+                    javafx.scene.layout.VBox newItem = buildCommentItem(updated);
+                    commentListContainer.getChildren().set(i, newItem);
+                    break;
+                }
+            }
+        });
     }
 
     private void updatePublicationReactions(int pubId) {
@@ -516,17 +543,94 @@ public class ForumPageView implements ViewInterface {
         }
     }
 
-    private void showReportDialog(java.util.function.Consumer<String> onReport) {
-        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog();
-        dialog.setTitle("Report Content");
-        dialog.setHeaderText("Why are you reporting this content?");
-        dialog.setContentText("Reason:");
-        
-        dialog.showAndWait().ifPresent(reason -> {
-            if (!reason.isBlank()) {
-                onReport.accept(reason);
-            }
+    private void showBookmarkConfirmation(String titleText, String msgText, Runnable onConfirm) {
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.7);");
+        overlay.setOpacity(0);
+
+        VBox card = new VBox(20);
+        card.setPadding(new Insets(30));
+        card.setMaxSize(400, 200);
+        card.setAlignment(Pos.CENTER);
+        card.setStyle(
+            "-fx-background-color: " + surfaceCard() + ";" +
+            "-fx-border-color: #00d2ff;" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 20px;" +
+            "-fx-background-radius: 20px;"
+        );
+
+        Text title = new Text(titleText);
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 20));
+        title.setFill(javafx.scene.paint.Color.WHITE);
+
+        Text msg = new Text(msgText);
+        msg.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 14));
+        msg.setFill(javafx.scene.paint.Color.web("rgba(255,255,255,0.8)"));
+        msg.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        Button cancelBtn = ghostBtn("Annuler", () -> hideLightbox(overlay));
+        Button confirmBtn = filledBtn("Confirmer", () -> {
+            onConfirm.run();
+            hideLightbox(overlay);
         });
+        confirmBtn.setStyle(confirmBtn.getStyle() + "-fx-background-color: #00d2ff;");
+
+        HBox btns = new HBox(12, cancelBtn, confirmBtn);
+        btns.setAlignment(Pos.CENTER);
+
+        card.getChildren().addAll(title, msg, btns);
+        overlay.getChildren().add(card);
+        faceStack.getChildren().add(overlay);
+
+        FadeTransition ft = new FadeTransition(Duration.millis(300), overlay);
+        ft.setToValue(1);
+        ft.play();
+    }
+
+    private void showSignalConfirmation(String titleText, String msgText, Runnable onConfirm) {
+        StackPane overlay = new StackPane();
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.7);");
+        overlay.setOpacity(0);
+
+        VBox card = new VBox(20);
+        card.setPadding(new Insets(30));
+        card.setMaxSize(400, 200);
+        card.setAlignment(Pos.CENTER);
+        card.setStyle(
+            "-fx-background-color: " + surfaceCard() + ";" +
+            "-fx-border-color: #ffa502;" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 20px;" +
+            "-fx-background-radius: 20px;"
+        );
+
+        Text title = new Text(titleText);
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 20));
+        title.setFill(javafx.scene.paint.Color.WHITE);
+
+        Text msg = new Text(msgText);
+        msg.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), 14));
+        msg.setFill(javafx.scene.paint.Color.web("rgba(255,255,255,0.8)"));
+        msg.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        Button cancelBtn = ghostBtn("Annuler", () -> hideLightbox(overlay));
+        Button confirmBtn = filledBtn("Confirmer", () -> {
+            onConfirm.run();
+            hideLightbox(overlay);
+        });
+        confirmBtn.setStyle(confirmBtn.getStyle() + "-fx-background-color: #ffa502;");
+
+        HBox btns = new HBox(12, cancelBtn, confirmBtn);
+        btns.setAlignment(Pos.CENTER);
+
+        card.getChildren().addAll(title, msg, btns);
+        overlay.getChildren().add(card);
+        faceStack.getChildren().add(overlay);
+
+        FadeTransition ft = new FadeTransition(Duration.millis(300), overlay);
+        ft.setToValue(1);
+        ft.play();
     }
 
     private void showDeleteConfirmation(String titleText, String msgText, Runnable onConfirm) {
@@ -1215,7 +1319,7 @@ public class ForumPageView implements ViewInterface {
         btnGeneral = toggleFilter("General", true);
         btnGeneral.setOnAction(e -> {
             currentFilter = "General";
-            applyFilter();
+            publicationController.afficher();
         });
 
         btnAnnouncements = toggleFilter("Announcements", false);
@@ -1224,7 +1328,13 @@ public class ForumPageView implements ViewInterface {
             applyFilter();
         });
 
-        HBox filters = new HBox(8, btnGeneral, btnAnnouncements);
+        btnFavorites = toggleFilter("Favoris", false);
+        btnFavorites.setOnAction(e -> {
+            currentFilter = "Favoris";
+            publicationController.afficherFavoris();
+        });
+
+        HBox filters = new HBox(8, btnGeneral, btnAnnouncements, btnFavorites);
 
         header.getChildren().addAll(title, actions, filters);
 
@@ -1636,6 +1746,7 @@ public class ForumPageView implements ViewInterface {
         // Update button styles
         updateFilterButtonStyle(btnGeneral, currentFilter.equals("General"));
         updateFilterButtonStyle(btnAnnouncements, currentFilter.equals("Announcements"));
+        if (btnFavorites != null) updateFilterButtonStyle(btnFavorites, currentFilter.equals("Favoris"));
 
         java.util.List<com.syndicati.models.entities.Publication> filtered;
         if (currentFilter.equals("Announcements")) {
@@ -1803,6 +1914,7 @@ public class ForumPageView implements ViewInterface {
 
     private VBox buildCommentItem(com.syndicati.models.entities.Commentaire c) {
         VBox item = new VBox(10);
+        item.setId("comment-" + c.getIdCommentaire());
         item.setPadding(new Insets(12));
         item.setStyle(
             "-fx-background-color: rgba(255,255,255,0.03);" +
@@ -1914,12 +2026,17 @@ public class ForumPageView implements ViewInterface {
 
         Label cLikeCount = new Label(String.valueOf(reactionController.getCount(null, c.getIdCommentaire(), PubCommentReaction.KIND_LIKE)));
         Label cDislikeCount = new Label(String.valueOf(reactionController.getCount(null, c.getIdCommentaire(), PubCommentReaction.KIND_DISLIKE)));
+        Label cReportCount = new Label(String.valueOf(reactionController.getCount(null, c.getIdCommentaire(), PubCommentReaction.KIND_REPORT)));
 
         Button cLikeBtn = socialBtn("👍", cLikeCount, () -> reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_LIKE, null, null));
         Button cDislikeBtn = socialBtn("👎", cDislikeCount, () -> reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_DISLIKE, null, null));
-        Button cSignalBtn = socialBtn("🚩", "", () -> {
-            showReportDialog(reason -> {
-                reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_REPORT, null, reason);
+        Button cSignalBtn = socialBtn("🚩", cReportCount, () -> {
+            boolean alreadySignaled = reactionController.hasReacted(null, c.getIdCommentaire(), PubCommentReaction.KIND_REPORT);
+            String title = alreadySignaled ? "Retirer le signalement" : "Signaler le contenu";
+            String msg = alreadySignaled ? "Voulez-vous retirer votre signalement sur ce commentaire ?" : "Voulez-vous vraiment signaler ce commentaire ?";
+            
+            showSignalConfirmation(title, msg, () -> {
+                reactionController.handleReaction(null, c.getIdCommentaire(), PubCommentReaction.KIND_REPORT, null, "Signaled");
             });
         });
 

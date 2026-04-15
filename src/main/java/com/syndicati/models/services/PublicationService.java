@@ -41,4 +41,8 @@ public class PublicationService {
     public boolean deletePublication(int id) {
         return repository.delete(id);
     }
+
+    public List<Publication> getBookmarkedByUserId(int userId) {
+        return repository.findAllBookmarkedByUserId(userId);
+    }
 }

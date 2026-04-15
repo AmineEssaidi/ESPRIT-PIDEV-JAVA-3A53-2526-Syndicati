@@ -37,4 +37,8 @@ public class CommentaireService {
     public boolean deleteComment(int id) {
         return repository.delete(id);
     }
+
+    public Commentaire getCommentById(int id) {
+        return repository.findById(id);
+    }
 }

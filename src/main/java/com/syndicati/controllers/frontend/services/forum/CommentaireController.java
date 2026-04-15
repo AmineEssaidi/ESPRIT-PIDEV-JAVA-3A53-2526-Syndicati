@@ -35,6 +35,13 @@ public class CommentaireController {
     }
 
     /**
+     * Synchronous fetch of a single comment.
+     */
+    public Commentaire getCommentById(int id) {
+        return service.getCommentById(id);
+    }
+
+    /**
      * Adds a new comment and refreshes the list on success.
      */
     public void ajouterCommentaire(int pubId, String content, String image, int visibility) {

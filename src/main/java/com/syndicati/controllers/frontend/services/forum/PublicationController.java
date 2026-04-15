@@ -36,6 +36,18 @@ public class PublicationController {
         }).start();
     }
 
+    public void afficherFavoris() {
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser == null) return;
+
+        new Thread(() -> {
+            List<Publication> publications = service.getBookmarkedByUserId(currentUser.getIdUser());
+            Platform.runLater(() -> {
+                view.setPublications(publications);
+            });
+        }).start();
+    }
+
     /**
      * Adds a new publication and refreshes the view.
      */
