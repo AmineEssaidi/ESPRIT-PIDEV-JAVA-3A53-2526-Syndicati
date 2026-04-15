@@ -52,6 +52,16 @@ public class PublicationController {
      * Adds a new publication and refreshes the view.
      */
     public void addPublication(String title, String category, String description, String image) {
+        if (description == null || description.trim().isEmpty()) {
+            view.showNotification("Description cannot be empty.", "error");
+            return;
+        }
+
+        if (!Character.isLetter(description.trim().charAt(0))) {
+            view.showNotification("Description must start with a letter.", "error");
+            return;
+        }
+
         Publication pub = new Publication();
         pub.setTitrePub(title);
         pub.setCategoriePub(category);

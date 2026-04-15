@@ -45,14 +45,14 @@ public class CommentaireController {
      * Adds a new comment and refreshes the list on success.
      */
     public void ajouterCommentaire(int pubId, String content, String image, int visibility) {
-        if (content == null || content.trim().isEmpty()) {
-            view.showNotification("Comment content cannot be empty.", "error");
+        if (content == null || content.trim().length() < 10) {
+            view.showNotification("Comment must be at least 10 characters long.", "error");
             return;
         }
 
         // Quick check for start characters
-        if (!Character.isLetterOrDigit(content.trim().charAt(0))) {
-            view.showNotification("Comment must start with a letter or number (no symbols like . , ? ;)", "error");
+        if (!Character.isLetter(content.trim().charAt(0))) {
+            view.showNotification("Comment must start with a letter (no numbers or symbols like . , ? ;)", "error");
             return;
         }
 
