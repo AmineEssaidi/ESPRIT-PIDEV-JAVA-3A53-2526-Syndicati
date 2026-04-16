@@ -1,5 +1,9 @@
 package com.syndicati.models.entities;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLDataException;
+
 public class Maintenance {
     int id_maintenance, id_app;
     String etat_app, etat_plomberie, etat_electricite, etat_chauffage, date_derniere_maintenance, description_maint, recommendation_ia;
@@ -111,4 +115,6 @@ public class Maintenance {
     {
         return "Date maintenance: "+ this.getDate_derniere_maintenance() + " Recommendation: " + this.getRecommendation_ia()+"\n";
     }
+
+
 }

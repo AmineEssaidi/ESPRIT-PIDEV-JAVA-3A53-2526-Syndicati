@@ -1,6 +1,9 @@
 package com.syndicati.controllers.backend.residence;
 
+import com.syndicati.models.entities.Appartement;
 import com.syndicati.models.entities.Residence;
+import com.syndicati.models.services.ServiceAppartement;
+import com.syndicati.models.services.ServiceMaintenance;
 import com.syndicati.models.services.ServiceResidence;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
@@ -8,7 +11,9 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 import com.syndicati.views.backend.dashboard.ResidenceAdd;
 
+import java.sql.SQLDataException;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 
 public class DetailResidenceController {
@@ -40,6 +45,9 @@ public class DetailResidenceController {
         }
 
         ServiceResidence serviceResidence = new ServiceResidence();
+        ServiceAppartement serviceAppartement = new ServiceAppartement();
+        ServiceMaintenance serviceMaintenance = new ServiceMaintenance();
+
         try {
             Residence residence = serviceResidence.TrouverResidenceParNom(residenceNom);
             if (residence == null) {
@@ -47,12 +55,20 @@ public class DetailResidenceController {
                 return;
             }
 
+            List<Appartement> appartements = serviceAppartement.AppartementsParResidence(residence);
+
+            for (Appartement app : appartements) {
+                serviceMaintenance.SupprimerParAppartement(app.getId_app());
+
+                serviceAppartement.Supprimer(app);
+            }
+
             serviceResidence.Supprimer(residence);
 
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Supprimée");
-            alert.setHeaderText("Résidence supprimée avec succès!");
-            alert.show();
+            alert.setHeaderText("Résidence et toutes ses données associées supprimées avec succès!");
+            alert.showAndWait();
 
             stage.setScene(previousScene);
 
@@ -60,6 +76,7 @@ public class DetailResidenceController {
             showError(e.getMessage());
         }
     }
+
 
     public void modifierResidenceAction() {
         new ResidenceAdd(stage, previousScene).show(); // swap with EditResidence when ready

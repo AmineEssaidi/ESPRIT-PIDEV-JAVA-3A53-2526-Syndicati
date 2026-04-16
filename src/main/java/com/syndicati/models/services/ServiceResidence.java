@@ -18,18 +18,19 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
     @Override
     public void Ajouter(Residence Residence) throws SQLDataException
     {
-        String req= "INSERT INTO RESIDENCE (nom_r, adresse, image_r, date_ajout, n_appartements, n_etages, n_blocs) VALUES ('"
+        String req = "INSERT INTO RESIDENCE (nom_r, adresse, image_r, date_ajout, n_appartements, n_etages, n_blocs) VALUES ('"
                 + Residence.getNom_r() + "', '"
-                + Residence.getAdresse() + "', '"
-                + Residence.getImage_r() + "', '"
-                + Residence.getDate_ajout() + "', '"
-                + Residence.getN_appartements()+ "', '"
+                + Residence.getAdresse() + "', "
+                + (Residence.getImage_r() != null ? "'" + Residence.getImage_r() + "'" : "NULL") + ", '"
+                + Residence.getDate_ajout() + " 00:00:00', '"
+                + Residence.getN_appartements() + "', '"
                 + Residence.getN_etages() + "', '"
                 + Residence.getN_blocs() + "')";
 
         try
         {
             Statement stat=connection.createStatement();
+            System.out.println("LA REQUETE SQL "+req);
             stat.executeUpdate(req);
         }
         catch (SQLException e)
@@ -106,6 +107,37 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
         }
 
         return ResidenceList;
+    }
+
+    public List <Residence> RecupererTri(String tri_par, String ordre) throws SQLDataException
+    {
+        String requete="SELECT * FROM RESIDENCE ORDER BY "+ tri_par + " " + ordre;
+        List<Residence> ResidenceList= null;
+        try
+        {
+            Statement statement= connection.createStatement();
+            ResultSet ResidenceSet= statement.executeQuery(requete);
+            ResidenceList = new ArrayList<>();
+            while(ResidenceSet.next())
+            {
+                Residence Residence=new Residence();
+                Residence.setId_residence(ResidenceSet.getInt(1));
+                Residence.setNom_r(ResidenceSet.getString("nom_r"));
+                Residence.setAdresse(ResidenceSet.getString("adresse"));
+                Residence.setImage_r(ResidenceSet.getString("image_r"));
+                Residence.setDate_ajout(ResidenceSet.getString("date_ajout"));
+                Residence.setN_appartements(ResidenceSet.getInt("n_appartements"));
+                Residence.setN_etages(ResidenceSet.getInt("n_etages"));
+                Residence.setN_blocs(ResidenceSet.getString("n_blocs"));
+                ResidenceList.add(Residence);
+
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        return ResidenceList;
+
     }
 
     public Residence TrouverResidenceParId(int id)

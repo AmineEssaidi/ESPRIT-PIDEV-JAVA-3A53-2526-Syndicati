@@ -27,6 +27,7 @@ public class ResidenceUpdate extends BaseDashboardPage {
     private Text nBlocsMAJErreur;
     private String nomResidence;
 
+
     public ResidenceUpdate(Stage stage, Scene previousScene, String nomResidence) {
         super(stage, previousScene);
         this.nomResidence = nomResidence;

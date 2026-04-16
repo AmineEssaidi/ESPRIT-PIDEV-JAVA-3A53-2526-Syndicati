@@ -10,7 +10,6 @@ public class Launcher {
         System.out.println("ðŸš€ Starting Syndicati Desktop...");
         System.out.println("ðŸ“± JavaFX Application Launcher");
         
-        // Launch the main JavaFX application
         MainApplication.main(args);
     }
 }

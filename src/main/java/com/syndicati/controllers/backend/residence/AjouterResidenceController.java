@@ -9,7 +9,15 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 import com.syndicati.views.backend.dashboard.ResidenceShow;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.Provider;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 public class AjouterResidenceController {
 
@@ -27,6 +35,8 @@ public class AjouterResidenceController {
     private final Text nAppartementsError;
     private final Text dateAjoutError;
     private final Text nBlocsError;
+    private File imageR;
+
     public AjouterResidenceController(Stage stage, Scene previousScene,
                                       TextField nomResidenceField,
                                       TextField adresseField,
@@ -51,6 +61,10 @@ public class AjouterResidenceController {
         this.dateAjoutError = dateAjoutError;
         this.nBlocsError = nBlocsError;
     }
+
+    public void setImageR(File imageR) {
+        this.imageR = imageR;
+    }
     public void ajouterResidenceAction() {
         nomError.setText("");
         adresseError.setText("");
@@ -65,45 +79,129 @@ public class AjouterResidenceController {
         String nBlocs = nBlocsField.getText();
 
         Residence residence = new Residence();
-        residence.setNom_r(nom);
-        residence.setAdresse(adresse);
-        residence.setImage_r(null);
-        residence.setDate_ajout(dateAjout);
-        residence.setN_appartements(parseIntSafe(nAppartementsStr, nAppartementsError));
-        residence.setN_etages(2);
-        residence.setN_blocs(nBlocs);
 
         ServiceResidence serviceResidence = new ServiceResidence();
+        if (VerifierResidence(nom, adresse, nAppartementsStr, dateAjout, nBlocs,
+                nomError, adresseError, nAppartementsError,
+                dateAjoutError, nBlocsError)) {
+            try {
+                SauvegarderImage(imageR, residence);
+                residence.setNom_r(nom);
+                residence.setAdresse(adresse);
+                residence.setN_appartements(Integer.parseInt(nAppartementsStr));
+                residence.setDate_ajout(dateAjout);
+                residence.setN_blocs(nBlocs);
+                residence.setN_etages(0);
 
-        try {
-            serviceResidence.Ajouter(residence);
+                serviceResidence.Ajouter(residence);
 
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("Résidence Ajoutée");
-            alert.setHeaderText("Résidence ajoutée avec succès!");
-            alert.show();
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Résidence Ajoutée");
+                alert.setHeaderText("Résidence ajoutée avec succès!");
+                alert.showAndWait();
 
-            String[] rowData = {nom, adresse, nAppartementsStr, dateAjout, nBlocs};
-            new ResidenceShow(stage, previousScene, rowData).show();
+                String[] rowData = {nom, adresse, nAppartementsStr, dateAjout, nBlocs};
+                new ResidenceShow(stage, previousScene, rowData).show();
 
-        } catch (SQLException e) {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Erreur");
-            alert.setHeaderText(e.getMessage());
-            alert.show();
+            } catch (SQLException e) {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Erreur");
+                alert.setContentText(e.getMessage());
+                alert.showAndWait();
+            } catch (DateTimeParseException e) {
+                dateAjoutError.setText("Format de date invalide (dd/MM/yyyy)");
+            }
         }
     }
 
-    private int parseIntSafe(String value, Text errorField) {
-        if (value == null || value.isBlank() || value.equals("-")) {
-            errorField.setText("This field must be a number.");
-            return 0;
+
+    private boolean VerifierResidence(String nom, String adresse, String nAppartementsStr, String dateAjout, String nBlocs,
+                                      Text nomError, Text adresseError, Text nAppartementsError, Text dateAjoutError, Text nBlocsError)
+    {
+        boolean test = true;
+
+        nomError.setText("");
+        adresseError.setText("");
+        nAppartementsError.setText("");
+        dateAjoutError.setText("");
+        nBlocsError.setText("");
+
+        nomError.setVisible(true); nomError.setManaged(true);
+        adresseError.setVisible(true); adresseError.setManaged(true);
+        nAppartementsError.setVisible(true); nAppartementsError.setManaged(true);
+        dateAjoutError.setVisible(true); dateAjoutError.setManaged(true);
+        nBlocsError.setVisible(true); nBlocsError.setManaged(true);
+
+        if (nom == null || nom.trim().isEmpty())
+        {
+            nomError.setText("Nom de résidence obligatoire!");
+            test = false;
         }
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            errorField.setText("Invalid number: \"" + value + "\"");
-            return 0;
+        else if (!(nom.matches("^[a-zA-ZÀ-ÿ]+[a-zA-ZÀ-ÿ0-9 ]*$")))
+        {
+            nomError.setText("Nom de résidence invalide!");
+            test = false;
         }
+
+        if (adresse == null || adresse.trim().isEmpty())
+        {
+            adresseError.setText("L'adresse est obligatoire!");
+            test = false;
+        }
+        else if (adresse.trim().length() < 5)
+        {
+            adresseError.setText("Adresse trop courte");
+            test = false;
+        }
+        else if (adresse.matches("[0-9]+"))
+        {
+            adresseError.setText("Adresse invalide");
+            test = false;
+        }
+
+        if (!(nAppartementsStr.matches("\\d+")))
+        {
+            nAppartementsError.setText("Nombre invalide!");
+            test = false;
+        }
+        else
+        {
+            int nAppartements = Integer.parseInt(nAppartementsStr);
+            if (nAppartements <= 0 || nAppartements > 10)
+            {
+                nAppartementsError.setText("Nombre d'appartements doit être entre 1 et 10!");
+                test = false;
+            }
+        }
+
+        if (dateAjout == null || dateAjout.trim().isEmpty())
+        {
+            dateAjoutError.setText("Date d'ajout obligatoire");
+            test = false;
+        }
+        else if (!(dateAjout.matches("\\d{4}-\\d{2}-\\d{2}")))
+        {
+            dateAjoutError.setText("Format invalide (YYYY-MM-DD)");
+            test = false;
+        }
+
+
+
+        return test;
+    }
+
+    public boolean SauvegarderImage(File imageR, Residence residence) {
+        if (imageR != null) {
+            String destDir = System.getProperty("user.dir") + "/uploads/residence_images/";
+            new File(destDir).mkdirs();
+            String destPath = (destDir + imageR.getName()).replace("\\", "/");
+            try {
+                Files.copy(imageR.toPath(), Path.of(destPath), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            residence.setImage_r(imageR.getName());
+        }
+        return true;
     }
 }

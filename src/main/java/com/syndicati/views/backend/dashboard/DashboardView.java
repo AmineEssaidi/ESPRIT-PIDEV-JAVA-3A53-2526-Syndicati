@@ -8,6 +8,7 @@ import com.syndicati.models.services.ServiceResidence;
 import javafx.application.Platform;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;
+import javafx.geometry.HPos;
 import javafx.stage.Stage;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -41,8 +42,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
 import javafx.scene.image.Image;
 import javafx.scene.paint.ImagePattern;
+
 
 /**
  * Admin Dashboard View - full replica of the Horizon admin panel.
@@ -1371,10 +1375,15 @@ public class DashboardView implements ViewInterface {
 
     private VBox residenceTablePane() {
         VBox wrap = new VBox(14);
-        Object data;
-        wrap.getChildren().add(dataTableWithCrud("Residences", "Residence",
+        wrap.getChildren().add(TriRecherche(wrap));
+        wrap.getChildren().add(buildResidenceTable(ListeResidences));
+        return wrap;
+    }
+    private VBox buildResidenceTable(List<Residence> residences) {
+        return dataTableWithCrud(
+                "Residences", "Residence",
                 new String[]{"Residence", "Address", "N of Appartments", "Date Built", "Blocks"},
-                ListeResidences.stream()
+                residences.stream()
                         .map(r -> new String[]{
                                 r.getNom_r(),
                                 r.getAdresse(),
@@ -1382,27 +1391,16 @@ public class DashboardView implements ViewInterface {
                                 r.getDate_ajout(),
                                 String.valueOf(r.getN_blocs())
                         })
-                        .toArray(String[][]::new), true, true
-        ));
-        return wrap;
+                        .toArray(String[][]::new),
+                true, true
+        );
     }
+
 
     private VBox residenceApartmentsPane() {
         VBox wrap = new VBox(14);
-        wrap.getChildren().add(dataTableWithCrud("Apartments", "Apartments",
-                new String[]{"Residence", "Type", "Rent Price", "Status", "Parking Available?"},
-                ListeAppartements.stream()
-                        .map(a -> new String[]{
-                                ServiceResidence.TrouverResidenceParId(a.getResidence_id()).getNom_r() != null
-                                        ? ServiceResidence.TrouverResidenceParId(a.getResidence_id()).getNom_r()
-                                        : "Unavailable",
-                                a.getType_a(),
-                                String.valueOf(a.getPrix_location()),
-                                String.valueOf(a.getDisponible()).equals("1") ? "Available" : "Rented",
-                                String.valueOf(a.getParking()).equals("1") ? "Available" : "Unavailable"
-                        })
-                        .toArray(String[][]::new), true, true
-        ));
+        wrap.getChildren().add(TriRechercheAppartement(wrap));
+        wrap.getChildren().add(buildAppartementTable(ListeAppartements));
         return wrap;
     }
 
@@ -1424,7 +1422,109 @@ public class DashboardView implements ViewInterface {
         ));
         return wrap;
     }
+    private GridPane TriRechercheAppartement(VBox wrap) {
+        TextField searchField = new TextField();
+        searchField.setPromptText("Recherche par appartement");
+        searchField.setPrefWidth(250);
 
+        Button numeroBtn  = pillAction("Number",    true);
+        Button idBtn      = pillAction("ID",        true);
+        Button residenceBtn = pillAction("Residence", true);
+        Button statusBtn  = pillAction("Status",    true);
+        Button typeBtn    = pillAction("Type",       true);
+        Button prixBtn    = pillAction("Price",      true);
+        Button surfaceBtn = pillAction("Surface",    true);
+        Button sortDirBtn = pillAction("↑",          true);
+
+        boolean[] ordre  = {true};
+        String[]  tri_par = {"numero_app"};
+
+        Runnable refresh = () -> {
+            String keyword = searchField.getText().toLowerCase().trim();
+            String dir = ordre[0] ? "asc" : "desc";
+
+            List<Appartement> RTri = null;
+            try {
+                RTri = ServiceAppartement.RecupererTri(tri_par[0], dir);
+            } catch (SQLDataException e) {
+                throw new RuntimeException(e);
+            }
+
+            List<Appartement> filtered = RTri.stream()
+                    .filter(a -> {
+                        String residenceName = ServiceResidence.TrouverResidenceParId(a.getResidence_id()).getNom_r();
+                        return residenceName != null && residenceName.toLowerCase().contains(keyword);
+                    })
+                    .collect(Collectors.toList());
+
+            if (wrap.getChildren().size() > 1)
+                wrap.getChildren().remove(1);
+            wrap.getChildren().add(buildAppartementTable(filtered));
+        };
+
+        numeroBtn.setOnAction(e ->   { tri_par[0] = "JSON_EXTRACT(appartement_info, '$.number')";     refresh.run(); });
+        idBtn.setOnAction(e ->       { tri_par[0] = "id_app";         refresh.run(); });
+        residenceBtn.setOnAction(e ->{ tri_par[0] = "residence_id";   refresh.run(); });
+        statusBtn.setOnAction(e ->   { tri_par[0] = "disponible";     refresh.run(); });
+        typeBtn.setOnAction(e ->     { tri_par[0] = "type_a";         refresh.run(); });
+        prixBtn.setOnAction(e ->     { tri_par[0] = "prix_location";  refresh.run(); });
+        surfaceBtn.setOnAction(e ->  { tri_par[0] = "superficie";        refresh.run(); });
+
+        sortDirBtn.setOnAction(e -> {
+            ordre[0] = !ordre[0];
+            sortDirBtn.setText(ordre[0] ? "↑" : "↓");
+            refresh.run();
+        });
+
+        searchField.textProperty().addListener((obs, old, newVal) -> refresh.run());
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setAlignment(Pos.CENTER_LEFT);
+
+        ColumnConstraints searchCol = new ColumnConstraints();
+        searchCol.setPrefWidth(250);
+        ColumnConstraints btnCol = new ColumnConstraints();
+        btnCol.setHalignment(HPos.LEFT);
+
+        grid.getColumnConstraints().add(searchCol);
+        for (int i = 0; i < 8; i++) grid.getColumnConstraints().add(btnCol);
+
+        grid.add(searchField, 0, 0);
+        grid.add(numeroBtn,   1, 0);
+        grid.add(idBtn,       2, 0);
+        grid.add(residenceBtn,3, 0);
+        grid.add(statusBtn,   4, 0);
+        grid.add(typeBtn,     5, 0);
+        grid.add(prixBtn,     6, 0);
+        grid.add(surfaceBtn,  7, 0);
+        grid.add(sortDirBtn,  8, 0);
+
+        return grid;
+    }
+    private VBox buildAppartementTable(List<Appartement> appartements) {
+        return dataTableWithCrud(
+                "Appartements", "Appartement",
+                new String[]{"Residence", "Type", "Rent Price", "Status", "Parking Available?"},
+                appartements.stream()
+                        .map(a -> {
+                            Residence residence = ServiceResidence.TrouverResidenceParId(a.getResidence_id());
+                            String residenceName = (residence != null && residence.getNom_r() != null)
+                                    ? residence.getNom_r()
+                                    : "Unavailable";
+                            return new String[]{
+                                    residenceName,
+                                    a.getType_a(),
+                                    String.valueOf(a.getPrix_location()),
+                                    String.valueOf(a.getDisponible()).equals("1") ? "Available" : "Rented",
+                                    String.valueOf(a.getParking()).equals("1") ? "Available" : "Unavailable",
+                                    String.valueOf(a.getId_app())
+                            };
+                        })
+                        .toArray(String[][]::new),
+                true, true
+        );
+    }
     private VBox eventTablePane() {
         VBox wrap = new VBox(14);
         wrap.getChildren().add(dataTableWithCrud("Evenements", "Event",
@@ -1524,7 +1624,7 @@ public class DashboardView implements ViewInterface {
         for (int r = 0; r < rows.length; r++) {
             final int ri = r;
             String bg = (r%2==0) ? "transparent" : "rgba(255,255,255,0.01)";
-            for (int c = 0; c < rows[r].length; c++) {
+            for (int c = 0; c < cols.length; c++) {
                 Text tx = t(rows[r][c], lightFont(), FontWeight.NORMAL, 14);
                 tx.setFill(c==0 ? textSecondaryColor() : textMutedColor());
                 HBox cb = new HBox(tx); cb.setPadding(new Insets(10,12,10,12)); cb.setStyle("-fx-background-color:"+bg+";");
@@ -1552,24 +1652,24 @@ public class DashboardView implements ViewInterface {
 
     private VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, boolean allowEdit) {
         CrudSpec spec = crudSpec(title, entityLabel);
-        
+
         StackPane faceContainer = new StackPane();
         faceContainer.setPrefHeight(Region.USE_COMPUTED_SIZE);
         faceContainer.setMaxHeight(Double.MAX_VALUE);
         faceContainer.setStyle("-fx-background-color:transparent;");
         faceContainer.setMaxWidth(Double.MAX_VALUE);
-        
+
         VBox tableCard = new VBox(12);
         tableCard.setPadding(new Insets(12));
         tableCard.setStyle("-fx-background-color:transparent;");
         tableCard.setMaxWidth(Double.MAX_VALUE);
-        
+
         VBox modalFace = new VBox(12);
         modalFace.setPadding(new Insets(12));
         modalFace.setStyle("-fx-background-color:transparent;");
         modalFace.setMaxWidth(Double.MAX_VALUE);
         modalFace.setVisible(false);
-        
+
         VBox card = glassCard();
         card.setPadding(new Insets(16, 16, 14, 16));
 
@@ -1584,9 +1684,23 @@ public class DashboardView implements ViewInterface {
         head.getChildren().addAll(titleWrap, spacer);
 
         if (allowAdd) {
-            Button addBtn = pillAction(spec.addButtonLabel, true);
-            addBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "add", cols, null));
-            head.getChildren().add(addBtn);
+            if ("Residence".equals(entityLabel)) {
+                Button addBtn = pillAction("Add Residence", true);
+                addBtn.setOnAction(e -> {
+                    Stage stage = (Stage) faceContainer.getScene().getWindow();
+                    Scene previousScene = faceContainer.getScene();
+                    new ResidenceAdd(stage, previousScene).show();
+                });
+                head.getChildren().add(addBtn);
+            } else if ("Appartement".equals(entityLabel)) {
+                Button addBtn = pillAction("Add Appartement", true);
+                addBtn.setOnAction(e -> {
+                    Stage stage = (Stage) faceContainer.getScene().getWindow();
+                    Scene previousScene = faceContainer.getScene();
+                    new AppartementAdd(stage, previousScene).show();
+                });
+                head.getChildren().add(addBtn);
+            }
         }
 
         GridPane tbl = new GridPane();
@@ -1619,7 +1733,7 @@ public class DashboardView implements ViewInterface {
 
         for (int r = 0; r < rows.length; r++) {
             String bg = (r % 2 == 0) ? "transparent" : "rgba(255,255,255,0.01)";
-            for (int c = 0; c < rows[r].length; c++) {
+            for (int c = 0; c < cols.length; c++) {
                 Text tx = t(rows[r][c], lightFont(), FontWeight.NORMAL, 14);
                 tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
                 HBox cb = new HBox(tx);
@@ -1637,17 +1751,26 @@ public class DashboardView implements ViewInterface {
 
             String[] rowData = rows[r];
             Button viewBtn = pillAction("View", false);
+
             if ("Residence".equals(entityLabel)) {
                 viewBtn.setOnAction(e -> {
                     Stage stage = (Stage) faceContainer.getScene().getWindow();
                     Scene previousScene = faceContainer.getScene();
                     new ResidenceShow(stage, previousScene, rowData).show();
                 });
+            } else if ("Appartement".equals(entityLabel)) {
+                viewBtn.setOnAction(e -> {
+                    Stage stage = (Stage) faceContainer.getScene().getWindow();
+                    Scene previousScene = faceContainer.getScene();
+                    int id = Integer.parseInt(rowData[cols.length].trim());
+                    Appartement found = ServiceAppartement.TrouverAppartementParId(id);
+                    new AppartementShow(stage, previousScene, found).show();
+                });
             } else {
                 viewBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
             }
-            rowActions.getChildren().add(viewBtn);
 
+            rowActions.getChildren().add(viewBtn);
             tbl.add(rowActions, cols.length, r + 1);
         }
 
@@ -1655,34 +1778,24 @@ public class DashboardView implements ViewInterface {
         pager.setAlignment(Pos.CENTER);
         pager.setPadding(new Insets(8, 0, 0, 0));
         pager.getChildren().addAll(
-            pagerBtn("<", false),
-            pagerBtn("1", true),
-            pagerBtn("2", false),
-            pagerBtn("3", false),
-            pagerBtn(">", false)
+                pagerBtn("<", false),
+                pagerBtn("1", true),
+                pagerBtn("2", false),
+                pagerBtn("3", false),
+                pagerBtn(">", false)
         );
 
         card.getChildren().addAll(head, tbl, pager);
         tableCard.getChildren().add(card);
-        
+
         StackPane.setAlignment(tableCard, Pos.TOP_CENTER);
         StackPane.setAlignment(modalFace, Pos.TOP_CENTER);
         faceContainer.getChildren().addAll(tableCard, modalFace);
         faceContainer.setUserData(modalFace);
-        
+
         VBox wrap = new VBox(faceContainer);
         wrap.setMaxWidth(Double.MAX_VALUE);
         VBox.setVgrow(faceContainer, Priority.ALWAYS);
-
-
-        Button testBtn = pillAction("testing add button", false);
-        testBtn.setOnAction(e -> {
-            Stage stage = (Stage) faceContainer.getScene().getWindow();
-            Scene previousScene = faceContainer.getScene();
-            new ResidenceAdd(stage, previousScene).show();
-        });
-        head.getChildren().add(testBtn);
-
 
         return wrap;
     }
@@ -2342,6 +2455,74 @@ public class DashboardView implements ViewInterface {
             s.viewDeleteLabel = "Delete " + entityLabel;
             return s;
         }
+    }
+
+    private GridPane TriRecherche(VBox wrap) {
+        TextField searchField = new TextField();
+        searchField.setPromptText("Recherche par nom");
+        searchField.setPrefWidth(250);
+
+        Button nameBtn    = pillAction("Name", true);
+        Button adresseBtn = pillAction("Address", true);
+        Button sortDirBtn = pillAction("↑", true);
+        sortDirBtn.setStyle("-fx-font-size: 14px;");
+        boolean[] ordre = {true};
+        String[] tri_par = {"nom_r"};
+
+        Runnable refresh = () -> {
+            String keyword = searchField.getText().toLowerCase().trim();
+            String dir = ordre[0] ? "asc" : "desc";
+
+            List<Residence> RTri = null;
+            try {
+                RTri = ServiceResidence.RecupererTri(tri_par[0], dir);
+            } catch (SQLDataException e) {
+                throw new RuntimeException(e);
+            }
+
+            List<Residence> filtered = RTri.stream()
+                    .filter(r -> r.getNom_r().toLowerCase().contains(keyword))
+                    .collect(Collectors.toList());
+
+            if (wrap.getChildren().size() > 1)
+                wrap.getChildren().remove(1);
+            wrap.getChildren().add(buildResidenceTable(filtered));
+        };
+
+        nameBtn.setOnAction(e -> {
+            tri_par[0] = "nom_r";
+            refresh.run();
+        });
+
+        adresseBtn.setOnAction(e -> {
+            tri_par[0] = "adresse";
+            refresh.run();
+        });
+
+        sortDirBtn.setOnAction(e -> {
+            ordre[0] = !ordre[0];
+            sortDirBtn.setText(ordre[0] ? "↑" : "↓");
+            refresh.run();
+        });
+
+        searchField.textProperty().addListener((obs, old, newVal) -> refresh.run());
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setAlignment(Pos.CENTER_LEFT);
+
+        ColumnConstraints searchCol = new ColumnConstraints();
+        searchCol.setPrefWidth(250);
+        ColumnConstraints btnCol = new ColumnConstraints();
+        btnCol.setHalignment(HPos.LEFT);
+        grid.getColumnConstraints().addAll(searchCol, btnCol, btnCol, btnCol);
+
+        grid.add(searchField, 0, 0);
+        grid.add(nameBtn,     1, 0);
+        grid.add(adresseBtn,  2, 0);
+        grid.add(sortDirBtn,  3, 0);
+
+        return grid;
     }
 
     private Button pagerBtn(String text, boolean active) {

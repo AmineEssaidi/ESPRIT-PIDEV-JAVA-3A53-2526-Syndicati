@@ -12,101 +12,117 @@ import javafx.scene.control.TextField;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 
 public class AjouterAppartementController {
 
-    private final Stage stage;
-    private final Scene previousScene;
+    private  Stage stage;
+    private  Scene previousScene;
 
-    private final TextField imageAChamp;
-    private final ComboBox<String> residenceChamp;
-    private final TextField IDUtilisateurChamp;
-    private final ComboBox<String> parkingChamp;
-    private final ComboBox<String> disponibleChamp;
-    private final ComboBox<String> typeAChamp;
-    private final TextField blocChamp;
-    private final TextField etageChamp;
-    private final TextField superficieChamp;
-    private final TextField prixLocationChamp;
+    private  ComboBox<String> residenceChamp;
+    private  TextField IDUtilisateurChamp;
+    private  ComboBox<String> parkingChamp;
+    private  ComboBox<String> disponibleChamp;
+    private  ComboBox<String> typeAChamp;
+    private   ComboBox<String> numeroChamp;
+    private ComboBox<String> blocChamp;
+    private ComboBox<String> etageChamp;
+    private  TextField superficieChamp;
+    private  TextField prixLocationChamp;
 
-    private final Text imageAChampErreur;
-    private final Text IDUtilisateurChampErreur;
-    private final Text superficieChampErreur;
-    private final Text prixLocationChampErreur;
+    private  Text imageErreur;
+    private  Text IDUtilisateurChampErreur;
+    private  Text superficieChampErreur;
+    private  Text prixLocationChampErreur;
+
+    private File imageA;
 
     public AjouterAppartementController(Stage stage, Scene previousScene,
-                                        TextField imageAChamp,
                                         ComboBox<String> residenceChamp,
                                         TextField IDUtilisateurChamp,
                                         ComboBox<String> parkingChamp,
                                         ComboBox<String> disponibleChamp,
                                         ComboBox<String> typeAChamp,
-                                        TextField blocChamp,
-                                        TextField etageChamp,
+                                        ComboBox<String> blocChamp,
+                                        ComboBox<String> numeroChamp,
+                                        ComboBox<String> etageChamp,
                                         TextField superficieChamp,
                                         TextField prixLocationChamp,
-                                        Text imageAChampErreur,
+                                        Text imageErreur,
                                         Text IDUtilisateurChampErreur,
                                         Text superficieChampErreur,
                                         Text prixLocationChampErreur) {
         this.stage = stage;
         this.previousScene = previousScene;
-        this.imageAChamp = imageAChamp;
         this.residenceChamp = residenceChamp;
         this.IDUtilisateurChamp = IDUtilisateurChamp;
         this.parkingChamp = parkingChamp;
         this.disponibleChamp = disponibleChamp;
         this.typeAChamp = typeAChamp;
         this.blocChamp = blocChamp;
+        this.numeroChamp = numeroChamp;
         this.etageChamp = etageChamp;
         this.superficieChamp = superficieChamp;
         this.prixLocationChamp = prixLocationChamp;
-        this.imageAChampErreur = imageAChampErreur;
+        this.imageErreur = imageErreur;
         this.IDUtilisateurChampErreur = IDUtilisateurChampErreur;
         this.superficieChampErreur = superficieChampErreur;
         this.prixLocationChampErreur = prixLocationChampErreur;
     }
 
+    public void setImageA(File imageA) {
+        this.imageA = imageA;
+    }
+
     public void ajouterAppartementAction() {
-        imageAChampErreur.setText("");
+        imageErreur.setText("");
         IDUtilisateurChampErreur.setText("");
         superficieChampErreur.setText("");
         prixLocationChampErreur.setText("");
 
-        String imageA = imageAChamp.getText();
         String residence = residenceChamp.getValue();
         String idUtilisateurStr = IDUtilisateurChamp.getText();
         String typeA = typeAChamp.getValue();
-        String bloc = blocChamp.getText();
-        String etageStr = etageChamp.getText();
+        String bloc = blocChamp.getValue();
+        String numero = numeroChamp.getValue();
+        String etageStr = etageChamp.getValue();
         String superficieStr = superficieChamp.getText();
         String prixLocationStr = prixLocationChamp.getText();
         boolean parking = "Disponible".equals(parkingChamp.getValue());
         boolean disponible = "Disponible".equals(disponibleChamp.getValue());
 
-        int idUtilisateur = parseIntSafe(idUtilisateurStr, IDUtilisateurChampErreur);
-        int etage = parseIntSafe(etageStr, null);
-        int superficie = parseIntSafe(superficieStr, superficieChampErreur);
-        int prixLocation = parseIntSafe(prixLocationStr, prixLocationChampErreur);
+        if (!VerifierAppartement(IDUtilisateurChamp, superficieChamp, prixLocationChamp,
+                IDUtilisateurChampErreur, superficieChampErreur, prixLocationChampErreur)) {
+            return;
+        }
+
+        if (imageA == null) {
+            imageErreur.setText("Image obligatoire!");
+            return;
+        }
+
+        int idUtilisateur = Integer.parseInt(idUtilisateurStr);
+        int superficie = Integer.parseInt(superficieStr);
+        int prixLocation = Integer.parseInt(prixLocationStr);
 
         String appartementInfo = String.format(
-                "{\"bloc\": \"%s\", \"floor\": \"%s\", \"number\": \"\", \"parking\": %b, \"disponible\": %b}",
-                bloc, etageStr, parking, disponible
+                "{\"bloc\": \"%s\", \"floor\": \"%s\", \"number\": \"%s\", \"parking\": %b, \"disponible\": %b}",
+                bloc, etageStr, numero, parking, disponible
         );
 
         Appartement appartement = new Appartement();
-        Residence Residence= new Residence();
 
-        ServiceResidence ServiceResidence = new ServiceResidence();
+        ServiceResidence serviceResidence = new ServiceResidence();
+        Residence residence_obj = serviceResidence.TrouverResidenceParNom(residence);
 
-        Residence=ServiceResidence.TrouverResidenceParNom(residence);
+        SauvegarderImage(imageA, appartement);
 
-
-        appartement.setImage_a(imageA);
-
-
-        appartement.setId_residence(Residence.getId_residence());
+        appartement.setResidence_id(residence_obj.getId_residence());
         appartement.setId_user(idUtilisateur);
         appartement.setType_a(typeA);
         appartement.setAppartement_info(appartementInfo);
@@ -124,9 +140,7 @@ public class AjouterAppartementController {
             alert.setTitle("Appartement Ajouté");
             alert.setHeaderText("Appartement ajouté avec succès!");
             alert.show();
-
-            String[] rowData = {String.valueOf(appartement.getId_app()), residence, typeA, bloc, etageStr};
-            new AppartementShow(stage, previousScene, rowData).show();
+            new AppartementShow(stage, previousScene, appartement).show();
 
         } catch (SQLException e) {
             Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -136,29 +150,73 @@ public class AjouterAppartementController {
         }
     }
 
-    private int parseIntSafe(String value, Text errorField) {
-        if (value == null || value.isBlank()) {
-            if (errorField != null) errorField.setText("This field must be a number.");
-            return 0;
+    private boolean VerifierAppartement(TextField IDUtilisateurChamp,
+                                        TextField superficieChamp,
+                                        TextField prixLocationChamp,
+                                        Text IDUtilisateurChampErreur,
+                                        Text superficieChampErreur,
+                                        Text prixLocationChampErreur) {
+        boolean test = true;
+
+        IDUtilisateurChampErreur.setText("");
+        superficieChampErreur.setText("");
+        prixLocationChampErreur.setText("");
+
+        IDUtilisateurChampErreur.setVisible(true); IDUtilisateurChampErreur.setManaged(true);
+        superficieChampErreur.setVisible(true);    superficieChampErreur.setManaged(true);
+        prixLocationChampErreur.setVisible(true);  prixLocationChampErreur.setManaged(true);
+
+        String idUtilisateurStr = IDUtilisateurChamp.getText();
+        if (!idUtilisateurStr.matches("\\d+")) {
+            IDUtilisateurChampErreur.setText("ID utilisateur invalide!");
+            test = false;
+        } else {
+            int idUtilisateur = Integer.parseInt(idUtilisateurStr);
+            if (idUtilisateur <= 0) {
+                IDUtilisateurChampErreur.setText("ID utilisateur doit être positif!");
+                test = false;
+            }
         }
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            if (errorField != null) errorField.setText("Invalid number: \"" + value + "\"");
-            return 0;
+
+        String superficieStr = superficieChamp.getText();
+        if (!superficieStr.matches("\\d+")) {
+            superficieChampErreur.setText("Superficie invalide!");
+            test = false;
+        } else {
+            int superficie = Integer.parseInt(superficieStr);
+            if (superficie <= 0) {
+                superficieChampErreur.setText("Superficie doit être positive!");
+                test = false;
+            }
         }
+
+        String prixLocationStr = prixLocationChamp.getText();
+        if (!prixLocationStr.matches("\\d+")) {
+            prixLocationChampErreur.setText("Prix de location invalide!");
+            test = false;
+        } else {
+            int prixLocation = Integer.parseInt(prixLocationStr);
+            if (prixLocation <= 0) {
+                prixLocationChampErreur.setText("Prix de location doit être positif!");
+                test = false;
+            }
+        }
+
+        return test;
     }
 
-    private double parseDoubleSafe(String value, Text errorField) {
-        if (value == null || value.isBlank()) {
-            if (errorField != null) errorField.setText("This field must be a number.");
-            return 0.0;
+    public boolean SauvegarderImage(File imageA, Appartement appartement) {
+        if (imageA != null) {
+            String destDir = System.getProperty("user.dir") + "/uploads/appartement_images/";
+            new File(destDir).mkdirs();
+            String destPath = (destDir + imageA.getName()).replace("\\", "/");
+            try {
+                Files.copy(imageA.toPath(), Path.of(destPath), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            appartement.setImage_a(imageA.getName());
         }
-        try {
-            return Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            if (errorField != null) errorField.setText("Invalid number: \"" + value + "\"");
-            return 0.0;
-        }
+        return true;
     }
 }

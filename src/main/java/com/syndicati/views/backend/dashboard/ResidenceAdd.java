@@ -7,7 +7,10 @@ import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.*;
 import javafx.scene.text.*;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+
+import java.io.File;
 
 public class ResidenceAdd extends BaseDashboardPage {
 
@@ -22,6 +25,9 @@ public class ResidenceAdd extends BaseDashboardPage {
     private Text nAppartementsError;
     private Text dateAjoutError;
     private Text nBlocsError;
+    private Text ImageText;
+    private Text ImageErreur;
+    private File imageR=null;
 
     public ResidenceAdd(Stage stage, Scene previousScene) {
         super(stage, previousScene);
@@ -29,6 +35,25 @@ public class ResidenceAdd extends BaseDashboardPage {
 
     @Override
     protected VBox buildContent() {
+
+        Button imageButton = new Button("Choisir une image");
+        ImageText = new Text("Aucune image choisie");
+        ImageErreur = new Text("");
+
+        imageButton.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Choisir une image");
+            fileChooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg")
+            );
+            File selectedFile = fileChooser.showOpenDialog(stage);
+            if (selectedFile != null) {
+                imageR = selectedFile;
+                ImageText.setText(selectedFile.getName());
+            }
+        });
+
+
         nomResidenceField = new TextField();
         nomResidenceField.setPromptText("Nom de la résidence");
         nomError = new Text("");
@@ -56,7 +81,10 @@ public class ResidenceAdd extends BaseDashboardPage {
         );
 
         VBox card = glassCard();
+        VBox imageGroup = new VBox(5, imageButton, ImageText, ImageErreur);
+
         card.getChildren().addAll(
+                imageGroup,
                 fieldGroup("Nom de la Résidence", nomResidenceField, nomError),
                 fieldGroup("Adresse", adresseField, adresseError),
                 fieldGroup("Nombre d'Appartements", nAppartementsField, nAppartementsError),
@@ -65,7 +93,10 @@ public class ResidenceAdd extends BaseDashboardPage {
         );
 
         Button submitBtn = primaryButton("Create Residence");
-        submitBtn.setOnAction(e -> controller.ajouterResidenceAction());
+        submitBtn.setOnAction(e -> {
+            controller.setImageR(imageR);
+            controller.ajouterResidenceAction();
+        });
 
         Button backBtn = secondaryButton("← Back");
         backBtn.setOnAction(e -> stage.setScene(previousScene));

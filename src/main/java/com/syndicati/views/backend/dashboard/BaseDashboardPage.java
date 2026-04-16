@@ -1,11 +1,11 @@
 package com.syndicati.views.backend.dashboard;
 import com.syndicati.utils.theme.ThemeManager;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.*;
@@ -13,6 +13,7 @@ import javafx.stage.Stage;
 public abstract class BaseDashboardPage {
     protected final Stage stage;
     protected final Scene previousScene;
+
 
     public BaseDashboardPage(Stage stage, Scene previousScene) {
         this.stage = stage;
@@ -205,6 +206,36 @@ public abstract class BaseDashboardPage {
         group.getChildren().addAll(lbl, input, errorText);
         return group;
     }
+    protected VBox fieldGroup(String label, ComboBox<String> comboBox, Text errorText) {
+        VBox group = new VBox(6);
+        Text lbl = new Text(label);
+        lbl.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
+        lbl.setFill(isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(15,23,42,0.64)"));
+        //comboBox.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13));
+        comboBox.setMaxWidth(Double.MAX_VALUE);
+        comboBox.setStyle(
+                "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)") + ";" +
+                        "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
+                        "-fx-border-width:1;" +
+                        "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
+                        "-fx-prompt-text-fill:" + (isDark() ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.35)") + ";" +
+                        "-fx-background-radius:10px;-fx-border-radius:10px;-fx-padding:4 12 4 12;"
+        );
+        comboBox.skinProperty().addListener((obs, oldSkin, newSkin) -> {
+            if (newSkin != null) {
+                comboBox.lookup(".list-view").setStyle(
+                        "-fx-background-color:" + (isDark() ? "#1e1e2e" : "white") + ";" +
+                                "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
+                                "-fx-border-width:1;" +
+                                "-fx-background-radius:10px;-fx-border-radius:10px;"
+                );
+            }
+        });
+        errorText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 11));
+        errorText.setFill(Color.web("#ef4444"));
+        group.getChildren().addAll(lbl, comboBox, errorText);
+        return group;
+    }
 
     protected Button primaryButton(String label) {
         Button b = new Button(label);
@@ -269,6 +300,83 @@ public abstract class BaseDashboardPage {
         return pill;
     }
 
+    public Alert styledAlert(Alert.AlertType type, String title, String message) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setContentText(message);
+        DialogPane dp = alert.getDialogPane();
+
+        dp.setStyle("-fx-background-color: #1e1e2e;");
+        dp.lookup(".header-panel").setStyle("-fx-background-color: #2a2a3e;");
+        dp.lookup(".header-panel .label").setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
+        dp.lookup(".content.label").setStyle("-fx-text-fill: #cdd6f4; -fx-font-size: 13px;");
+        dp.lookup(".button-bar").setStyle("-fx-background-color: #1e1e2e;");
+        dp.lookupAll(".button").forEach(btn -> btn.setStyle(
+                "-fx-background-color: #4f46e5; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 6;"
+        ));
+
+        return alert;
+    }
+
+    protected void styleComboBox(ComboBox<String> comboBox) {
+        comboBox.setMaxWidth(Double.MAX_VALUE);
+        comboBox.setStyle(
+                "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)") + ";" +
+                        "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
+                        "-fx-border-width:1;" +
+                        "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
+                        "-fx-prompt-text-fill:" + (isDark() ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.35)") + ";" +
+                        "-fx-background-radius:10px;-fx-border-radius:10px;-fx-padding:4 12 4 12;"
+        );
+
+        String cellBg      = isDark() ? "#1e1e2e"              : "white";
+        String cellText    = isDark() ? "white"                : "#111827";
+        String cellHoverBg = isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+        String borderColor = isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)";
+
+        String cellCss = String.format("""
+        .combo-box-popup .list-view {
+            -fx-background-color: %s;
+            -fx-border-color: %s;
+            -fx-border-width: 1;
+            -fx-border-radius: 10px;
+            -fx-background-radius: 10px;
+        }
+        .combo-box-popup .list-cell {
+            -fx-background-color: %s;
+            -fx-text-fill: %s;
+            -fx-padding: 8 12 8 12;
+            -fx-font-size: 13px;
+        }
+        .combo-box-popup .list-cell:hover {
+            -fx-background-color: %s;
+        }
+        .combo-box-popup .list-cell:selected {
+            -fx-background-color: %s;
+            -fx-text-fill: %s;
+        }
+    """, cellBg, borderColor, cellBg, cellText, cellHoverBg, cellHoverBg, cellText);
+
+        comboBox.getStylesheets().add(
+                "data:text/css," + cellCss.replace("\n", "").replace("  ", " ")
+        );
+
+        comboBox.skinProperty().addListener((obs, oldSkin, newSkin) -> {
+            if (newSkin != null) {
+                Platform.runLater(() -> {
+                    Node listView = comboBox.lookup(".list-view");
+                    if (listView != null) {
+                        listView.setStyle(
+                                "-fx-background-color:" + cellBg + ";" +
+                                        "-fx-border-color:" + borderColor + ";" +
+                                        "-fx-border-width:1;" +
+                                        "-fx-background-radius:10px;-fx-border-radius:10px;"
+                        );
+                    }
+                });
+            }
+        });
+    }
     protected ThemeManager theme()             { return ThemeManager.getInstance(); }
     protected boolean isDark()                 { return theme().isDarkMode(); }
     protected String accentHex()              { return theme().getAccentHex(); }

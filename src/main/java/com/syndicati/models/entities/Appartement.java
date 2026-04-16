@@ -4,6 +4,7 @@ public class Appartement extends Residence {
 
     int id_app, residence_id, id_user, parking, disponible, superficie, prix_location, prix_vente;
     String image_a, type_a, date_construction, appartement_info;
+    Maintenance Maintenance;
 
     public Appartement(){}
 
@@ -35,7 +36,7 @@ public class Appartement extends Residence {
         this.appartement_info=appartement_info;
         this.superficie=superficie;
         this.prix_location=prix_location;
-        this.prix_vente=getPrix_vente();
+        this.prix_vente=prix_vente;
         this.date_construction=date_construction;
         this.id_app=id_app;
     }
@@ -140,6 +141,6 @@ public class Appartement extends Residence {
     @Override
     public String toString()
     {
-        return "\n Appartement "+this.getType_a()+" Prix: "+ this.getPrix_location();
+        return "ID Appartement: "+this.getId_app()+"\n Appartement "+this.getType_a()+" Prix: "+ this.getPrix_location();
     }
 }

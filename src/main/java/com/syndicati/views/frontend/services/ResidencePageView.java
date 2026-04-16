@@ -18,6 +18,8 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
@@ -28,12 +30,14 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 
 
+import java.io.File;
 import java.sql.SQLDataException;
 import java.util.ArrayList;
 import java.util.List;
@@ -70,16 +74,6 @@ public class ResidencePageView implements ViewInterface {
         }
     }
 
-    /*
-    List.of(
-new Residence("Azure Residence", "Lac 2, Tunis", 12, 120, 3, 2026),
-new Residence("Palm Heights", "La Marsa", 9, 88, 2, 2025),
-new Residence("Jardin Central", "Mutuelleville", 14, 160, 4, 2024),
-new Residence("Skyline Harbor", "Sidi Bousaid", 16, 210, 5, 2026),
-new Residence("Olive Gardens", "Menzah", 8, 74, 2, 2023),
-new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
-);
-*/
     private List<Appartement> getApartmentsForResidence(Residence Residence) {
         try {
             return ServiceAppartement.AppartementsParResidence(Residence);
@@ -242,18 +236,23 @@ new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
             "-fx-background-radius: 32px 32px 0 0;"
         );
 
-        StackPane yearTag = new StackPane(text(String.valueOf(r.getDate_ajout()), 12, true, "#ffffff"));
-        yearTag.setPadding(new Insets(7, 12, 7, 12));
-        yearTag.setStyle(
-            "-fx-background-color: rgba(0,0,0,0.6);" +
-            "-fx-background-radius: 20px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 20px;"
-        );
-        StackPane.setAlignment(yearTag, Pos.TOP_RIGHT);
-        StackPane.setMargin(yearTag, new Insets(20, 20, 0, 0));
-        media.getChildren().add(yearTag);
+        String imageName = r.getImage_r();
+        if (imageName != null && !imageName.isEmpty()) {
+            String imagePath = System.getProperty("user.dir") + "/uploads/residence_images/" + imageName;
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                ImageView imageView = new ImageView(new Image(imageFile.toURI().toString()));
+                imageView.setFitWidth(400);
+                imageView.setFitHeight(280);
+                imageView.setPreserveRatio(false);
+                imageView.setSmooth(true);
+                Rectangle clip = new Rectangle(400, 280);
+                clip.setArcWidth(32);
+                clip.setArcHeight(32);
+                imageView.setClip(clip);
+                media.getChildren().add(0, imageView);
+            }
+        }
 
         VBox body = new VBox(14);
         body.setPadding(new Insets(26, 22, 22, 22));
@@ -305,6 +304,7 @@ new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
     private void rebuildApartmentsFace() {
         apartmentsFace.getChildren().clear();
         Residence residence = residences.get(selectedResidence);
+        ServiceAppartement serviceapp= new ServiceAppartement();
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -315,7 +315,12 @@ new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
 
         GridPane cards = responsiveGrid();
         List<Node> nodes = new ArrayList<>();
-        List<Appartement> apartments = getApartmentsForResidence(residence);
+        List<Appartement> apartments = null;
+        try {
+            apartments = serviceapp.AppartementsParResidence(residence);
+        } catch (SQLDataException e) {
+            throw new RuntimeException(e);
+        }
         for (Appartement apt : apartments) {
             nodes.add(apartmentCard(apt));
         }
@@ -348,6 +353,23 @@ new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
         StackPane.setAlignment(availability, Pos.TOP_RIGHT);
         StackPane.setMargin(availability, new Insets(18, 18, 0, 0));
         media.getChildren().add(availability);
+        String imageName = apt.getImage_a();
+        if (imageName != null && !imageName.isEmpty()) {
+            String imagePath = System.getProperty("user.dir") + "/uploads/appartement_images/" + imageName;
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                ImageView imageView = new ImageView(new Image(imageFile.toURI().toString()));
+                imageView.setFitWidth(400);
+                imageView.setFitHeight(280);
+                imageView.setPreserveRatio(false);
+                imageView.setSmooth(true);
+                Rectangle clip = new Rectangle(400, 280);
+                clip.setArcWidth(32);
+                clip.setArcHeight(32);
+                imageView.setClip(clip);
+                media.getChildren().add(0, imageView);
+            }
+        }
 
         VBox body = new VBox(10);
         body.setPadding(new Insets(20));
@@ -406,6 +428,23 @@ new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 24px;"
         );
+        String imageName = apt.getImage_a();
+        if (imageName != null && !imageName.isEmpty()) {
+            String imagePath = System.getProperty("user.dir") + "/uploads/appartement_images/" + imageName;
+            File imageFile = new File(imagePath);
+            if (imageFile.exists()) {
+                ImageView imageView = new ImageView(new Image(imageFile.toURI().toString()));
+                imageView.setFitWidth(620);
+                imageView.setFitHeight(400);
+                imageView.setPreserveRatio(false);
+                imageView.setSmooth(true);
+                Rectangle clip = new Rectangle(620, 400);
+                clip.setArcWidth(24);
+                clip.setArcHeight(24);
+                imageView.setClip(clip);
+                image.getChildren().add(imageView);
+            }
+        }
 
         VBox info = new VBox(12);
         info.setPadding(new Insets(22));
@@ -433,7 +472,7 @@ new Residence("Royal Bay", "Gammarth", 11, 102, 3, 2025)
         FlowPane recGrid = new FlowPane();
         recGrid.setHgap(12);
         recGrid.setVgap(12);
-        List<Appartement> appartements = getApartmentsForResidence(ServiceResidence.TrouverResidenceParId(selectedResidence));
+        List<Appartement> appartements = getApartmentsForResidence(residence);
         for (Appartement rec : appartements) {
             if (rec == apt) {
                 continue;
