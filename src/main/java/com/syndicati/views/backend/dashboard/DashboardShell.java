@@ -109,7 +109,7 @@ final class DashboardShell {
         view.styleBackButton(back, false);
         back.setOnMouseEntered(e -> view.styleBackButton(back, true));
         back.setOnMouseExited(e -> view.styleBackButton(back, false));
-        back.setOnAction(e -> { if (view.exitCallback != null) view.exitCallback.run(); });
+        back.setOnAction(e -> runExitCallback(view));
         if (!view.sidebarExpanded) {
             Tooltip.install(back, new Tooltip("Back to App"));
         }
@@ -421,7 +421,7 @@ final class DashboardShell {
         VBox items = new VBox(4);
         items.getChildren().addAll(
             dropdownItem(view, "\uD83D\uDC64", "My Profile", () -> openFrontendPage(view, "profile")),
-            dropdownItem(view, "\u2302", "Main Home", () -> { if (view.exitCallback != null) view.exitCallback.run(); }),
+            dropdownItem(view, "\u2302", "Main Home", () -> runExitCallback(view)),
             dropdownItem(view, "\u2699", "Settings", () -> openFrontendPage(view, "settings")),
             dropdownItemWithBadge(view, "\uD83D\uDCB3", "Billing", "4", () -> openFrontendPage(view, "profile"))
         );
@@ -586,9 +586,13 @@ final class DashboardShell {
     }
 
     static void openFrontendPage(DashboardView view, String page) {
+        runExitCallback(view);
+        Platform.runLater(() -> NavigationManager.getInstance().navigateTo(page));
+    }
+
+    static void runExitCallback(DashboardView view) {
         if (view.exitCallback != null) {
             view.exitCallback.run();
         }
-        Platform.runLater(() -> NavigationManager.getInstance().navigateTo(page));
     }
 }

@@ -317,7 +317,7 @@ public class DynamicHeader {
         track.setArcHeight(34);
 
         Circle thumb = new Circle(13);
-        Label icon = new Label(themeManager.isDarkMode() ? "â˜¾" : "â˜€");
+        Label icon = new Label(themeManager.isDarkMode() ? "\u263e" : "\u2600");
         icon.setFont(Font.font(12));
 
         updateThemeToggleVisual(track, thumb, icon);
@@ -341,7 +341,7 @@ public class DynamicHeader {
         track.setStroke(Color.web(dark ? "rgba(255,255,255,0.20)" : "rgba(15,23,42,0.12)"));
         thumb.setFill(Color.web(dark ? "#111827" : "#ffffff"));
         thumb.setTranslateX(dark ? 13 : -13);
-        icon.setText(dark ? "â˜¾" : "â˜€");
+        icon.setText(dark ? "\u263e" : "\u2600");
         icon.setTextFill(Color.web(dark ? "#e5e7eb" : "#111827"));
         icon.setTranslateX(dark ? 13 : -13);
     }
@@ -351,7 +351,7 @@ public class DynamicHeader {
         wrap.setAlignment(Pos.CENTER);
         notificationAnchor = wrap;
 
-        Button bellButton = new Button("ðŸ””");
+        Button bellButton = new Button("\ud83d\udd14");
         bellButton.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
         bellButton.setPadding(new Insets(8, 12, 8, 12));
         styleGhostPill(bellButton);
@@ -406,7 +406,7 @@ public class DynamicHeader {
         title.setTextFill(themeManager.isDarkMode() ? Color.web("#f3f4f6") : Color.web("#111827"));
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button close = new Button("âœ•");
+        Button close = new Button("\u2715");
         close.setPadding(new Insets(4, 10, 4, 10));
         styleGhostPill(close);
         close.setOnAction(e -> closeNotificationPopup());
@@ -416,9 +416,9 @@ public class DynamicHeader {
         rows.setPadding(new Insets(8));
         rows.setSpacing(6);
         rows.getChildren().addAll(
-            notifRow("âœ¨", "Syndicati", "Your community dashboard is synced", "now"),
-            notifRow("ðŸ’¬", "Forum", "A new reply landed in your discussion", "5 min"),
-            notifRow("ðŸ¢", "Residence", "A maintenance update is ready", "1 h")
+            notifRow("\u2728", "Syndicati", "Your community dashboard is synced", "now"),
+            notifRow("\ud83d\udcac", "Forum", "A new reply landed in your discussion", "5 min"),
+            notifRow("\ud83c\udfe2", "Residence", "A maintenance update is ready", "1 h")
         );
 
         box.getChildren().addAll(header, rows);
@@ -537,15 +537,15 @@ public class DynamicHeader {
         sep1.setPrefHeight(1);
         sep1.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
-        Button profile = profileRow("ðŸ‘¤  Profile", "profile");
-        Button settings = profileRow("âš™  Settings", "settings");
+        Button profile = profileRow("\ud83d\udc64  Profile", "profile");
+        Button settings = profileRow("\u2699  Settings", "settings");
 
         VBox rows = new VBox();
         rows.setPadding(new Insets(8));
         rows.setSpacing(6);
         rows.getChildren().add(profile);
         if (AccessControlService.canAccessAdminArea()) {
-            rows.getChildren().add(profileRow("ðŸ“Š  Dashboard", "dashboard"));
+            rows.getChildren().add(profileRow("\ud83d\udcca  Dashboard", "dashboard"));
         }
         rows.getChildren().add(settings);
 
@@ -553,7 +553,7 @@ public class DynamicHeader {
         sep2.setPrefHeight(1);
         sep2.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
-        Button logout = new Button("â»  Sign Out");
+        Button logout = new Button("\u23fb  Sign Out");
         logout.setMaxWidth(Double.MAX_VALUE);
         logout.setAlignment(Pos.CENTER_LEFT);
         logout.setPadding(new Insets(9, 10, 9, 10));

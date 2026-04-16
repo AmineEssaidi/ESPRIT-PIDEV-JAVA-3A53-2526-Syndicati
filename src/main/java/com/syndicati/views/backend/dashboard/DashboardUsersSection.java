@@ -9,9 +9,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -19,24 +19,21 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
+@SuppressWarnings("SpellCheckingInspection")
 final class DashboardUsersSection {
 
     private DashboardUsersSection() {
     }
 
     static VBox build(DashboardView view) {
-        VBox s = view.moduleShell("Users", "\uD83D\uDC65");
-        VBox body = new VBox(16);
-        HBox sub = view.moduleModeSwitcher(new String[]{"Users", "Profile", "Onboarding"}, "Users", key -> {
-            body.getChildren().setAll(
-                "Profile".equals(key) ? usersProfilePane(view) :
-                "Onboarding".equals(key) ? usersOnboardingPane(view) :
-                usersTablePane(view)
-            );
-        });
-        body.getChildren().add(usersTablePane(view));
-        s.getChildren().addAll(sub, body);
-        return s;
+        return view.moduleModeView(
+            "Users",
+            "\uD83D\uDC65",
+            new String[]{"Users", "Profile", "Onboarding"},
+            key -> "Profile".equals(key) ? usersProfilePane(view) :
+                   "Onboarding".equals(key) ? usersOnboardingPane(view) :
+                   usersTablePane(view)
+        );
     }
 
     private static VBox usersTablePane(DashboardView view) {
@@ -110,31 +107,29 @@ final class DashboardUsersSection {
         primaryControls.setAlignment(Pos.CENTER_LEFT);
 
         String[][] filters = new String[][]{
-            {"all", "All"},
+            {"name", "Name"},
+            {"email", "Email"},
+            {"role", "Role"},
             {"verified", "Verified"},
-            {"pending", "Pending"},
-            {"active", "Active"},
-            {"disabled", "Disabled"}
+            {"status", "Status"}
         };
 
-        FlowPane filterRow = new FlowPane();
-        filterRow.setHgap(6);
-        filterRow.setVgap(6);
+        HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        VBox controlsWrap = new VBox(6, primaryControls, filterRow);
-        controlsWrap.setAlignment(Pos.CENTER_LEFT);
+        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
             String key = filter[0];
-            Button b = view.pillAction(filter[1], "all".equals(key));
+            Button b = view.pillAction(filter[1], false);
             b.setOnAction(e -> {
-                queryState.filterKey = key;
+                queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
                 filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, k.equals(queryState.filterKey)));
-                renderUsersTable(view, baseRows, queryState, tableHost, sortPill);
+                renderUsersTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
             });
             filterButtons.put(key, b);
             filterRow.getChildren().add(b);
@@ -143,18 +138,18 @@ final class DashboardUsersSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderUsersTable(view, baseRows, queryState, tableHost, sortPill);
+            renderUsersTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderUsersTable(view, baseRows, queryState, tableHost, sortPill);
+            renderUsersTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
-        filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, "all".equals(k)));
-        renderUsersTable(view, baseRows, queryState, tableHost, sortPill);
+        filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
+        renderUsersTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, controlsWrap, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
@@ -163,21 +158,48 @@ final class DashboardUsersSection {
         List<String[]> baseRows,
         DashboardTableQueryEngine.QueryState queryState,
         VBox tableHost,
-        Button sortPill
+        Button sortPill,
+        Node headerControls
     ) {
-        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(
-            baseRows,
-            queryState,
-            (row, filterKey) -> {
-                switch (filterKey) {
-                    case "verified": return "Yes".equalsIgnoreCase(row[3]);
-                    case "pending":  return "Pending".equalsIgnoreCase(row[4]);
-                    case "active":   return "Active".equalsIgnoreCase(row[4]);
-                    case "disabled": return "Disabled".equalsIgnoreCase(row[4]);
-                    default:          return true;
+        String scopedTerm = queryState.searchTerm.trim().toLowerCase();
+        String scope = queryState.filterKey;
+
+        List<String[]> scopedRows = new ArrayList<>();
+        for (String[] row : baseRows) {
+            if (scopedTerm.isEmpty()) {
+                scopedRows.add(row);
+                continue;
+            }
+
+            boolean matches;
+            matches = switch (scope) {
+                case "name"     -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
+                case "email"    -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "role"     -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "verified" -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "status"   -> row[4] != null && row[4].toLowerCase().contains(scopedTerm);
+                default -> {
+                    boolean found = false;
+                    for (String cell : row) {
+                        if (cell != null && cell.toLowerCase().contains(scopedTerm)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    yield found;
                 }
-            },
-            0
+            };
+
+            if (matches) {
+                scopedRows.add(row);
+            }
+        }
+
+        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(
+            scopedRows,
+            queryState,
+            (row, key) -> true,
+            getUsersFilterColumnIndex(scope)
         );
 
         String[][] visibleRows;
@@ -193,11 +215,12 @@ final class DashboardUsersSection {
             new String[]{"Name", "Email", "Role", "Verified", "Status"},
             visibleRows,
             true,
-            true
+            headerControls
         ));
 
         styleQueryPill(view, sortPill, queryState.ascending);
-        sortPill.setText(queryState.ascending ? "Order: A-Z" : "Order: Z-A");
+        String filterLabel = scope.isEmpty() ? "Name" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
+        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
     }
 
     private static void styleQueryPill(DashboardView view, Button b, boolean active) {
@@ -224,6 +247,37 @@ final class DashboardUsersSection {
         }
     }
 
+    private static int getUsersFilterColumnIndex(String filterKey) {
+        return switch (filterKey) {
+            case "name"     -> 0;
+            case "email"    -> 1;
+            case "role"     -> 2;
+            case "verified" -> 3;
+            case "status"   -> 4;
+            default         -> 0;
+        };
+    }
+
+    private static int getProfileFilterColumnIndex(String filterKey) {
+        return switch (filterKey) {
+            case "locale"   -> 0;
+            case "theme"    -> 1;
+            case "timezone" -> 2;
+            case "avatar"   -> 3;
+            default         -> 0;
+        };
+    }
+
+    private static int getOnboardingFilterColumnIndex(String filterKey) {
+        return switch (filterKey) {
+            case "step"      -> 0;
+            case "completed" -> 1;
+            case "locale"    -> 2;
+            case "theme"     -> 3;
+            default          -> 0;
+        };
+    }
+
     private static VBox usersProfilePane(DashboardView view) {
         VBox wrap = new VBox(16);
         List<Profile> profiles = view.dashboardAdminService().profiles();
@@ -244,8 +298,6 @@ final class DashboardUsersSection {
         List<String[]> baseRows = new ArrayList<>();
         for (Profile p : profiles) {
             baseRows.add(new String[]{
-                String.valueOf(p.getIdProfile()),
-                String.valueOf(p.getUserId()),
                 view.safe(p.getLocale()),
                 p.getTheme() == null ? "-" : String.valueOf(p.getTheme()),
                 p.getTimezone() == null ? "-" : String.valueOf(p.getTimezone()),
@@ -270,35 +322,30 @@ final class DashboardUsersSection {
         );
 
         Button sortPill = view.pillAction("Order: ID Asc", false);
-        HBox primaryControls = new HBox(8, searchField, sortPill);
-        primaryControls.setAlignment(Pos.CENTER_LEFT);
 
         String[][] filters = new String[][]{
-            {"all", "All"},
-            {"locale_set", "Locale Set"},
-            {"theme_set", "Theme Set"},
-            {"timezone_set", "Timezone Set"},
-            {"with_avatar", "With Avatar"}
+            {"locale", "Locale"},
+            {"theme", "Theme"},
+            {"timezone", "Timezone"},
+            {"avatar", "Avatar"}
         };
 
-        FlowPane filterRow = new FlowPane();
-        filterRow.setHgap(6);
-        filterRow.setVgap(6);
+        HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        VBox controlsWrap = new VBox(6, primaryControls, filterRow);
-        controlsWrap.setAlignment(Pos.CENTER_LEFT);
+        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
             String key = filter[0];
-            Button b = view.pillAction(filter[1], "all".equals(key));
+            Button b = view.pillAction(filter[1], false);
             b.setOnAction(e -> {
-                queryState.filterKey = key;
+                queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
                 filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, k.equals(queryState.filterKey)));
-                renderProfilesTable(view, baseRows, queryState, tableHost, sortPill);
+                renderProfilesTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
             });
             filterButtons.put(key, b);
             filterRow.getChildren().add(b);
@@ -307,18 +354,19 @@ final class DashboardUsersSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderProfilesTable(view, baseRows, queryState, tableHost, sortPill);
+            renderProfilesTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderProfilesTable(view, baseRows, queryState, tableHost, sortPill);
+            renderProfilesTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
-        filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, "all".equals(k)));
-        renderProfilesTable(view, baseRows, queryState, tableHost, sortPill);
+        queryState.filterKey = "";
+        filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
+        renderProfilesTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, controlsWrap, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
@@ -343,8 +391,6 @@ final class DashboardUsersSection {
         List<String[]> baseRows = new ArrayList<>();
         for (Onboarding o : onboardings) {
             baseRows.add(new String[]{
-                String.valueOf(o.getIdOnboarding()),
-                String.valueOf(o.getUserId()),
                 String.valueOf(o.getStep()),
                 o.isCompleted() ? "Yes" : "No",
                 view.safe(o.getSelectedLocale()),
@@ -370,35 +416,30 @@ final class DashboardUsersSection {
         );
 
         Button sortPill = view.pillAction("Order: ID Asc", false);
-        HBox primaryControls = new HBox(8, searchField, sortPill);
-        primaryControls.setAlignment(Pos.CENTER_LEFT);
 
         String[][] filters = new String[][]{
-            {"all", "All"},
+            {"step", "Step"},
             {"completed", "Completed"},
-            {"in_progress", "In Progress"},
-            {"theme_set", "Theme Set"},
-            {"locale_set", "Locale Set"}
+            {"locale", "Locale"},
+            {"theme", "Theme"}
         };
 
-        FlowPane filterRow = new FlowPane();
-        filterRow.setHgap(6);
-        filterRow.setVgap(6);
+        HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        VBox controlsWrap = new VBox(6, primaryControls, filterRow);
-        controlsWrap.setAlignment(Pos.CENTER_LEFT);
+        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
             String key = filter[0];
-            Button b = view.pillAction(filter[1], "all".equals(key));
+            Button b = view.pillAction(filter[1], false);
             b.setOnAction(e -> {
-                queryState.filterKey = key;
+                queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
                 filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, k.equals(queryState.filterKey)));
-                renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill);
+                renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
             });
             filterButtons.put(key, b);
             filterRow.getChildren().add(b);
@@ -407,18 +448,19 @@ final class DashboardUsersSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill);
+            renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill);
+            renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
-        filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, "all".equals(k)));
-        renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill);
+        queryState.filterKey = "";
+        filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
+        renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, controlsWrap, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
@@ -427,26 +469,52 @@ final class DashboardUsersSection {
         List<String[]> baseRows,
         DashboardTableQueryEngine.QueryState queryState,
         VBox tableHost,
-        Button sortPill
+        Button sortPill,
+        Node headerControls
     ) {
-        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(
-            baseRows,
-            queryState,
-            (row, filterKey) -> {
-                switch (filterKey) {
-                    case "locale_set": return !"-".equals(row[2]);
-                    case "theme_set": return !"-".equals(row[3]);
-                    case "timezone_set": return !"-".equals(row[4]);
-                    case "with_avatar": return !"-".equals(row[5]);
-                    default: return true;
+        String scopedTerm = queryState.searchTerm.trim().toLowerCase();
+        String scope = queryState.filterKey;
+
+        List<String[]> scopedRows = new ArrayList<>();
+        for (String[] row : baseRows) {
+            if (scopedTerm.isEmpty()) {
+                scopedRows.add(row);
+                continue;
+            }
+
+            boolean matches;
+            matches = switch (scope) {
+                case "locale"   -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
+                case "theme"    -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "timezone" -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "avatar"   -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                default -> {
+                    boolean found = false;
+                    for (String cell : row) {
+                        if (cell != null && cell.toLowerCase().contains(scopedTerm)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    yield found;
                 }
-            },
-            0
+            };
+
+            if (matches) {
+                scopedRows.add(row);
+            }
+        }
+
+        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(
+            scopedRows,
+            queryState,
+            (row, key) -> true,
+            getProfileFilterColumnIndex(scope)
         );
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"-", "-", "No profiles found", "-", "-", "-"}};
+            visibleRows = new String[][]{{"-", "-", "No profiles found", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
@@ -454,14 +522,15 @@ final class DashboardUsersSection {
         tableHost.getChildren().setAll(view.dataTableWithCrud(
             "User Profile Data",
             "Profile",
-            new String[]{"Profile ID", "User ID", "Locale", "Theme", "Timezone", "Avatar"},
+            new String[]{"Locale", "Theme", "Timezone", "Avatar"},
             visibleRows,
             false,
-            true
+            headerControls
         ));
 
         styleQueryPill(view, sortPill, queryState.ascending);
-        sortPill.setText(queryState.ascending ? "Order: ID Asc" : "Order: ID Desc");
+        String filterLabel = scope.isEmpty() ? "Locale" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
+        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
     }
 
     private static void renderOnboardingTable(
@@ -469,26 +538,52 @@ final class DashboardUsersSection {
         List<String[]> baseRows,
         DashboardTableQueryEngine.QueryState queryState,
         VBox tableHost,
-        Button sortPill
+        Button sortPill,
+        Node headerControls
     ) {
-        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(
-            baseRows,
-            queryState,
-            (row, filterKey) -> {
-                switch (filterKey) {
-                    case "completed": return "Yes".equalsIgnoreCase(row[3]);
-                    case "in_progress": return "No".equalsIgnoreCase(row[3]);
-                    case "theme_set": return !"-".equals(row[5]);
-                    case "locale_set": return !"-".equals(row[4]);
-                    default: return true;
+        String scopedTerm = queryState.searchTerm.trim().toLowerCase();
+        String scope = queryState.filterKey;
+
+        List<String[]> scopedRows = new ArrayList<>();
+        for (String[] row : baseRows) {
+            if (scopedTerm.isEmpty()) {
+                scopedRows.add(row);
+                continue;
+            }
+
+            boolean matches;
+            matches = switch (scope) {
+                case "step"      -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
+                case "completed" -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "locale"    -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "theme"     -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                default -> {
+                    boolean found = false;
+                    for (String cell : row) {
+                        if (cell != null && cell.toLowerCase().contains(scopedTerm)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    yield found;
                 }
-            },
-            0
+            };
+
+            if (matches) {
+                scopedRows.add(row);
+            }
+        }
+
+        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(
+            scopedRows,
+            queryState,
+            (row, key) -> true,
+            getOnboardingFilterColumnIndex(scope)
         );
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"-", "-", "-", "-", "No onboarding found", "-", "-"}};
+            visibleRows = new String[][]{{"1", "No", "No onboarding found", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
@@ -496,13 +591,14 @@ final class DashboardUsersSection {
         tableHost.getChildren().setAll(view.dataTableWithCrud(
             "Onboarding Data",
             "Onboarding",
-            new String[]{"Onboarding ID", "User ID", "Step", "Completed", "Locale", "Theme", "Updated"},
+            new String[]{"Step", "Completed", "Locale", "Theme", "Updated"},
             visibleRows,
             false,
-            true
+            headerControls
         ));
 
         styleQueryPill(view, sortPill, queryState.ascending);
-        sortPill.setText(queryState.ascending ? "Order: ID Asc" : "Order: ID Desc");
+        String filterLabel = scope.isEmpty() ? "Step" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
+        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
     }
 }

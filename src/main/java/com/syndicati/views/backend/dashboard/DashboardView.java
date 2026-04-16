@@ -1,43 +1,40 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.models.user.Onboarding;
+import com.syndicati.models.syndicat.Reclamation;
+import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
-import javafx.application.Platform;
-import javafx.animation.TranslateTransition;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
+import javafx.scene.effect.BlurType;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.Node;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.*;
 import javafx.stage.Popup;
-import javafx.stage.Window;
-import javafx.util.Duration;
 import com.syndicati.interfaces.ViewInterface;
-import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.services.dashboard.DashboardAdminService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javafx.scene.image.Image;
 import javafx.scene.paint.ImagePattern;
 
@@ -46,6 +43,7 @@ import javafx.scene.paint.ImagePattern;
  * Sidebar (220px) + scrollable main area.
  * Call setExitCallback() so "Back to App" can exit dashboard mode.
  */
+@SuppressWarnings({"SpellCheckingInspection", "CssInvalidPropertyValue"})
 public class DashboardView implements ViewInterface {
 
     private final HBox root;
@@ -133,7 +131,7 @@ public class DashboardView implements ViewInterface {
         }
         String role = user.getRoleUser().trim();
         if ("ROLE_ADMIN".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role)) {
-            return "Administrateur";
+            return "Administrator";
         }
         return role;
     }
@@ -178,7 +176,6 @@ public class DashboardView implements ViewInterface {
             "-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.28)" : "rgba(15,23,42,0.12)") + ",26,0,0,8);";
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     private void setupLayout() {
         root.setSpacing(0);
         root.setAlignment(Pos.TOP_LEFT);
@@ -209,16 +206,11 @@ public class DashboardView implements ViewInterface {
         refreshAccentStyling();
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    // SIDEBAR  Ã¢â‚¬â€ three floating glass pills (matches web admin CSS)
+    // SIDEBAR - three floating glass pills (matches web admin CSS)
     //   .admin-sidebar-top | .admin-sidebar-nav | .admin-sidebar-bottom
     //   each: backdrop-blur glass, border-radius 24px, transparent gap
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-    VBox createSidebar() {
-        return DashboardShell.buildSidebar(this);
-    }
 
-    /** Shared glass pill container Ã¢â‚¬â€ three of these make up the sidebar. */
+    /** Shared glass pill container - three of these make up the sidebar. */
     VBox glassPill(Pos alignment) {
         VBox pill = new VBox(0);
         pill.setAlignment(alignment);
@@ -228,16 +220,24 @@ public class DashboardView implements ViewInterface {
     }
 
     void styleBackButton(Button b, boolean h) {
-        b.setStyle(h
-            ? "-fx-background-color:" + (isDark() ? accentRgba(0.22) : "rgba(15,23,42,0.12)") + ";-fx-background-radius:12px;-fx-text-fill:" + (isDark() ? "#e5e7eb" : "#111827") + ";-fx-cursor:hand;"
-            : "-fx-background-color:transparent;-fx-background-radius:12px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.5)" : "rgba(15,23,42,0.55)") + ";-fx-cursor:hand;"
+        String background = h ? (isDark() ? accentRgba(0.22) : "rgba(15,23,42,0.12)") : "transparent";
+        String textColor = h ? (isDark() ? "#e5e7eb" : "#111827") : (isDark() ? "rgba(255,255,255,0.5)" : "rgba(15,23,42,0.55)");
+        b.setStyle(
+            "-fx-background-color:" + background + ";" +
+            "-fx-background-radius:12px;" +
+            "-fx-text-fill:" + textColor + ";" +
+            "-fx-cursor:hand;"
         );
     }
 
     void styleSignOutButton(Button b, boolean h) {
-        b.setStyle(h
-            ? "-fx-background-color:#800020;-fx-background-radius:12px;-fx-text-fill:#ffffff;-fx-cursor:hand;"
-            : "-fx-background-color:rgba(128,0,32,0.85);-fx-background-radius:12px;-fx-text-fill:#ffe4ea;-fx-cursor:hand;"
+        String background = h ? "#800020" : "rgba(128,0,32,0.85)";
+        String textColor = h ? "#ffffff" : "#ffe4ea";
+        b.setStyle(
+            "-fx-background-color:" + background + ";" +
+            "-fx-background-radius:12px;" +
+            "-fx-text-fill:" + textColor + ";" +
+            "-fx-cursor:hand;"
         );
     }
 
@@ -252,8 +252,6 @@ public class DashboardView implements ViewInterface {
         HBox inner = new HBox(10);
         inner.setAlignment(sidebarExpanded ? Pos.CENTER_LEFT : Pos.CENTER);
         inner.setMouseTransparent(true);
-
-        // Icon box: 36Ãƒâ€”36 rounded square matching .admin-sidebar-icon sizing
         StackPane iconBox = new StackPane();
         iconBox.setPrefSize(32, 32); iconBox.setMinSize(32, 32); iconBox.setMaxSize(32, 32);
         iconBox.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:10px;");
@@ -282,17 +280,17 @@ public class DashboardView implements ViewInterface {
         sectionButtons.put(section, btn);
         styleSidebarItem(btn, section.equals(activeSection));
 
-        btn.setOnMouseEntered(e -> {
+        btn.setOnMouseEntered(_ -> {
             if (!section.equals(activeSection)) {
                 btn.setStyle("-fx-background-color:" + (isDark() ? accentRgba(0.15) : "rgba(15,23,42,0.08)") + ";-fx-background-radius:12px;-fx-cursor:hand;-fx-border-color:" + (isDark() ? accentRgba(0.22) : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:12px;-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.3)" : "rgba(15,23,42,0.12)") + ",16,0,0,4);");
                 iconBox.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.10)") + ";-fx-background-radius:10px;");
              }
         });
-        btn.setOnMouseExited(e -> {
+        btn.setOnMouseExited(_ -> {
             styleSidebarItem(btn, section.equals(activeSection));
             if (!section.equals(activeSection)) iconBox.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:10px;");
         });
-        btn.setOnAction(e -> switchSection(section));
+        btn.setOnAction(_ -> switchSection(section));
         return btn;
     }
 
@@ -305,25 +303,22 @@ public class DashboardView implements ViewInterface {
                 "-fx-effect:dropshadow(gaussian," + accentRgba(0.5) + ",20,0.3,0,6);"
             );
             // Re-style icon box inside active button to match web active item
-            if (b.getGraphic() instanceof HBox) {
-                HBox inner = (HBox) b.getGraphic();
-                if (!inner.getChildren().isEmpty() && inner.getChildren().get(0) instanceof StackPane) {
-                    StackPane ib = (StackPane) inner.getChildren().get(0);
+            if (b.getGraphic() instanceof HBox inner) {
+                if (!inner.getChildren().isEmpty() && inner.getChildren().getFirst() instanceof StackPane ib) {
                     ib.setStyle("-fx-background-color:rgba(255,255,255,0.15);-fx-background-radius:10px;");
                 }
-                if (inner.getChildren().size() > 1 && inner.getChildren().get(1) instanceof Text) {
-                    ((Text) inner.getChildren().get(1)).setFill(Color.WHITE);
+                if (inner.getChildren().size() > 1 && inner.getChildren().get(1) instanceof Text text) {
+                    text.setFill(Color.WHITE);
                 }
             }
         } else {
             b.setStyle("-fx-background-color:transparent;-fx-background-radius:12px;-fx-cursor:hand;");
-            if (b.getGraphic() instanceof HBox) {
-                HBox inner = (HBox) b.getGraphic();
-                if (!inner.getChildren().isEmpty() && inner.getChildren().get(0) instanceof StackPane) {
-                    ((StackPane) inner.getChildren().get(0)).setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:10px;");
+            if (b.getGraphic() instanceof HBox inner) {
+                if (!inner.getChildren().isEmpty() && inner.getChildren().getFirst() instanceof StackPane ib) {
+                    ib.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:10px;");
                 }
-                if (inner.getChildren().size() > 1 && inner.getChildren().get(1) instanceof Text) {
-                    ((Text) inner.getChildren().get(1)).setFill(isDark() ? Color.web("rgba(229,231,235,0.75)") : Color.web("rgba(15,23,42,0.72)"));
+                if (inner.getChildren().size() > 1 && inner.getChildren().get(1) instanceof Text text) {
+                    text.setFill(isDark() ? Color.web("rgba(229,231,235,0.75)") : Color.web("rgba(15,23,42,0.72)"));
                 }
             }
         }
@@ -335,9 +330,7 @@ public class DashboardView implements ViewInterface {
         contentArea.getChildren().setAll(buildSection(section));
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // MAIN AREA
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox createMainArea() {
         VBox area = new VBox(0);
         area.setFillWidth(true);
@@ -358,53 +351,23 @@ public class DashboardView implements ViewInterface {
         return area;
     }
 
-    HBox createAdminHeader() {
-        return DashboardShell.buildHeader(this);
-    }
-
-    private StackPane buildNotificationTrigger() { return DashboardShell.buildNotificationTrigger(this); }
-
-    private VBox buildNotificationDropdownCard() { return DashboardShell.buildNotificationDropdownCard(this); }
-
-    private VBox notificationRow(String title, String body, String time) { return DashboardShell.notificationRow(this, title, body, time); }
-
-    private void scheduleCloseNotificationPopup(StackPane anchor, VBox card) { DashboardShell.scheduleCloseNotificationPopup(this, anchor, card); }
-
-    private void cancelNotificationCloseDelay() { DashboardShell.cancelNotificationCloseDelay(this); }
-
-    private void showNotificationPopupInsideStage(StackPane bell, VBox card) { DashboardShell.showNotificationPopupInsideStage(this, bell, card); }
-
-    private void attachProfileDropdown(HBox profilePill) { DashboardShell.attachProfileDropdown(this, profilePill); }
-
-    private void showProfilePopupInsideStage(HBox profilePill, VBox card) { DashboardShell.showProfilePopupInsideStage(this, profilePill, card); }
-
-    private Button dropdownItem(String icon, String label, Runnable action) { return DashboardShell.dropdownItem(this, icon, label, action); }
-
-    private Button dropdownItemWithBadge(String icon, String label, String badge, Runnable action) { return DashboardShell.dropdownItemWithBadge(this, icon, label, badge, action); }
-
-    private void openFrontendPage(String page) { DashboardShell.openFrontendPage(this, page); }
-
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // SECTION DISPATCHER
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildSection(String section) {
-        switch (section) {
-            case "users":     return buildUsersSection();
-            case "forum":     return buildForumSection();
-            case "syndicat":  return buildSyndicatSection();
-            case "residence": return buildResidenceSection();
-            case "evenement": return buildEvenementSection();
-            default:          return buildGeneralSection();
-        }
+        return switch (section) {
+            case "users"     -> buildUsersSection();
+            case "forum"     -> buildForumSection();
+            case "syndicat"  -> buildSyndicatSection();
+            case "residence" -> buildResidenceSection();
+            case "evenement" -> buildEvenementSection();
+            default          -> buildGeneralSection();
+        };
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // GENERAL section
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildGeneralSection() {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
         VBox subContent = new VBox(20); subContent.setFillWidth(true);
-        HBox subBar = subTabBar(new String[]{"Overview","Engagement","System"}, "Overview", key -> {
+        HBox subBar = subTabBar(new String[]{"Overview", "Engagement", "System"}, key -> {
             subContent.getChildren().setAll(
                 "Engagement".equals(key) ? buildEngagementContent() :
                 "System".equals(key)     ? buildSystemContent()     :
@@ -434,9 +397,6 @@ public class DashboardView implements ViewInterface {
     }
 
     private VBox buildEngagementContent() {
-        VBox v = new VBox(20); v.setFillWidth(true);
-        VBox card = glassCard();
-        Text title = t("Top Pages - Most Visited Routes", boldFont(), FontWeight.BOLD, 18); title.setFill(textPrimaryColor());
         VBox rows = new VBox(10);
         String[][] pages = {
             {"1","#a78bfa","/frontend/home",      "284 views"},
@@ -446,26 +406,14 @@ public class DashboardView implements ViewInterface {
             {"5","#f87171","/admin/dashboard",    "98 views"}
         };
         for (String[] p : pages) {
-            HBox row = new HBox(12); row.setAlignment(Pos.CENTER_LEFT);
-            row.setPadding(new Insets(10,14,10,14));
-            row.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:10px;-fx-border-color:rgba(255,255,255,0.05);-fx-border-width:1;-fx-border-radius:10px;");
-            StackPane rd = new StackPane(); rd.setPrefSize(28,28);
-            rd.setStyle("-fx-background-color:" + p[1] + "33;-fx-background-radius:14;");
-            Text rn = t(p[0], boldFont(), FontWeight.BOLD, 11); rn.setFill(Color.web(p[1]));
-            rd.getChildren().add(rn);
-            Text rt = t(p[2], boldFont(), FontWeight.NORMAL, 13); rt.setFill(textSecondaryColor());
-            Region spr = new Region(); HBox.setHgrow(spr, Priority.ALWAYS);
-            Text cnt = t(p[3], boldFont(), FontWeight.BOLD, 13); cnt.setFill(Color.web(p[1]));
-            row.getChildren().addAll(rd, rt, spr, cnt);
-            rows.getChildren().add(row);
+            rows.getChildren().add(buildRowCard(p[1], p[2], p[3], p[0], 10));
         }
-        card.getChildren().addAll(title, rows);
-        v.getChildren().add(card);
-        return v;
+        VBox card = sectionCard();
+        card.getChildren().addAll(t("Top Pages - Most Visited Routes", boldFont(), FontWeight.BOLD, 18), rows);
+        return new VBox(card);
     }
 
     private VBox buildSystemContent() {
-        VBox v = new VBox(20); v.setFillWidth(true);
         HBox stats = new HBox(16); stats.setFillHeight(true);
         addStatCards(stats,
             new String[]{"SRV","DB","RT","PRC"},
@@ -473,33 +421,52 @@ public class DashboardView implements ViewInterface {
             new String[]{"Online","248 MB","124 ms","7"},
             new String[]{"#34d399","#60a5fa","#a78bfa","#fbbf24"}
         );
-        VBox logCard = glassCard();
-        Text lt = t("Recent System Events", boldFont(), FontWeight.BOLD, 18); lt.setFill(textPrimaryColor());
         VBox logs = new VBox(8);
         for (String[] ev : new String[][]{
-            {"OK","Mar 12 09:14","User admin@syndicati.tn logged in"},
-            {"WARN","Mar 12 08:52","Scheduled email batch: 58 sent"},
-            {"OK","Mar 12 07:30","DB backup completed (248 MB)"},
-            {"OK","Mar 11 22:00","Cache cleared successfully"},
-            {"WARN","Mar 11 20:18","New user registration: Karim S."}
+            {"#34d399","Mar 12 09:14","User admin logged in"},
+            {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
+            {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"},
+            {"#34d399","Mar 11 22:00","Cache cleared successfully"},
+            {"#fbbf24","Mar 11 20:18","New user registration: Karim S."}
         }) {
-            HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
-            row.setPadding(new Insets(7,10,7,10));
-            row.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:8;");
-            Text dot = new Text(ev[0]); Text ts = t(ev[1], lightFont(), FontWeight.NORMAL, 13); ts.setFill(textMutedColor());
-            Text msg = t(ev[2], lightFont(), FontWeight.NORMAL, 14); msg.setFill(textSecondaryColor());
-            row.getChildren().addAll(dot, ts, msg);
-            logs.getChildren().add(row);
+            logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
         }
-        logCard.getChildren().addAll(lt, logs);
-        v.getChildren().addAll(stats, logCard);
-        return v;
+        VBox logCard = sectionCard();
+        logCard.getChildren().addAll(t("Recent System Events", boldFont(), FontWeight.BOLD, 18), logs);
+        return new VBox(20, stats, logCard);
+    }
+
+    private HBox buildRowCard(String color, String title, String value, String index, int radius) {
+        HBox row = new HBox(12);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(radius == 10 ? 10 : 7, 14, radius == 10 ? 10 : 7, 14));
+        row.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:" + radius + "px;-fx-border-color:rgba(255,255,255,0.05);-fx-border-width:1;-fx-border-radius:" + radius + "px;");
+        
+        if (index != null) {
+            StackPane rd = new StackPane(t(index, boldFont(), FontWeight.BOLD, 11));
+            rd.setPrefSize(28, 28);
+            rd.setStyle("-fx-background-color:" + color + "33;-fx-background-radius:14;");
+            ((Text)rd.getChildren().getFirst()).setFill(Color.web(color));
+            row.getChildren().add(rd);
+        } else {
+            Circle dot = new Circle(4, Color.web(color));
+            row.getChildren().add(dot);
+        }
+
+        Text rt = t(title, boldFont(), FontWeight.NORMAL, index != null ? 13 : 14);
+        rt.setFill(textSecondaryColor());
+        Region spr = new Region(); HBox.setHgrow(spr, Priority.ALWAYS);
+        Text cnt = t(value, boldFont(), index != null ? FontWeight.BOLD : FontWeight.NORMAL, 13);
+        cnt.setFill(index != null ? Color.web(color) : textMutedColor());
+        
+        row.getChildren().addAll(rt, spr, cnt);
+        return row;
     }
 
     private VBox buildActivityChart() {
-        VBox card = glassCard();
+        VBox card = sectionCard();
         Text title = t("Activity Pulse", boldFont(), FontWeight.BOLD, 15); title.setFill(textPrimaryColor());
-        Text sub   = t("Page Views \u25A0  UI Clicks \u25A0  \u2014 Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
+        Text sub   = t("Page Views ■  UI Clicks ■  — Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
         sub.setFill(textMutedColor());
 
         HBox cw = new HBox(8); cw.setAlignment(Pos.BOTTOM_LEFT);
@@ -529,8 +496,8 @@ public class DashboardView implements ViewInterface {
     }
 
     private VBox buildTopUsers() {
-        VBox card = glassCard();
-        Text title = t("\u2B50  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
+        VBox card = sectionCard();
+        Text title = t("⭐  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
         VBox list = new VBox(6);
         for (String[] u : new String[][]{
             {"Ahmed B.","SYNDIC","142"}, {"Leila M.","RESIDENT","118"},
@@ -555,29 +522,19 @@ public class DashboardView implements ViewInterface {
         return card;
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // USERS section (Twig: switcher Users/Profile/Onboarding)
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildUsersSection() { return DashboardUsersSection.build(this); }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // FORUM section (Twig: Publications/Commentaires/Reactions)
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildForumSection() { return DashboardForumSection.build(this); }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // SYNDICAT section (Twig: Reclamations/Responses)
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildSyndicatSection() { return DashboardSyndicatSection.build(this); }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // RESIDENCE section (Twig: Residences/Appartements/Maintenance)
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildResidenceSection() { return DashboardResidenceSection.build(this); }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // EVENEMENT section (Twig: Evenements/Participations)
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox buildEvenementSection() { return DashboardEvenementSection.build(this); }
 
     String safe(String value) {
@@ -588,9 +545,7 @@ public class DashboardView implements ViewInterface {
         return value == null ? "-" : value.format(DASHBOARD_DATE_TIME_FMT);
     }
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     // SHARED HELPERS
-    // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     VBox moduleShell(String name, String icon) {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
         HBox heading = new HBox(10); heading.setAlignment(Pos.CENTER_LEFT);
@@ -614,8 +569,8 @@ public class DashboardView implements ViewInterface {
         String normal = "-fx-background-color:rgba(255,255,255,0.03);-fx-background-radius:16px;-fx-border-color:rgba(255,255,255,0.07);-fx-border-width:1;-fx-border-radius:16px;";
         String hover  = "-fx-background-color:rgba(255,255,255,0.055);-fx-background-radius:16px;-fx-border-color:" + color + "55;-fx-border-width:1;-fx-border-radius:16px;";
         card.setStyle(normal);
-        card.setOnMouseEntered(e -> card.setStyle(hover));
-        card.setOnMouseExited(e  -> card.setStyle(normal));
+        card.setOnMouseEntered(_ -> card.setStyle(hover));
+        card.setOnMouseExited(_  -> card.setStyle(normal));
         StackPane ic = new StackPane(); ic.setPrefSize(40,40);
         ic.setStyle("-fx-background-color:" + color + "25;-fx-background-radius:12px;");
         ic.getChildren().add(new Text(icon));
@@ -633,65 +588,11 @@ public class DashboardView implements ViewInterface {
         return c;
     }
 
-    private VBox dataTable(String title, String[] cols, String[][] rows) {
-        VBox card = glassCard();
-        card.setPadding(new Insets(16, 16, 14, 16));
-
-        // Website-like glass-table header
-        HBox head = new HBox(10);
-        head.setAlignment(Pos.CENTER_LEFT);
-        Text tt = t(title, boldFont(), FontWeight.BOLD, 15); tt.setFill(textPrimaryColor());
-        Text sub = t("Live module data", lightFont(), FontWeight.NORMAL, 13);
-        sub.setFill(textMutedColor());
-        VBox titleWrap = new VBox(2, tt, sub);
-        head.getChildren().add(titleWrap);
-
-        GridPane tbl = new GridPane(); tbl.setHgap(0); tbl.setVgap(0); tbl.setMaxWidth(Double.MAX_VALUE);
-        for (int c = 0; c < cols.length; c++) {
-            ColumnConstraints cc = new ColumnConstraints(); cc.setHgrow(Priority.ALWAYS); cc.setFillWidth(true);
-            tbl.getColumnConstraints().add(cc);
-        }
-        for (int c = 0; c < cols.length; c++) {
-            Text col = t(cols[c].toUpperCase(), boldFont(), FontWeight.BOLD, 12);
-            col.setFill(textMutedColor());
-            HBox cell = new HBox(col); cell.setPadding(new Insets(9,12,9,12));
-            cell.setStyle("-fx-border-color:rgba(255,255,255,0.06);-fx-border-width:0 0 1 0;");
-            tbl.add(cell, c, 0);
-        }
-        for (int r = 0; r < rows.length; r++) {
-            final int ri = r;
-            String bg = (r%2==0) ? "transparent" : "rgba(255,255,255,0.01)";
-            for (int c = 0; c < rows[r].length; c++) {
-                Text tx = t(rows[r][c], lightFont(), FontWeight.NORMAL, 14);
-                tx.setFill(c==0 ? textSecondaryColor() : textMutedColor());
-                HBox cb = new HBox(tx); cb.setPadding(new Insets(10,12,10,12)); cb.setStyle("-fx-background-color:"+bg+";");
-                cb.setOnMouseEntered(e -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
-                cb.setOnMouseExited(e  -> cb.setStyle("-fx-background-color:"+bg+";"));
-                tbl.add(cb, c, ri+1);
-            }
-        }
-
-        // Pagination controls matching website pattern
-        HBox pager = new HBox(8);
-        pager.setAlignment(Pos.CENTER);
-        pager.setPadding(new Insets(8, 0, 0, 0));
-        pager.getChildren().addAll(
-            pagerBtn("<", false),
-            pagerBtn("1", true),
-            pagerBtn("2", false),
-            pagerBtn("3", false),
-            pagerBtn(">", false)
-        );
-
-        card.getChildren().addAll(head, tbl, pager);
-        return card;
+    VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd) {
+        return dataTableWithCrud(title, entityLabel, cols, rows, allowAdd, null);
     }
 
-    VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, boolean allowEdit) {
-        return dataTableWithCrud(title, entityLabel, cols, rows, allowAdd, allowEdit, null);
-    }
-
-    VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, boolean allowEdit, Node headerControls) {
+    VBox dataTableWithCrud(String title, String entityLabel, String[] cols, String[][] rows, boolean allowAdd, Node headerControls) {
         CrudSpec spec = crudSpec(title, entityLabel);
         
         StackPane faceContainer = new StackPane();
@@ -719,8 +620,6 @@ public class DashboardView implements ViewInterface {
 
         final class PagerState {
             int page = 1;
-            String searchTerm = "";
-            String filterKey = "all";
         }
         final PagerState pagerState = new PagerState();
 
@@ -734,63 +633,7 @@ public class DashboardView implements ViewInterface {
         VBox titleWrap = new VBox(2, tt, sub);
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        head.getChildren().add(titleWrap);
-
-        if ("Users Table".equals(title) && headerControls == null) {
-            TextField usersSearch = new TextField();
-            usersSearch.setPromptText("Search users...");
-            usersSearch.setPrefWidth(240);
-            usersSearch.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
-            usersSearch.setStyle(
-                "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-                "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-                "-fx-border-width:1;" +
-                "-fx-border-radius:10px;" +
-                "-fx-background-radius:10px;" +
-                "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
-                "-fx-prompt-text-fill:" + (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-            );
-
-            HBox usersFilters = new HBox(6);
-            usersFilters.setAlignment(Pos.CENTER_LEFT);
-
-            String[][] usersFilterDefs = new String[][]{
-                {"all", "All"},
-                {"verified", "Verified"},
-                {"pending", "Pending"},
-                {"active", "Active"},
-                {"disabled", "Disabled"}
-            };
-
-            Map<String, Button> usersFilterButtons = new LinkedHashMap<>();
-            for (String[] def : usersFilterDefs) {
-                String key = def[0];
-                Button b = pillAction(def[1], "all".equals(key));
-                b.setOnAction(e -> {
-                    pagerState.filterKey = key;
-                    pagerState.page = 1;
-                    usersFilterButtons.forEach((k, btn) -> {
-                        btn.setStyle(k.equals(pagerState.filterKey)
-                            ? "-fx-background-color:" + accentRgba(0.24) + ";-fx-border-color:" + accentRgba(0.34) + ";-fx-border-width:1;-fx-background-radius:100px;-fx-border-radius:100px;-fx-text-fill:white;-fx-cursor:hand;"
-                            : "-fx-background-color:transparent;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)") + ";-fx-border-width:1;-fx-background-radius:100px;-fx-border-radius:100px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)") + ";-fx-cursor:hand;"
-                        );
-                    });
-                    refreshTable[0].run();
-                });
-                usersFilterButtons.put(key, b);
-                usersFilters.getChildren().add(b);
-            }
-
-            usersSearch.textProperty().addListener((obs, oldVal, newVal) -> {
-                pagerState.searchTerm = newVal == null ? "" : newVal;
-                pagerState.page = 1;
-                refreshTable[0].run();
-            });
-
-            VBox usersControls = new VBox(6, usersSearch, usersFilters);
-            usersControls.setAlignment(Pos.CENTER_LEFT);
-            head.getChildren().add(usersControls);
-        }
+        head.getChildren().addAll(titleWrap, spacer);
 
         if (headerControls != null) {
             if (headerControls instanceof Region) {
@@ -799,11 +642,9 @@ public class DashboardView implements ViewInterface {
             head.getChildren().add(headerControls);
         }
 
-        head.getChildren().add(spacer);
-
         if (allowAdd) {
             Button addBtn = pillAction(spec.addButtonLabel, true);
-            addBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "add", cols, null));
+            addBtn.setOnAction(ignored -> switchToModalFace(faceContainer, spec, entityLabel, "add", cols, null));
             head.getChildren().add(addBtn);
         }
 
@@ -856,37 +697,6 @@ public class DashboardView implements ViewInterface {
                 if (row == null) {
                     continue;
                 }
-
-                if ("Users Table".equals(title)) {
-                    String q = pagerState.searchTerm == null ? "" : pagerState.searchTerm.trim().toLowerCase();
-                    if (!q.isEmpty()) {
-                        boolean match = false;
-                        for (String cell : row) {
-                            if (cell != null && cell.toLowerCase().contains(q)) {
-                                match = true;
-                                break;
-                            }
-                        }
-                        if (!match) {
-                            continue;
-                        }
-                    }
-
-                    String key = pagerState.filterKey == null ? "all" : pagerState.filterKey;
-                    if ("verified".equals(key) && (row.length < 4 || !"Yes".equalsIgnoreCase(row[3]))) {
-                        continue;
-                    }
-                    if ("pending".equals(key) && (row.length < 5 || !"Pending".equalsIgnoreCase(row[4]))) {
-                        continue;
-                    }
-                    if ("active".equals(key) && (row.length < 5 || !"Active".equalsIgnoreCase(row[4]))) {
-                        continue;
-                    }
-                    if ("disabled".equals(key) && (row.length < 5 || !"Disabled".equalsIgnoreCase(row[4]))) {
-                        continue;
-                    }
-                }
-
                 workingRows.add(row);
             }
 
@@ -906,13 +716,13 @@ public class DashboardView implements ViewInterface {
                 return;
             }
 
-            int safePage = Math.max(1, Math.min(pagerState.page, totalPages));
+            int safePage = Math.clamp(pagerState.page, 1, totalPages);
             pagerState.page = safePage;
             int fromIndex = (safePage - 1) * pageSize;
             int toIndex = Math.min(fromIndex + pageSize, totalRows);
 
             for (int r = fromIndex; r < toIndex; r++) {
-                String bg = ((r - fromIndex) % 2 == 0) ? "transparent" : "rgba(255,255,255,0.01)";
+                String bg = (((r - fromIndex) & 1) == 0) ? "transparent" : "rgba(255,255,255,0.01)";
                 String[] rowData = workingRows.get(r);
                 for (int c = 0; c < rowData.length; c++) {
                     Text tx = t(rowData[c], lightFont(), FontWeight.NORMAL, 14);
@@ -920,8 +730,8 @@ public class DashboardView implements ViewInterface {
                     HBox cb = new HBox(tx);
                     cb.setPadding(new Insets(10,12,10,12));
                     cb.setStyle("-fx-background-color:" + bg + ";");
-                    cb.setOnMouseEntered(e -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
-                    cb.setOnMouseExited(e -> cb.setStyle("-fx-background-color:" + bg + ";"));
+                    cb.setOnMouseEntered(_ -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
+                    cb.setOnMouseExited(_ -> cb.setStyle("-fx-background-color:" + bg + ";"));
                     tbl.add(cb, c, (r - fromIndex) + 1);
                 }
 
@@ -931,7 +741,7 @@ public class DashboardView implements ViewInterface {
                 rowActions.setStyle("-fx-background-color:" + bg + ";");
 
                 Button viewBtn = pillAction("View", false);
-                viewBtn.setOnAction(e -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
+                viewBtn.setOnAction(ignored -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
                 rowActions.getChildren().add(viewBtn);
 
                 tbl.add(rowActions, cols.length, (r - fromIndex) + 1);
@@ -954,7 +764,7 @@ public class DashboardView implements ViewInterface {
                 Button pageBtn = pagerBtn(String.valueOf(pageNum), pageNum == safePage);
                 pageBtn.setDisable(pageNum == safePage);
                 pageBtn.setOpacity(pageNum == safePage ? 1.0 : 0.95);
-                pageBtn.setOnAction(e -> {
+                pageBtn.setOnAction(ignored -> {
                     pagerState.page = targetPage;
                     refreshTable[0].run();
                 });
@@ -962,11 +772,11 @@ public class DashboardView implements ViewInterface {
             }
         };
 
-        prevBtn.setOnAction(e -> {
+        prevBtn.setOnAction(ignored -> {
             pagerState.page--;
             refreshTable[0].run();
         });
-        nextBtn.setOnAction(e -> {
+        nextBtn.setOnAction(ignored -> {
             pagerState.page++;
             refreshTable[0].run();
         });
@@ -1117,16 +927,23 @@ public class DashboardView implements ViewInterface {
         Button b = new Button(text);
         b.setFont(Font.font(lightFont(), FontWeight.NORMAL, 10));
         b.setPadding(new Insets(4, 10, 4, 10));
-        b.setStyle(primary
-            ? "-fx-background-color:" + accentRgba(0.24) + ";-fx-border-color:" + accentRgba(0.34) + ";-fx-border-width:1;-fx-background-radius:100px;-fx-border-radius:100px;-fx-text-fill:white;-fx-cursor:hand;"
-            : "-fx-background-color:transparent;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)") + ";-fx-border-width:1;-fx-background-radius:100px;-fx-border-radius:100px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)") + ";-fx-cursor:hand;"
+        String background = primary ? accentRgba(0.24) : "transparent";
+        String border = primary ? accentRgba(0.34) : (isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)");
+        String textColor = primary ? "white" : (isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)");
+        b.setStyle(
+            "-fx-background-color:" + background + ";" +
+            "-fx-border-color:" + border + ";" +
+            "-fx-text-fill:" + textColor + ";" +
+            "-fx-border-width:1;" +
+            "-fx-background-radius:100px;" +
+            "-fx-border-radius:100px;" +
+            "-fx-cursor:hand;"
         );
         return b;
     }
 
     private void switchToModalFace(StackPane container, CrudSpec spec, String entityLabel, String mode, String[] cols, String[] rowData) {
         VBox modalFace = (VBox) container.getUserData();
-        boolean editable = "edit".equals(mode) || "add".equals(mode);
         String title = "view".equals(mode) ? spec.viewTitle : ("edit".equals(mode) ? spec.editTitle : spec.addTitle);
         String subtitle = "view".equals(mode) ? spec.viewSubtitle : ("edit".equals(mode) ? spec.editSubtitle : spec.addSubtitle);
 
@@ -1146,10 +963,10 @@ public class DashboardView implements ViewInterface {
         Button close = new Button("x");
         close.setPadding(new Insets(6, 10, 6, 10));
         close.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)") + ";-fx-background-radius:999;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.85)") + ";-fx-cursor:hand;");
-        close.setOnAction(e -> switchToTableFace(container));
+        close.setOnAction(_ -> switchToTableFace(container));
         head.getChildren().addAll(tWrap, spacer, close);
 
-        VBox fields = buildModalFields(spec, mode, cols, rowData, editable);
+        VBox fields = buildModalFields(entityLabel, mode, cols, rowData);
 
         ScrollPane formScroll = new ScrollPane(fields);
         formScroll.setFitToWidth(true);
@@ -1162,13 +979,13 @@ public class DashboardView implements ViewInterface {
         HBox actions = new HBox(8);
         actions.setAlignment(Pos.CENTER_RIGHT);
         Button cancel = pillAction(spec.cancelLabel, false);
-        cancel.setOnAction(e -> switchToTableFace(container));
+        cancel.setOnAction(_ -> switchToTableFace(container));
         actions.getChildren().add(cancel);
         
         if ("view".equals(mode)) {
             if (spec.viewDeleteLabel != null) {
                 Button del = dangerAction(spec.viewDeleteLabel);
-                del.setOnAction(e -> {
+                del.setOnAction(ignored -> {
                     if (dashboardAdminService.deleteEntity(entityLabel, rowData)) {
                         switchSection(activeSection);
                     } else {
@@ -1178,12 +995,12 @@ public class DashboardView implements ViewInterface {
                 actions.getChildren().add(del);
             }
             Button edit = pillAction("Edit", true);
-            edit.setOnAction(e -> switchToModalFace(container, spec, entityLabel, "edit", cols, rowData));
+            edit.setOnAction(ignored -> switchToModalFace(container, spec, entityLabel, "edit", cols, rowData));
             actions.getChildren().add(edit);
         } else {
             String saveLabel = "add".equals(mode) ? spec.saveAddLabel : spec.saveEditLabel;
             Button save = pillAction(saveLabel, true);
-            save.setOnAction(e -> {
+            save.setOnAction(ignored -> {
                 if (dashboardAdminService.saveEntity(entityLabel, mode, rowData, fields)) {
                     switchSection(activeSection);
                 } else {
@@ -1197,43 +1014,42 @@ public class DashboardView implements ViewInterface {
         modalFace.getChildren().add(modalCard);
 
         ObservableList<Node> children = container.getChildren();
-        VBox tableCard = (VBox) children.get(0);
+        VBox tableCard = (VBox) children.getFirst();
         tableCard.setVisible(false);
         modalFace.setVisible(true);
     }
 
     private void switchToTableFace(StackPane container) {
         ObservableList<Node> children = container.getChildren();
-        VBox tableCard = (VBox) children.get(0);
+        VBox tableCard = (VBox) children.getFirst();
         VBox modalFace = (VBox) children.get(1);
         
         tableCard.setVisible(true);
         modalFace.setVisible(false);
     }
 
-    private VBox buildModalFields(CrudSpec spec, String mode, String[] cols, String[] rowData, boolean editable) {
+    private VBox buildModalFields(String entityLabel, String mode, String[] cols, String[] rowData) {
         VBox fields = new VBox(10);
 
+        fields.getChildren().add(sectionTitle(
+            "view".equals(mode) ? "Overview" :
+            "edit".equals(mode) ? "Editable Fields" :
+            "Create New Record"
+        ));
         if ("view".equals(mode)) {
-            fields.getChildren().add(sectionTitle("Overview"));
             fields.getChildren().add(metaStrip(rowData));
-        } else if ("edit".equals(mode)) {
-            fields.getChildren().add(sectionTitle("Editable Fields"));
-        } else {
-            fields.getChildren().add(sectionTitle("Create New Record"));
         }
 
         for (int i = 0; i < cols.length; i++) {
             String val = (rowData != null && i < rowData.length) ? rowData[i] : "";
-            fields.getChildren().add(fieldRow(cols[i], val, editable));
+            boolean editable = "edit".equals(mode) || "add".equals(mode);
+            fields.getChildren().add(fieldRow(entityLabel, mode, cols[i], val, editable));
         }
 
         if ("edit".equals(mode) || "add".equals(mode)) {
             fields.getChildren().add(sectionTitle("Flags & Metadata"));
-            fields.getChildren().add(infoChipRow(
-                "Active", "Verified", "Synced", "Tracked"
-            ));
-            fields.getChildren().add(notesBox("Internal notes", "Add context for admins (reason, follow-up, priority)."));
+            fields.getChildren().add(infoChipRow());
+            fields.getChildren().add(notesBox());
         }
 
         return fields;
@@ -1259,11 +1075,12 @@ public class DashboardView implements ViewInterface {
         return row;
     }
 
-    private HBox infoChipRow(String... labels) {
+    private HBox infoChipRow() {
         HBox row = new HBox(8);
         row.setAlignment(Pos.CENTER_LEFT);
+        String[] labels = {"Active", "Verified", "Synced", "Tracked"};
         for (int i = 0; i < labels.length; i++) {
-            row.getChildren().add(chip(labels[i], i % 2 == 1));
+            row.getChildren().add(chip(labels[i], (i & 1) != 0));
         }
         return row;
     }
@@ -1274,18 +1091,19 @@ public class DashboardView implements ViewInterface {
         HBox box = new HBox(tx);
         box.setAlignment(Pos.CENTER);
         box.setPadding(new Insets(5, 10, 5, 10));
-        box.setStyle(accent
-            ? "-fx-background-color:" + accentRgba(0.26) + ";-fx-border-color:" + accentRgba(0.36) + ";-fx-border-width:1;-fx-background-radius:999;-fx-border-radius:999;"
-            : "-fx-background-color:rgba(255,255,255,0.05);-fx-border-color:rgba(255,255,255,0.12);-fx-border-width:1;-fx-background-radius:999;-fx-border-radius:999;"
-        );
+        String common = ";-fx-border-width:1;-fx-background-radius:999;-fx-border-radius:999;";
+        String chipStyle = accent
+            ? "-fx-background-color:" + accentRgba(0.26) + ";-fx-border-color:" + accentRgba(0.36) + common
+            : "-fx-background-color:rgba(255,255,255,0.05);-fx-border-color:rgba(255,255,255,0.12)" + common;
+        box.setStyle(chipStyle);
         return box;
     }
 
-    private VBox notesBox(String label, String value) {
+    private VBox notesBox() {
         VBox wrap = new VBox(4);
-        Text lbl = t(label, lightFont(), FontWeight.NORMAL, 13);
+        Text lbl = t("Internal notes", lightFont(), FontWeight.NORMAL, 13);
         lbl.setFill(textMutedColor());
-        Text val = t(value, lightFont(), FontWeight.NORMAL, 13);
+        Text val = t("Add context for admins (reason, follow-up, priority).", lightFont(), FontWeight.NORMAL, 13);
         val.setFill(textSecondaryColor());
         VBox box = new VBox(val);
         box.setPadding(new Insets(10, 12, 10, 12));
@@ -1300,23 +1118,108 @@ public class DashboardView implements ViewInterface {
         return wrap;
     }
 
-    private Node fieldRow(String label, String value, boolean editable) {
-        VBox row = new VBox(4);
+    private Node fieldRow(String entityLabel, String mode, String label, String value, boolean editable) {
+        VBox row = new VBox(6);
+        row.setPadding(new Insets(4, 0, 4, 0));
         Text lbl = t(label, lightFont(), FontWeight.NORMAL, 11);
         lbl.setFill(textMutedColor());
 
-        if (editable) {
+        boolean canEditThisField = editable;
+        if ("Reclamation".equalsIgnoreCase(entityLabel) && "edit".equals(mode) && !"Status".equalsIgnoreCase(label)) {
+            canEditThisField = false;
+        }
+        if ("Reponse".equalsIgnoreCase(entityLabel) && "edit".equals(mode) && !"Message".equalsIgnoreCase(label)) {
+            canEditThisField = false;
+        }
+        if ("Reponse".equalsIgnoreCase(entityLabel) && "add".equals(mode) && "Date".equalsIgnoreCase(label)) {
+            canEditThisField = false;
+        }
+
+        if (canEditThisField) {
+            if ("User".equalsIgnoreCase(entityLabel) && "Role".equalsIgnoreCase(label)) {
+                ComboBox<String> roleSelect = new ComboBox<>();
+                roleSelect.getItems().addAll(userRoleOptions(value));
+                String selectedRole = normalizeRoleValue(value);
+                if (selectedRole.equals("-") && "add".equals(mode)) {
+                    selectedRole = "ROLE_RESIDENT";
+                }
+                if (!selectedRole.equals("-") && !roleSelect.getItems().contains(selectedRole)) {
+                    roleSelect.getItems().add(selectedRole);
+                }
+                if (!selectedRole.equals("-")) {
+                    roleSelect.setValue(selectedRole);
+                }
+                styleSelect(roleSelect, "Select Role", this::formatRoleDisplay);
+                row.getChildren().addAll(lbl, roleSelect);
+                return row;
+            }
+
+            if ("User".equalsIgnoreCase(entityLabel) && "Verified".equalsIgnoreCase(label)) {
+                ComboBox<String> verifiedSelect = new ComboBox<>();
+                verifiedSelect.getItems().addAll("Yes", "No");
+                verifiedSelect.setValue(isTruthyText(value) ? "Yes" : "No");
+                styleSelect(verifiedSelect, "Select Value", Function.identity());
+                row.getChildren().addAll(lbl, verifiedSelect);
+                return row;
+            }
+
+            if ("Reclamation".equalsIgnoreCase(entityLabel) && "Status".equalsIgnoreCase(label)) {
+                ComboBox<String> statusSelect = new ComboBox<>();
+                statusSelect.getItems().addAll(reclamationStatusOptions(value));
+                String selectedStatus = normalizeReclamationStatusValue(value);
+                if (!selectedStatus.equals("-") && !statusSelect.getItems().contains(selectedStatus)) {
+                    statusSelect.getItems().add(selectedStatus);
+                }
+                if (!selectedStatus.equals("-")) {
+                    statusSelect.setValue(selectedStatus);
+                }
+                styleSelect(statusSelect, "Select Status", this::formatReclamationStatusDisplay);
+                row.getChildren().addAll(lbl, statusSelect);
+                return row;
+            }
+
+            if ("Reponse".equalsIgnoreCase(entityLabel) && "User".equalsIgnoreCase(label)) {
+                ComboBox<String> userSelect = new ComboBox<>();
+                userSelect.getItems().addAll(reponseUserOptions(value));
+                String selectedUser = normalizeUserDisplayName(value);
+                if (!selectedUser.equals("-") && !userSelect.getItems().contains(selectedUser)) {
+                    userSelect.getItems().add(selectedUser);
+                }
+                if (!selectedUser.equals("-")) {
+                    userSelect.setValue(selectedUser);
+                }
+                styleSelect(userSelect, "Select User", Function.identity());
+                row.getChildren().addAll(lbl, userSelect);
+                return row;
+            }
+
+            if ("Reponse".equalsIgnoreCase(entityLabel) && "Reclamation".equalsIgnoreCase(label)) {
+                ComboBox<String> reclamationSelect = new ComboBox<>();
+                reclamationSelect.getItems().addAll(reponseReclamationOptions(value));
+                String selectedReclamation = normalizeReclamationTitle(value);
+                if (!selectedReclamation.equals("-") && !reclamationSelect.getItems().contains(selectedReclamation)) {
+                    reclamationSelect.getItems().add(selectedReclamation);
+                }
+                if (!selectedReclamation.equals("-")) {
+                    reclamationSelect.setValue(selectedReclamation);
+                }
+                styleSelect(reclamationSelect, "Select Reclamation", Function.identity());
+                row.getChildren().addAll(lbl, reclamationSelect);
+                return row;
+            }
+
+            if ("Reponse".equalsIgnoreCase(entityLabel) && "Date".equalsIgnoreCase(label)) {
+                canEditThisField = false;
+            }
+
             TextField input = new TextField(value);
             input.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
-            input.setStyle(
-                "-fx-background-color:rgba(255,255,255,0.05);" +
-                "-fx-border-color:rgba(255,255,255,0.12);" +
-                "-fx-border-width:1;" +
-                "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
-                "-fx-background-radius:10px;" +
-                "-fx-border-radius:10px;" +
-                "-fx-padding:8 10 8 10;"
-            );
+            input.setPrefHeight(36);
+            input.setMinHeight(36);
+            input.setStyle(inputStyle(false, false));
+            input.setOnMouseEntered(_ -> input.setStyle(inputStyle(true, input.isFocused())));
+            input.setOnMouseExited(_ -> input.setStyle(inputStyle(false, input.isFocused())));
+            input.focusedProperty().addListener((ignoredObservable, ignoredOldValue, newVal) -> input.setStyle(inputStyle(false, newVal)));
             row.getChildren().addAll(lbl, input);
         } else {
             Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
@@ -1333,6 +1236,279 @@ public class DashboardView implements ViewInterface {
             row.getChildren().addAll(lbl, box);
         }
         return row;
+    }
+
+    private List<String> reponseUserOptions(String currentValue) {
+        LinkedHashSet<String> users = new LinkedHashSet<>();
+        for (User user : dashboardAdminService.users()) {
+            String displayName = userDisplayName(user);
+            if (!displayName.equals("Unknown")) {
+                users.add(displayName);
+            }
+        }
+
+        String current = normalizeUserDisplayName(currentValue);
+        if (!current.equals("-")) {
+            users.add(current);
+        }
+        return new ArrayList<>(users);
+    }
+
+    private List<String> reponseReclamationOptions(String currentValue) {
+        LinkedHashSet<String> reclamations = new LinkedHashSet<>();
+        for (Reclamation reclamation : dashboardAdminService.reclamations()) {
+            String title = normalizeReclamationTitle(reclamation != null ? reclamation.getTitreReclamations() : null);
+            if (!title.equals("-")) {
+                reclamations.add(title);
+            }
+        }
+
+        String current = normalizeReclamationTitle(currentValue);
+        if (!current.equals("-")) {
+            reclamations.add(current);
+        }
+        return new ArrayList<>(reclamations);
+    }
+
+    private String normalizeUserDisplayName(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        return normalized.isEmpty() ? "-" : normalized;
+    }
+
+    private String normalizeReclamationTitle(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        return normalized.isEmpty() ? "-" : normalized;
+    }
+
+    private String userDisplayName(User user) {
+        if (user == null) {
+            return "Unknown";
+        }
+        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+        String last = user.getLastName() == null ? "" : user.getLastName().trim();
+        String fullName = (first + " " + last).trim();
+        return fullName.isEmpty() ? "Unknown" : fullName;
+    }
+
+    private List<String> reclamationStatusOptions(String currentValue) {
+        LinkedHashSet<String> statuses = new LinkedHashSet<>();
+        statuses.add("active");
+        statuses.add("en_attente");
+        statuses.add("refuse");
+        statuses.add("termine");
+
+        String current = normalizeReclamationStatusValue(currentValue);
+        if (!current.equals("-")) {
+            statuses.add(current);
+        }
+        return new ArrayList<>(statuses);
+    }
+
+    private String normalizeReclamationStatusValue(String statusValue) {
+        if (statusValue == null || statusValue.isBlank()) {
+            return "-";
+        }
+        String token = statusValue.trim().toLowerCase().replace(' ', '_');
+        return switch (token) {
+            case "active", "en_attente", "refuse", "termine" -> token;
+            case "pending" -> "en_attente";
+            case "rejected" -> "refuse";
+            case "completed" -> "termine";
+            default -> "-";
+        };
+    }
+
+    private String formatReclamationStatusDisplay(String statusValue) {
+        String status = normalizeReclamationStatusValue(statusValue);
+        return switch (status) {
+            case "active" -> "Active";
+            case "en_attente" -> "Pending";
+            case "refuse" -> "Rejected";
+            case "termine" -> "Completed";
+            default -> "Select Status";
+        };
+    }
+
+    private void styleSelect(ComboBox<String> select, String placeholder, Function<String, String> displayFormatter) {
+        select.setMaxWidth(Double.MAX_VALUE);
+        select.setPrefHeight(36);
+        select.setMinHeight(36);
+        select.setPromptText(placeholder);
+        
+        // Enhanced combobox styling with glass morphism
+        String baseStyle = "-fx-background-color:rgba(255,255,255,0.06);" +
+            "-fx-border-color:rgba(255,255,255,0.15);" +
+            "-fx-border-width:1;" +
+            "-fx-background-radius:10px;" +
+            "-fx-border-radius:10px;" +
+            "-fx-text-fill:" + (isDark() ? "#e5e7eb" : "#111827") + ";" +
+            "-fx-font-size:12;" +
+            "-fx-font-family:'" + lightFont() + "';" +
+            "-fx-padding:0 12 0 12;" +
+            "-fx-focus-color:transparent;" +
+            "-fx-faint-focus-color:transparent;";
+        
+        select.setStyle(baseStyle);
+        
+        // Custom button cell for displaying formatted text
+        select.setButtonCell(new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(placeholder);
+                } else {
+                    setText(displayFormatter.apply(item));
+                }
+                setStyle("-fx-text-fill:" + (isDark() ? "#e5e7eb" : "#111827") + ";");
+            }
+        });
+        
+        // Custom list cell factory for dropdown items
+        select.setCellFactory(ignored -> new javafx.scene.control.ListCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(displayFormatter.apply(item));
+                    String cellStyle = "-fx-padding:8 12 8 12;" +
+                        "-fx-text-fill:" + (isDark() ? "#e5e7eb" : "#111827") + ";" +
+                        "-fx-font-size:12;" +
+                        "-fx-font-family:'" + lightFont() + "';";
+                    if (isSelected()) {
+                        setStyle(cellStyle + "-fx-background-color:" + accentRgba(0.28) + ";");
+                    } else {
+                        setStyle(cellStyle + "-fx-background-color:transparent;");
+                    }
+                }
+            }
+        });
+        
+        // Custom popup styling
+        select.setOnShown(ignored -> {
+            if (select.getSkin() != null) {
+                try {
+                    var popup = (javafx.scene.control.skin.ComboBoxListViewSkin<?>) select.getSkin();
+                    var listView = (javafx.scene.control.ListView<?>) popup.getPopupContent();
+                    if (listView != null) {
+                        listView.setStyle(
+                            "-fx-background-color:rgba(20,20,20,0.95);" +
+                            "-fx-control-inner-background:rgba(20,20,20,0.95);" +
+                            "-fx-padding:0;" +
+                            "-fx-border-color:rgba(255,255,255,0.12);" +
+                            "-fx-border-width:1;" +
+                            "-fx-border-radius:8;" +
+                            "-fx-background-radius:8;"
+                        );
+                    }
+                } catch (Exception ex) {
+                    // Fallback if skin casting fails
+                }
+            }
+        });
+        
+        // Hover and focus effects
+        select.setOnMouseEntered(_ -> select.setStyle(inputStyle(true, select.isFocused())));
+        select.setOnMouseExited(_ -> select.setStyle(inputStyle(false, select.isFocused())));
+        select.focusedProperty().addListener((ignoredObservable, ignoredOldValue, newVal) -> select.setStyle(inputStyle(false, newVal)));
+    }
+
+    private String inputStyle(boolean hover, boolean focus) {
+        String base = "-fx-background-color:rgba(255,255,255," + (focus ? "0.09" : (hover ? "0.08" : "0.06")) + ");" +
+            "-fx-border-color:" + (focus ? accentRgba(0.45) : (hover ? accentRgba(0.35) : "rgba(255,255,255,0.15)")) + ";" +
+            "-fx-border-width:1;" +
+            "-fx-background-radius:10px;" +
+            "-fx-border-radius:10px;" +
+            "-fx-text-fill:" + (isDark() ? "#e5e7eb" : "#111827") + ";" +
+            "-fx-font-size:12;" +
+            "-fx-font-family:'" + lightFont() + "';" +
+            "-fx-padding:0 12 0 12;" +
+            "-fx-focus-color:transparent;" +
+            "-fx-faint-focus-color:transparent;";
+        if (hover || focus) {
+            base += "-fx-effect:dropshadow(gaussian," + (focus ? accentRgba(0.25) : "rgba(0,0,0,0.15)") + "," + (focus ? "12" : "8") + ",0,0," + (focus ? "6" : "4") + ");";
+        }
+        return base;
+    }
+
+    private List<String> userRoleOptions(String currentValue) {
+        LinkedHashSet<String> roles = new LinkedHashSet<>();
+        roles.add("ROLE_ADMIN");
+        roles.add("ROLE_SYNDIC");
+        roles.add("ROLE_RESIDENT");
+
+        for (User user : dashboardAdminService.users()) {
+            String normalized = normalizeRoleValue(user.getRoleUser());
+            if (!normalized.equals("-")) {
+                roles.add(normalized);
+            }
+        }
+
+        String current = normalizeRoleValue(currentValue);
+        if (!current.equals("-")) {
+            roles.add(current);
+        }
+        return new ArrayList<>(roles);
+    }
+
+    private String normalizeRoleValue(String roleValue) {
+        if (roleValue == null || roleValue.isBlank()) {
+            return "-";
+        }
+        String normalized = roleValue.trim().toUpperCase();
+        if (normalized.equals("-")) {
+            return "-";
+        }
+        if (normalized.startsWith("ROLE_")) {
+            return normalized;
+        }
+        return "ROLE_" + normalized;
+    }
+
+    private boolean isTruthyText(String value) {
+        String normalized = value == null ? "" : value.trim();
+        return "yes".equalsIgnoreCase(normalized)
+            || "true".equalsIgnoreCase(normalized)
+            || "1".equalsIgnoreCase(normalized)
+            || "verified".equalsIgnoreCase(normalized);
+    }
+
+    private String formatRoleDisplay(String roleValue) {
+        if (roleValue == null || roleValue.isBlank() || "-".equals(roleValue)) {
+            return "Select Role";
+        }
+        String normalized = roleValue.trim().toUpperCase();
+        if (normalized.startsWith("ROLE_")) {
+            normalized = normalized.substring(5);
+        }
+        return switch (normalized) {
+            case "ADMIN"    -> "Administrator";
+            case "SYNDIC"   -> "Syndic";
+            case "RESIDENT" -> "Resident";
+            case "OWNER"    -> "Owner";
+            default -> {
+                // Format as Title Case: "CUSTOM_ROLE" -> "Custom Role"
+                String[] parts = normalized.replace("_", " ").toLowerCase().split("\\s+");
+                StringBuilder titleCase = new StringBuilder();
+                for (String part : parts) {
+                    if (!part.isEmpty()) {
+                        titleCase.append(Character.toUpperCase(part.charAt(0)))
+                            .append(part.substring(1))
+                            .append(" ");
+                    }
+                }
+                yield titleCase.toString().trim();
+            }
+        };
     }
 
     private Button dangerAction(String text) {
@@ -1386,17 +1562,31 @@ public class DashboardView implements ViewInterface {
         b.setFont(Font.font(lightFont(), active ? FontWeight.BOLD : FontWeight.NORMAL, 11));
         b.setPadding(new Insets(5, 10, 5, 10));
         b.setMinWidth(30);
-        b.setStyle(active
-            ? "-fx-background-color:" + accentGradient() + ";-fx-background-radius:8px;-fx-text-fill:white;-fx-cursor:hand;"
-            : "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:8px;-fx-background-radius:8px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.72)" : "rgba(15,23,42,0.78)") + ";-fx-cursor:hand;"
+        String background = active ? accentGradient() : (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)");
+        String border = active ? "transparent" : (isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.14)");
+        String borderWidth = active ? "0" : "1";
+        String textColor = active ? "white" : (isDark() ? "rgba(255,255,255,0.72)" : "rgba(15,23,42,0.78)");
+        b.setStyle(
+            "-fx-background-color:" + background + ";" +
+            "-fx-background-radius:8px;" +
+            "-fx-border-color:" + border + ";" +
+            "-fx-border-width:" + borderWidth + ";" +
+            "-fx-border-radius:8px;" +
+            "-fx-text-fill:" + textColor + ";" +
+            "-fx-cursor:hand;"
         );
         return b;
     }
 
     private HBox mainSwitcher() {
         HBox c = new HBox(); c.setAlignment(Pos.CENTER);
-        HBox pill = new HBox(0); pill.setAlignment(Pos.CENTER); pill.setPadding(new Insets(4));
-        pill.setStyle("-fx-background-color:" + (isDark() ? "rgba(10,10,10,0.65)" : "rgba(248,250,252,0.96)") + ";-fx-background-radius:100px;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:100px;");
+        HBox pill = createPill(
+            0,
+            new Insets(4),
+            isDark() ? "rgba(10,10,10,0.65)" : "rgba(248,250,252,0.96)",
+            isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.14)",
+            100
+        );
         String[] labels   = {"General","Users","Forum","Syndicat","Residence","Evenement"};
         String[] sections = {"general","users","forum","syndicat","residence","evenement"};
         for (int i = 0; i < labels.length; i++) {
@@ -1404,11 +1594,16 @@ public class DashboardView implements ViewInterface {
             Button tab = new Button(labels[i]);
             tab.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
             tab.setPadding(new Insets(8,18,8,18));
-            tab.setStyle(sec.equals(activeSection)
-                ? "-fx-background-color:" + accentGradient() + ";-fx-background-radius:100px;-fx-text-fill:white;-fx-cursor:hand;"
-                : "-fx-background-color:transparent;-fx-background-radius:100px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.74)") + ";-fx-cursor:hand;"
+            boolean active = sec.equals(activeSection);
+            String background = active ? accentGradient() : "transparent";
+            String textColor = active ? "white" : (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.74)");
+            tab.setStyle(
+                "-fx-background-color:" + background + ";" +
+                "-fx-background-radius:100px;" +
+                "-fx-text-fill:" + textColor + ";" +
+                "-fx-cursor:hand;"
             );
-            tab.setOnAction(e -> switchSection(sec));
+            tab.setOnAction(_ -> switchSection(sec));
             pill.getChildren().add(tab);
         }
         c.getChildren().add(pill);
@@ -1416,24 +1611,28 @@ public class DashboardView implements ViewInterface {
     }
 
     /** Switcher used inside module pages (Users/Profile/Onboarding, etc.). */
-    HBox moduleModeSwitcher(String[] labels, String activeLabel, Consumer<String> onSelect) {
+    HBox moduleModeSwitcher(String[] labels, Consumer<String> onSelect) {
         HBox wrap = new HBox();
         wrap.setAlignment(Pos.CENTER);
 
-        HBox pill = new HBox(6);
-        pill.setAlignment(Pos.CENTER);
-        pill.setPadding(new Insets(6));
-        pill.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(10,10,10,0.45)" : "rgba(248,250,252,0.95)") + ";" +
-            "-fx-background-radius:100px;" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:100px;" +
-            "-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.35)" : "rgba(15,23,42,0.10)") + ",20,0,0,6);"
+        HBox pill = createPill(
+            6,
+            new Insets(6),
+            isDark() ? "rgba(10,10,10,0.45)" : "rgba(248,250,252,0.95)",
+            isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.14)",
+            100
         );
+        DropShadow pillShadow = new DropShadow();
+        pillShadow.setBlurType(BlurType.GAUSSIAN);
+        pillShadow.setColor(Color.web(isDark() ? "rgba(0,0,0,0.35)" : "rgba(15,23,42,0.10)"));
+        pillShadow.setRadius(20);
+        pillShadow.setOffsetX(0);
+        pillShadow.setOffsetY(6);
+        pill.setEffect(pillShadow);
 
         List<Button> tabButtons = new ArrayList<>();
 
+        String activeLabel = labels[0];
         for (String label : labels) {
             Button tab = new Button(label);
             tab.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
@@ -1458,7 +1657,7 @@ public class DashboardView implements ViewInterface {
                 );
             }
 
-            tab.setOnAction(e -> {
+            tab.setOnAction(_ -> {
                 for (Button b : tabButtons) {
                     b.setStyle(
                         "-fx-background-color:transparent;" +
@@ -1470,7 +1669,7 @@ public class DashboardView implements ViewInterface {
                 tab.setStyle(
                     "-fx-background-color:" + accentGradient() + ";" +
                     "-fx-background-radius:100px;" +
-                        "-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.55)" : "rgba(15,23,42,0.78)") + ";" +
+                    "-fx-text-fill:white;" +
                     "-fx-border-color:" + accentRgba(0.32) + ";" +
                     "-fx-border-width:1;" +
                     "-fx-border-radius:100px;" +
@@ -1487,17 +1686,23 @@ public class DashboardView implements ViewInterface {
         return wrap;
     }
 
-    private HBox subTabBar(String[] labels, String activeLabel, Consumer<String> onSelect) {
+    private HBox subTabBar(String[] labels, Consumer<String> onSelect) {
         HBox c = new HBox(); c.setAlignment(Pos.CENTER);
-        HBox pill = new HBox(4); pill.setAlignment(Pos.CENTER); pill.setPadding(new Insets(6));
-        pill.setStyle("-fx-background-color:" + (isDark() ? "rgba(15,15,17,0.65)" : "rgba(248,250,252,0.95)") + ";-fx-background-radius:16px;-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:16px;");
+        HBox pill = createPill(
+            4,
+            new Insets(6),
+            isDark() ? "rgba(15,15,17,0.65)" : "rgba(248,250,252,0.95)",
+            isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.14)",
+            16
+        );
+        String activeLabel = labels[0];
         for (String label : labels) {
             Button btn = new Button(label.toUpperCase());
             btn.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
             btn.setPadding(new Insets(5,16,5,16));
             styleSubTab(btn, label.equals(activeLabel));
-            btn.setOnAction(e -> {
-                pill.getChildren().forEach(n -> { if (n instanceof Button) styleSubTab((Button)n, false); });
+            btn.setOnAction(_ -> {
+                pill.getChildren().forEach(this::resetSubTabIfButton);
                 styleSubTab(btn, true);
                 onSelect.accept(label);
             });
@@ -1508,10 +1713,42 @@ public class DashboardView implements ViewInterface {
     }
 
     private void styleSubTab(Button b, boolean active) {
-        b.setStyle(active
-            ? "-fx-background-color:" + accentRgba(0.2) + ";-fx-background-radius:12px;-fx-text-fill:white;-fx-border-color:" + accentRgba(0.3) + ";-fx-border-width:1;-fx-border-radius:12px;-fx-cursor:hand;"
-            : "-fx-background-color:transparent;-fx-background-radius:12px;-fx-text-fill:" + (isDark() ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.7)") + ";-fx-border-color:transparent;-fx-border-width:1;-fx-border-radius:12px;-fx-cursor:hand;"
+        String background = active ? accentRgba(0.2) : "transparent";
+        String textColor = active ? "white" : (isDark() ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.7)");
+        String border = active ? accentRgba(0.3) : "transparent";
+        b.setStyle(
+            "-fx-background-color:" + background + ";" +
+            "-fx-background-radius:12px;" +
+            "-fx-text-fill:" + textColor + ";" +
+            "-fx-border-color:" + border + ";" +
+            "-fx-border-width:1;" +
+            "-fx-border-radius:12px;" +
+            "-fx-cursor:hand;"
         );
+    }
+
+    private VBox sectionCard() {
+        return glassCard();
+    }
+
+    private HBox createPill(double spacing, Insets padding, String background, String border, double radius) {
+        HBox pill = new HBox(spacing);
+        pill.setAlignment(Pos.CENTER);
+        pill.setPadding(padding);
+        pill.setStyle(
+            "-fx-background-color:" + background + ";" +
+            "-fx-background-radius:" + radius + "px;" +
+            "-fx-border-color:" + border + ";" +
+            "-fx-border-width:1;" +
+            "-fx-border-radius:" + radius + "px;"
+        );
+        return pill;
+    }
+
+    private void resetSubTabIfButton(Node node) {
+        if (node instanceof Button b) {
+            styleSubTab(b, false);
+        }
     }
 
     private HBox metric(String icon, String label, String val, String color) {
@@ -1537,6 +1774,23 @@ public class DashboardView implements ViewInterface {
     }
     String boldFont()  { return com.syndicati.MainApplication.getInstance().getBoldFontFamily();  }
     String lightFont() { return com.syndicati.MainApplication.getInstance().getLightFontFamily(); }
+
+    /** Multi-mode module view template - used to reduce duplication across sections. */
+    VBox moduleModeView(String name, String icon, String[] labels, java.util.function.Function<String, Node> contentMapper) {
+        VBox shell = moduleShell(name, icon);
+        VBox body = new VBox(16);
+        body.setFillWidth(true);
+
+        HBox sub = moduleModeSwitcher(labels, key -> {
+            body.getChildren().setAll(contentMapper.apply(key));
+        });
+
+        body.getChildren().add(contentMapper.apply(labels[0]));
+        shell.getChildren().addAll(sub, body);
+        return shell;
+    }
 }
+
+
 
 

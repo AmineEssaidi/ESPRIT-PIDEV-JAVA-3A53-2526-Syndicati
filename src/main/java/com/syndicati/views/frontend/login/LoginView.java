@@ -51,8 +51,6 @@ public class LoginView implements ViewInterface {
     private VBox faceIdPanel;
     private HBox loginAuthFlexContainer;
     private boolean faceIdOpen = false;
-    private boolean isSignUpMode = false;
-    private boolean isForgotPasswordMode = false;
     private Runnable onLoginSuccess;
     private boolean loginSuccessFired = false;
     private final AuthController authController;
@@ -325,12 +323,12 @@ public class LoginView implements ViewInterface {
         primaryRow.setAlignment(Pos.CENTER);
         primaryRow.setMaxWidth(Double.MAX_VALUE);
 
-        Button google = createAuthMethodButton("ðŸ”", "Sign in with Google", true);
+        Button google = createAuthMethodButton("\ud83d\udd10", "Sign in with Google", true);
         HBox.setHgrow(google, Priority.ALWAYS);
         google.setMaxWidth(Double.MAX_VALUE);
         google.setOnAction(e -> showInfoMessage("Google login UI is ready. Functionality will be connected later."));
 
-        Button toggle = new Button("âŒ„");
+        Button toggle = new Button("➕");
         toggle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
         toggle.setPrefWidth(42);
         toggle.setPrefHeight(42);
@@ -350,15 +348,15 @@ public class LoginView implements ViewInterface {
         secondary.setManaged(false);
         secondary.setOpacity(0);
 
-        Button github = createAuthMethodButton("ðŸ™", "GitHub", false);
+        Button github = createAuthMethodButton("\ud83d\ude4f", "GitHub", false);
         github.setOnAction(e -> showInfoMessage("GitHub login UI is ready. Functionality will be connected later."));
 
         HBox biometricRow = new HBox(8);
         biometricRow.setAlignment(Pos.CENTER);
         biometricRow.setMaxWidth(Double.MAX_VALUE);
 
-        Button passkey = createAuthMethodButton("ðŸ”", "Passkey", false);
-        Button faceId = createAuthMethodButton("ðŸ“·", "Face ID", false);
+        Button passkey = createAuthMethodButton("\ud83d\udd10", "Passkey", false);
+        Button faceId = createAuthMethodButton("\ud83d\udcf7", "Face ID", false);
         HBox.setHgrow(passkey, Priority.ALWAYS);
         HBox.setHgrow(faceId, Priority.ALWAYS);
         passkey.setMaxWidth(Double.MAX_VALUE);
@@ -805,17 +803,17 @@ public class LoginView implements ViewInterface {
         requirementsBox.setStyle("-fx-padding: 12; -fx-background-color: rgba(255,255,255,0.03); -fx-border-radius: 8; -fx-background-radius: 8;");
         
         // Length requirement
-        HBox lengthReq = createRequirementRow("âœ“", "8+ characters");
+        HBox lengthReq = createRequirementRow("\u2713", "8+ characters");
         lengthReq.setId("req-length");
         lengthReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
         
         // Uppercase requirement
-        HBox uppercaseReq = createRequirementRow("âœ“", "Uppercase letter");
+        HBox uppercaseReq = createRequirementRow("\u2713", "Uppercase letter");
         uppercaseReq.setId("req-uppercase");
         uppercaseReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
         
         // Special character requirement
-        HBox specialReq = createRequirementRow("âœ“", "Special character");
+        HBox specialReq = createRequirementRow("\u2713", "Special character");
         specialReq.setId("req-special");
         specialReq.setStyle("-fx-text-fill: rgba(255,255,255,0.5);");
         
@@ -870,7 +868,7 @@ public class LoginView implements ViewInterface {
     }
     
     private Button createPasswordToggleButton(PasswordField pwField) {
-        Button btn = new Button("ðŸ‘");
+        Button btn = new Button("\ud83d\udc41");
         btn.setOnAction(e -> {
             String currentText = pwField.getText();
             TextField tempField = new TextField(currentText);
@@ -1162,7 +1160,7 @@ public class LoginView implements ViewInterface {
             } else if (trimmed.length() < 2) {
                 valid = false;
                 message = "Must be at least 2 characters";
-            } else if (!trimmed.matches("^[a-zA-ZÃ€-Ã¿\\s-]+$")) {
+            } else if (!trimmed.matches("^[\\p{L}\\s-]+$")) {
                 valid = false;
                 message = "Only letters, spaces and hyphens allowed";
             }
@@ -1172,7 +1170,7 @@ public class LoginView implements ViewInterface {
                 validationMsg.setVisible(false);
                 validationMsg.setManaged(false);
                 validationMsg.setFill(Color.web(ThemeManager.getInstance().getAccentHex()));
-                validationMsg.setText("âœ“");
+                validationMsg.setText("\u2713");
             } else if (!trimmed.isEmpty()) {
                 validationMsg.setVisible(true);
                 validationMsg.setManaged(true);
@@ -1215,7 +1213,7 @@ public class LoginView implements ViewInterface {
                 validationMsg.setVisible(true);
                 validationMsg.setManaged(true);
                 validationMsg.setFill(Color.web(ThemeManager.getInstance().getAccentHex()));
-                validationMsg.setText("âœ“");
+                validationMsg.setText("\u2713");
             } else if (!trimmed.isEmpty()) {
                 validationMsg.setVisible(true);
                 validationMsg.setManaged(true);
@@ -1503,8 +1501,6 @@ public class LoginView implements ViewInterface {
     
     private void switchToSignUp() {
         resetFaceIdPanelState();
-        isSignUpMode = true;
-        isForgotPasswordMode = false;
         loginContainer.setVisible(false);
         loginContainer.setManaged(false);
         signUpContainer.setVisible(true);
@@ -1515,8 +1511,6 @@ public class LoginView implements ViewInterface {
     }
     
     private void switchToLogin() {
-        isSignUpMode = false;
-        isForgotPasswordMode = false;
         signUpContainer.setVisible(false);
         signUpContainer.setManaged(false);
         forgotPasswordContainer.setVisible(false);
@@ -1529,8 +1523,6 @@ public class LoginView implements ViewInterface {
     
     private void switchToForgotPassword() {
         resetFaceIdPanelState();
-        isSignUpMode = false;
-        isForgotPasswordMode = true;
         loginContainer.setVisible(false);
         loginContainer.setManaged(false);
         signUpContainer.setVisible(false);
@@ -1620,7 +1612,7 @@ public class LoginView implements ViewInterface {
             errors.add("First name is required");
         } else if (firstName.length() < 2) {
             errors.add("First name must be at least 2 characters");
-        } else if (!firstName.matches("^[a-zA-ZÃ€-Ã¿\\s-]+$")) {
+        } else if (!firstName.matches("^[\\p{L}\\s-]+$")) {
             errors.add("First name can only contain letters, spaces and hyphens");
         }
         
@@ -1629,7 +1621,7 @@ public class LoginView implements ViewInterface {
             errors.add("Last name is required");
         } else if (lastName.length() < 2) {
             errors.add("Last name must be at least 2 characters");
-        } else if (!lastName.matches("^[a-zA-ZÃ€-Ã¿\\s-]+$")) {
+        } else if (!lastName.matches("^[\\p{L}\\s-]+$")) {
             errors.add("Last name can only contain letters, spaces and hyphens");
         }
         
@@ -1715,7 +1707,7 @@ public class LoginView implements ViewInterface {
             errorItem.setAlignment(Pos.TOP_LEFT);
             errorItem.setStyle("-fx-padding: 0;");
             
-            Text bullet = new Text("âœ•");
+            Text bullet = new Text("\u2716");
             bullet.setFont(Font.font(14));
             bullet.setFill(Color.web("#ff3b30"));
             
@@ -2445,7 +2437,7 @@ public class LoginView implements ViewInterface {
             
             if (finalPasskeyBtn != null) {
                 finalPasskeyBtn.setDisable(true);
-                finalPasskeyBtn.setText("ðŸ”„ Authenticating...");
+                 finalPasskeyBtn.setText("\ud83d\udd10 Authenticating...");
             }
 
             // Simulate WebAuthn authentication flow
@@ -2480,7 +2472,7 @@ public class LoginView implements ViewInterface {
                         // Re-enable button
                         if (finalPasskeyBtn != null) {
                             finalPasskeyBtn.setDisable(false);
-                            finalPasskeyBtn.setText("ðŸ” Passkey");
+                               finalPasskeyBtn.setText("\ud83d\udd10 Passkey");
                         }
                     });
                     
@@ -2489,7 +2481,7 @@ public class LoginView implements ViewInterface {
                         showErrorMessage("Passkey authentication failed: " + ex.getMessage());
                         if (finalPasskeyBtn != null) {
                             finalPasskeyBtn.setDisable(false);
-                            finalPasskeyBtn.setText("ðŸ” Passkey");
+                                finalPasskeyBtn.setText("\ud83d\udd10 Passkey");
                         }
                     });
                 }
@@ -2534,7 +2526,7 @@ public class LoginView implements ViewInterface {
             // Disable verify button during authentication
             if (faceIdVerifyButton != null) {
                 faceIdVerifyButton.setDisable(true);
-                faceIdVerifyButton.setText("ðŸ”„ Verifying...");
+                faceIdVerifyButton.setText("\ud83d\udd04 Verifying...");
             }
             if (faceIdStatusLabel != null) {
                 faceIdStatusLabel.setText("Starting camera...");
@@ -2685,7 +2677,7 @@ public class LoginView implements ViewInterface {
                         
                         // Update status
                         if (faceIdStatusLabel != null) {
-                            faceIdStatusLabel.setText("âœ“ Authentication successful!");
+                            faceIdStatusLabel.setText("\u2713 Authentication successful!");
                         }
                         
                         // Show success message

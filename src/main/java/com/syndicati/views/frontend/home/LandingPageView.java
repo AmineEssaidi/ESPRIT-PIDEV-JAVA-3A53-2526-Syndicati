@@ -9,16 +9,11 @@ import javafx.geometry.Pos;
 import com.syndicati.components.shared.DynamicHeader;
 import com.syndicati.components.shared.DynamicFooter;
 import com.syndicati.components.home.HomeContent;
-import com.syndicati.models.user.User;
  
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
-import com.syndicati.utils.session.SessionManager;
-import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.views.backend.dashboard.DashboardView;
-import javafx.application.Platform;
-import javafx.scene.control.Alert;
 
 /**
  * Landing Page View - Main container with dynamic island header and footer
@@ -34,7 +29,6 @@ public class LandingPageView implements ViewInterface {
     private HomeContent homeContent;
     private VBox contentRow; // Stored so we can swap it out for dashboard mode
     private String currentPageName = "home";
-    private OnboardingOverlayView onboardingOverlayView;
     
     
     
@@ -60,14 +54,12 @@ public class LandingPageView implements ViewInterface {
             applyThemeStyling();
             footer.refreshTheme();
         });
-
-        Platform.runLater(this::showOnboardingIfNeeded);
     }
     
     private void setupLayout() {
-        // Use an opaque base color that adapts to theme (dark: black, light: bright neutral).
+        // Set root to completely transparent - no background at all
         root.setStyle(rootBaseStyle());
-        root.setBackground(new Background(new BackgroundFill(Color.web(rootBackgroundColor()), CornerRadii.EMPTY, Insets.EMPTY)));
+        root.setBackground(null); // Force remove any background
 
         // Main dark rounded panel - use VBox for vertical stacking with proper rounded corners
         darkPanel = new VBox();
@@ -75,12 +67,14 @@ public class LandingPageView implements ViewInterface {
         darkPanel.setPadding(new Insets(0));
         darkPanel.setAlignment(Pos.TOP_LEFT);
         
-        // Keep dark mode solid black, and use an enhanced clean light panel in light mode.
+        // Use ThemeManager for dynamic background color based on theme
         ThemeManager themeManager = ThemeManager.getInstance();
-        String backgroundColor = panelBackgroundColor();
+        String backgroundColor = themeManager.isDarkMode()
+            ? "radial-gradient(focus-angle 28deg, focus-distance 24%, center 14% 8%, radius 135%, " + themeManager.toRgba(themeManager.getAccentHex(), 0.12) + " 0%, rgba(6,6,10,0.97) 62%, rgba(3,3,5,0.99) 100%), linear-gradient(to bottom right, rgba(18,18,26,0.92), rgba(10,10,14,0.94) 52%, rgba(4,4,6,0.97) 100%)"
+            : "linear-gradient(to bottom right, #f8fbff, #eef2f8 55%, #edf6ff 100%)";
         darkPanel.setStyle(
             "-fx-background-color: " + backgroundColor + ";" +
-            "-fx-border-color: " + panelBorderColor() + ";" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? themeManager.toRgba(themeManager.getAccentHex(), 0.26) : "rgba(15,23,42,0.14)") + ";" +
             "-fx-border-width: 1px;" +
             "-fx-background-radius: 0;" // Let the scene clip handle corners
         );
@@ -176,10 +170,6 @@ public class LandingPageView implements ViewInterface {
     }
     
     public void navigateToProfile() {
-        if (!AccessControlService.canAccessProfile()) {
-            showAccessDenied("Please sign in to view your profile.");
-            return;
-        }
         currentPageName = "profile";
         // Clear existing content and show profile page
         mainContent.getChildren().clear();
@@ -192,8 +182,6 @@ public class LandingPageView implements ViewInterface {
         mainContent.getChildren().clear();
         homeContent = new HomeContent();
         mainContent.getChildren().add(homeContent.getRoot());
-
-        Platform.runLater(this::showOnboardingIfNeeded);
     }
     
     public void navigateToDashboard() {
@@ -202,10 +190,6 @@ public class LandingPageView implements ViewInterface {
 
     /** Swap out the normal header+content with the full admin dashboard layout. */
     public void enterDashboardMode() {
-        if (!AccessControlService.canAccessAdminArea()) {
-            showAccessDenied("Access denied. You do not have permission to access the admin area.");
-            return;
-        }
         currentPageName = "dashboard";
         DashboardView dv = NavigationManager.getInstance().getDashboardView();
         dv.setExitCallback(this::exitDashboardMode);
@@ -233,14 +217,6 @@ public class LandingPageView implements ViewInterface {
 
     public void navigateToPage(String pageName) {
         String normalizedPage = pageName == null ? "home" : pageName.toLowerCase();
-        if ("profile".equals(normalizedPage) && !AccessControlService.canAccessProfile()) {
-            showAccessDenied("Please sign in to view your profile.");
-            return;
-        }
-        if ("dashboard".equals(normalizedPage) && !AccessControlService.canAccessAdminArea()) {
-            showAccessDenied("Access denied. You do not have permission to access the admin area.");
-            return;
-        }
         currentPageName = normalizedPage;
         if ("home".equalsIgnoreCase(pageName)) {
             navigateToHome();
@@ -253,26 +229,21 @@ public class LandingPageView implements ViewInterface {
         mainContent.getChildren().clear();
         mainContent.getChildren().add(NavigationManager.getInstance().getPage(pageName));
     }
-
-    private void showAccessDenied(String message) {
-        Alert alert = new Alert(Alert.AlertType.WARNING);
-        alert.setTitle("Access Denied");
-        alert.setHeaderText("Permission Required");
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
     
     private void applyThemeStyling() {
-        // Keep opaque theme-aware base/background across theme changes.
+        // Keep root completely transparent for rounded corners
         root.setStyle(rootBaseStyle());
-        root.setBackground(new Background(new BackgroundFill(Color.web(rootBackgroundColor()), CornerRadii.EMPTY, Insets.EMPTY)));
+        root.setBackground(null); // Force remove any background
         
         // Update darkPanel background color based on current theme
         if (darkPanel != null) {
-            String backgroundColor = panelBackgroundColor();
+            ThemeManager themeManager = ThemeManager.getInstance();
+            String backgroundColor = themeManager.isDarkMode()
+                ? "radial-gradient(focus-angle 28deg, focus-distance 24%, center 14% 8%, radius 135%, " + themeManager.toRgba(themeManager.getAccentHex(), 0.12) + " 0%, rgba(6,6,10,0.97) 62%, rgba(3,3,5,0.99) 100%), linear-gradient(to bottom right, rgba(18,18,26,0.92), rgba(10,10,14,0.94) 52%, rgba(4,4,6,0.97) 100%)"
+                : "linear-gradient(to bottom right, #f8fbff, #eef2f8 55%, #edf6ff 100%)";
             darkPanel.setStyle(
                 "-fx-background-color: " + backgroundColor + ";" +
-                "-fx-border-color: " + panelBorderColor() + ";" +
+                "-fx-border-color: " + (themeManager.isDarkMode() ? themeManager.toRgba(themeManager.getAccentHex(), 0.26) : "rgba(15,23,42,0.14)") + ";" +
                 "-fx-border-width: 1px;" +
                 "-fx-background-radius: 0;"
             );
@@ -281,25 +252,7 @@ public class LandingPageView implements ViewInterface {
 
     private String rootBaseStyle() {
         ThemeManager tm = ThemeManager.getInstance();
-        String base = rootBackgroundColor();
-        return "-fx-background-color: " + base + "; -fx-background: " + base + ";" + tm.getScrollbarVariableStyle();
-    }
-
-    private String rootBackgroundColor() {
-        return ThemeManager.getInstance().isDarkMode() ? "#000000" : "#f4f7fb";
-    }
-
-    private String panelBackgroundColor() {
-        ThemeManager tm = ThemeManager.getInstance();
-        if (tm.isDarkMode()) {
-            return "#000000";
-        }
-        return "linear-gradient(to bottom right, #fbfdff 0%, #f3f7fc 52%, #eef4fb 100%)";
-    }
-
-    private String panelBorderColor() {
-        ThemeManager tm = ThemeManager.getInstance();
-        return tm.isDarkMode() ? tm.toRgba(tm.getAccentHex(), 0.26) : "rgba(15,23,42,0.12)";
+        return "-fx-background-color: transparent; -fx-background: transparent;" + tm.getScrollbarVariableStyle();
     }
 
     private void refreshHomeContentIfVisible() {
@@ -334,34 +287,6 @@ public class LandingPageView implements ViewInterface {
 
         if (mainContent != null && darkPanel.getChildren().contains(contentRow)) {
             mainContent.getChildren().setAll(navigation.getPage(currentPageName));
-        }
-    }
-
-    private void showOnboardingIfNeeded() {
-        User currentUser = SessionManager.getInstance().getCurrentUser();
-        if (currentUser == null || currentUser.getIdUser() == null) {
-            return;
-        }
-
-        if (onboardingOverlayView != null && onboardingOverlayView.shouldShow()) {
-            if (!root.getChildren().contains(onboardingOverlayView.getRoot())) {
-                root.getChildren().add(onboardingOverlayView.getRoot());
-            }
-            onboardingOverlayView.getRoot().toFront();
-            return;
-        }
-
-        onboardingOverlayView = new OnboardingOverlayView(currentUser, () -> {
-            if (onboardingOverlayView != null && onboardingOverlayView.getRoot() != null) {
-                root.getChildren().remove(onboardingOverlayView.getRoot());
-            }
-        });
-
-        if (onboardingOverlayView.shouldShow()) {
-            if (!root.getChildren().contains(onboardingOverlayView.getRoot())) {
-                root.getChildren().add(onboardingOverlayView.getRoot());
-            }
-            onboardingOverlayView.getRoot().toFront();
         }
     }
     

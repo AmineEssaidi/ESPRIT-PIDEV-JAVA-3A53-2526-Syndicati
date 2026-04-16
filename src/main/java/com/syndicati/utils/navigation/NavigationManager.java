@@ -178,6 +178,12 @@ public class NavigationManager {
         alert.setTitle("Access Denied");
         alert.setHeaderText("Permission Required");
         alert.setContentText(message);
+        if (landingPageView != null) {
+            Pane root = landingPageView.getRoot();
+            if (root != null && root.getScene() != null && root.getScene().getWindow() != null) {
+                alert.initOwner(root.getScene().getWindow());
+            }
+        }
         alert.showAndWait();
     }
 

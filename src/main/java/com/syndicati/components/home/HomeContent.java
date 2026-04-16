@@ -204,7 +204,7 @@ public class HomeContent {
             "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.10) + ";" +
             "-fx-background-radius: 20px;"
         );
-        // Decorative diagonal highlight Ã¢â‚¬â€ sized as a Region so it never overflows its column
+        // Decorative diagonal highlight sized as a Region so it never overflows its column
         Region light = new Region();
         light.setMaxWidth(Double.MAX_VALUE);
         light.setMaxHeight(100);

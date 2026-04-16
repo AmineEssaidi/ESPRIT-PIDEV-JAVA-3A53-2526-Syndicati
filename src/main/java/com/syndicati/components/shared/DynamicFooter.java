@@ -80,10 +80,10 @@ public class DynamicFooter {
         
         // Create footer links with improved design
         centerSection.getChildren().addAll(
-            createFooterLink("ðŸ“˜", "Documentation"),
-            createFooterLink("ðŸ›Ÿ", "Support"),
-            createFooterLink("ðŸ™", "GitHub"),
-            createFooterLink("ðŸ“„", "License")
+            createFooterLink("\ud83d\udcd8", "Documentation"),
+            createFooterLink("\ud83c\udfa7", "Support"),
+            createFooterLink("\ud83d\udc19", "GitHub"),
+            createFooterLink("\ud83d\udcc4", "License")
         );
         
         // Right side - Made with love (enhanced)

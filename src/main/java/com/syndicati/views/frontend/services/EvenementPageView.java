@@ -8,6 +8,7 @@ import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.layout.ColumnConstraints;
@@ -233,11 +234,19 @@ public class EvenementPageView implements ViewInterface {
 
         HBox head = new HBox(8);
         head.setAlignment(Pos.CENTER_LEFT);
+        Button prevBtn = iconButton("<");
+        prevBtn.setCursor(javafx.scene.Cursor.HAND);
+        prevBtn.setOnAction(e -> System.out.println("Previous month"));
+        
+        Button nextBtn = iconButton(">");
+        nextBtn.setCursor(javafx.scene.Cursor.HAND);
+        nextBtn.setOnAction(e -> System.out.println("Next month"));
+        
         head.getChildren().addAll(
             text("March 2026", 18, true, tm.getAccentHex()),
             spacer(),
-            iconButton("<"),
-            iconButton(">")
+            prevBtn,
+            nextBtn
         );
 
         GridPane grid = new GridPane();
@@ -273,12 +282,14 @@ public class EvenementPageView implements ViewInterface {
                     "-fx-border-width: 1px;" +
                     "-fx-border-radius: 10px;"
                 );
+                cell.setCursor(javafx.scene.Cursor.HAND);
 
                 if (row == 1 && col < startOffset) {
                     cell.getChildren().add(text("", 12, false, "rgba(255,255,255,0.2)"));
                 } else if (day <= 31) {
                     boolean hasEvent = day == 22 || day == 28 || day == 2 || day == 18;
                     boolean active = day == 22;
+                    int dayNum = day;
 
                     Text d = text(String.valueOf(day), 12, true, tm.getTextColor());
                     cell.getChildren().add(d);
@@ -307,6 +318,31 @@ public class EvenementPageView implements ViewInterface {
                             "-fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.45) + ", 14, 0.3, 0, 3);"
                         );
                     }
+
+                    cell.setOnMouseClicked(e -> System.out.println("Clicked day: " + dayNum));
+                    cell.setOnMouseEntered(e -> {
+                        if (!active && !hasEvent) {
+                            cell.setStyle(
+                                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
+                                "-fx-background-radius: 10px;" +
+                                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
+                                "-fx-border-width: 1px;" +
+                                "-fx-border-radius: 10px;"
+                            );
+                        }
+                    });
+                    cell.setOnMouseExited(e -> {
+                        if (!active && !hasEvent) {
+                            cell.setStyle(
+                                "-fx-background-color: " + surfaceSoft() + ";" +
+                                "-fx-background-radius: 10px;" +
+                                "-fx-border-color: transparent;" +
+                                "-fx-border-width: 1px;" +
+                                "-fx-border-radius: 10px;"
+                            );
+                        }
+                    });
+                    
                     day++;
                 }
 
@@ -549,6 +585,7 @@ public class EvenementPageView implements ViewInterface {
     private Button buildHostTrigger() {
         Button btn = new Button("Host an Event");
         btn.setMaxWidth(Double.MAX_VALUE);
+        btn.setCursor(javafx.scene.Cursor.HAND);
         btn.setStyle(
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
             "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.28) + ";" +
@@ -565,6 +602,7 @@ public class EvenementPageView implements ViewInterface {
 
     private Button gradientButton(String label, int fontSize, Insets padding) {
         Button b = new Button(label);
+        b.setCursor(javafx.scene.Cursor.HAND);
         b.setStyle(
             "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
             "-fx-text-fill: white;" +
@@ -578,6 +616,7 @@ public class EvenementPageView implements ViewInterface {
 
     private Button iconButton(String label) {
         Button b = new Button(label);
+        b.setCursor(javafx.scene.Cursor.HAND);
         b.setStyle(
             "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-border-color: " + borderSoft() + ";" +
@@ -592,6 +631,7 @@ public class EvenementPageView implements ViewInterface {
 
     private Button paginationBtn(String label, boolean active) {
         Button b = new Button(label);
+        b.setCursor(javafx.scene.Cursor.HAND);
         if (active) {
             b.setStyle(
                 "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +

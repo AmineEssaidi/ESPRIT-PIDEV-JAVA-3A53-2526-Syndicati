@@ -82,12 +82,12 @@ public class RealCameraService {
             boolean started = insightFaceService.initialize();
             
             if (started) {
-                System.out.println("RealCameraService: âœ“ InsightFace service started successfully.");
+                System.out.println("RealCameraService: [OK] InsightFace service started successfully.");
                 landmarkDetectionAvailable = true;
                 insightFaceReady = true;
                 useInsightFace = true;  // Enable InsightFace usage now that it's running
             } else {
-                System.err.println("RealCameraService: âœ— InsightFace service failed to start. Trying fallback...");
+                System.err.println("RealCameraService: [X] InsightFace service failed to start. Trying fallback...");
                 insightFaceService = null; // Clear failed service
                 
                 // Fallback to basic Haar detector
@@ -151,10 +151,10 @@ public class RealCameraService {
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 faceDetector = new CascadeClassifier(tempPath);
                 if (faceDetector != null && !faceDetector.empty()) {
-                    System.out.println("RealCameraService: âœ“ Face detector loaded successfully");
+                    System.out.println("RealCameraService: [OK] Face detector loaded successfully");
                     landmarkDetectionAvailable = true;
                 } else {
-                    System.err.println("RealCameraService: âœ— Face detector loaded but empty (OpenCV issue)");
+                    System.err.println("RealCameraService: [X] Face detector loaded but empty (OpenCV issue)");
                 }
             } else {
                 System.err.println("RealCameraService: Face cascade XML not found in resources");
@@ -169,19 +169,19 @@ public class RealCameraService {
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 eyeDetector = new CascadeClassifier(tempPath);
                 if (eyeDetector != null && !eyeDetector.empty()) {
-                    System.out.println("RealCameraService: âœ“ Eye detector loaded successfully");
+                    System.out.println("RealCameraService: [OK] Eye detector loaded successfully");
                     landmarkDetectionAvailable = true;
                 } else {
-                    System.err.println("RealCameraService: âœ— Eye detector loaded but empty (OpenCV issue)");
+                    System.err.println("RealCameraService: [X] Eye detector loaded but empty (OpenCV issue)");
                 }
             } else {
                 System.err.println("RealCameraService: Eye cascade XML not found in resources");
             }
             
             if (landmarkDetectionAvailable) {
-                System.out.println("RealCameraService: âœ“ HAAR Cascade facial landmark detection ready");
+                System.out.println("RealCameraService: [OK] HAAR Cascade facial landmark detection ready");
             } else {
-                System.out.println("RealCameraService: âœ— HAAR Cascade not available - using skin color detection");
+                System.out.println("RealCameraService: [X] HAAR Cascade not available - using skin color detection");
             }
         } catch (UnsatisfiedLinkError ex) {
             // OpenCV natives are optional here: when unavailable, we intentionally fall back
@@ -189,10 +189,10 @@ public class RealCameraService {
             System.out.println("RealCameraService: OpenCV natives unavailable; using skin-color fallback.");
             landmarkDetectionAvailable = false;
         } catch (NoClassDefFoundError ex) {
-            System.err.println("RealCameraService: âœ— OpenCV classes not available: " + ex.getMessage());
+            System.err.println("RealCameraService: [X] OpenCV classes not available: " + ex.getMessage());
             landmarkDetectionAvailable = false;
         } catch (Exception ex) {
-            System.err.println("RealCameraService: âœ— Error initializing landmark detection: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
+            System.err.println("RealCameraService: [X] Error initializing landmark detection: " + ex.getClass().getSimpleName() + " - " + ex.getMessage());
             landmarkDetectionAvailable = false;
         }
     }
@@ -367,7 +367,7 @@ public class RealCameraService {
                 try {
                     Image insightFaceImage = detectWithInsightFace();
                     if (insightFaceImage != null) {
-                        System.out.println("RealCameraService: âœ“ InsightFace detection succeeded");
+                        System.out.println("RealCameraService: [OK] InsightFace detection succeeded");
                         return cacheRenderedImage(insightFaceImage);
                     }
                 } catch (Exception ex) {
@@ -380,7 +380,7 @@ public class RealCameraService {
             try {
                 Image detectedImage = detectBasic();
                 if (detectedImage != null) {
-                    System.out.println("RealCameraService: âœ“ Basic detection succeeded - landmarks should be visible");
+                    System.out.println("RealCameraService: [OK] Basic detection succeeded - landmarks should be visible");
                     return cacheRenderedImage(detectedImage);
                 }
             } catch (Exception ex) {
@@ -489,13 +489,13 @@ public class RealCameraService {
         
         if (spoofing.isSpoof) {
             statusColor = new java.awt.Color(255, 0, 0);
-            statusText = String.format("âš  SPOOF DETECTED (%.0f%%)", spoofing.spoofingScore * 100);
+            statusText = String.format("[WARN] SPOOF DETECTED (%.0f%%)", spoofing.spoofingScore * 100);
         } else if (spoofing.spoofingScore > 0.3) {
             statusColor = new java.awt.Color(255, 200, 0);
             statusText = String.format("? SUSPICIOUS (%.0f%%)", spoofing.spoofingScore * 100);
         } else {
             statusColor = new java.awt.Color(0, 200, 0);
-            statusText = "âœ“ REAL FACE";
+            statusText = "[OK] REAL FACE";
         }
         
         g2d.setColor(statusColor);
@@ -1577,7 +1577,7 @@ public class RealCameraService {
         // Simulate face detection with increasing success rate
         double rand = Math.random();
         if (rand > 0.3) {
-            return new FaceQuality(true, "Face detected âœ“");
+            return new FaceQuality(true, "Face detected [OK]");
         }
         
         if (rand > 0.15) {

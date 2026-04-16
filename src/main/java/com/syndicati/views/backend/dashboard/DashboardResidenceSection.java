@@ -3,24 +3,21 @@ package com.syndicati.views.backend.dashboard;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
+@SuppressWarnings("SpellCheckingInspection")
 final class DashboardResidenceSection {
 
     private DashboardResidenceSection() {
     }
 
     static VBox build(DashboardView view) {
-        VBox s = view.moduleShell("Residence", "\uD83C\uDFE2");
-        VBox body = new VBox(16);
-        HBox sub = view.moduleModeSwitcher(new String[]{"Residences", "Appartements", "Maintenance"}, "Residences", key -> {
-            body.getChildren().setAll(
-                "Appartements".equals(key) ? apartmentsPane(view) :
-                "Maintenance".equals(key) ? maintenancePane(view) :
-                residencesPane(view)
-            );
-        });
-        body.getChildren().add(residencesPane(view));
-        s.getChildren().addAll(sub, body);
-        return s;
+        return view.moduleModeView(
+            "Residence",
+            "\uD83C\uDFE2",
+            new String[]{"Residences", "Appartements", "Maintenance"},
+            key -> "Appartements".equals(key) ? apartmentsPane(view) :
+                   "Maintenance".equals(key) ? maintenancePane(view) :
+                   residencesPane(view)
+        );
     }
 
     private static VBox residencesPane(DashboardView view) {
@@ -31,7 +28,7 @@ final class DashboardResidenceSection {
                 {"Residence Jasmin", "Bardo", "120", "Ahmed B.", "Active"},
                 {"Residence Mimosa", "Lac 2", "86", "Leila M.", "Active"},
                 {"Residence Olive", "Menzah", "64", "Karim S.", "Maintenance"}
-            }, true, true
+            }, true
         ));
         return wrap;
     }
@@ -45,7 +42,7 @@ final class DashboardResidenceSection {
                 {"A-202", "Jasmin", "Leila M.", "2", "Occupied"},
                 {"B-105", "Mimosa", "-", "1", "Available"},
                 {"C-401", "Olive", "-", "4", "Available"}
-            }, true, true
+            }, true
         ));
         return wrap;
     }
@@ -58,7 +55,7 @@ final class DashboardResidenceSection {
                 {"MNT-301", "Jasmin", "Water Pump", "High", "In Progress"},
                 {"MNT-298", "Mimosa", "Garage Lighting", "Medium", "Open"},
                 {"MNT-296", "Olive", "Lift Noise", "Low", "Scheduled"}
-            }, false, false
+            }, false
         ));
         return wrap;
     }

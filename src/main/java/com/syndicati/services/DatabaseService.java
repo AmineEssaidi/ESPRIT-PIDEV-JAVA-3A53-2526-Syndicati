@@ -71,12 +71,12 @@ public class DatabaseService {
             
             try (Connection connection = DriverManager.getConnection(dbUrl, props)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("Ã¢Å“â€¦ Database connection successful!");
+                    System.out.println("[OK] Database connection successful!");
                     return true;
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Ã¢ÂÅ’ Connection with properties failed: " + e.getMessage());
+            System.out.println("[ERROR] Connection with properties failed: " + e.getMessage());
             System.out.println("   Error Code: " + e.getErrorCode());
             System.out.println("   SQL State: " + e.getSQLState());
         }
@@ -88,12 +88,12 @@ public class DatabaseService {
         try {
             try (Connection connection = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("Ã¢Å“â€¦ Simple database connection successful!");
+                    System.out.println("[OK] Simple database connection successful!");
                     return true;
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Ã¢ÂÅ’ Simple connection failed: " + e.getMessage());
+            System.out.println("[ERROR] Simple connection failed: " + e.getMessage());
         }
         return false;
     }
@@ -104,13 +104,13 @@ public class DatabaseService {
             String serverUrl = "jdbc:mysql://" + extractHostPort(dbUrl) + "/";
             try (Connection connection = DriverManager.getConnection(serverUrl, dbUser, dbPassword)) {
                 if (connection != null && !connection.isClosed()) {
-                    System.out.println("Ã¢Å“â€¦ MySQL server connection successful!");
+                    System.out.println("[OK] MySQL server connection successful!");
                     System.out.println("   Server is running, but configured database might not exist or be accessible");
                     return false; // Still return false since we need the specific database
                 }
             }
         } catch (SQLException e) {
-            System.out.println("Ã¢ÂÅ’ MySQL server connection failed: " + e.getMessage());
+            System.out.println("[ERROR] MySQL server connection failed: " + e.getMessage());
             System.out.println("   This suggests MySQL server is not running or not accessible");
         }
         return false;

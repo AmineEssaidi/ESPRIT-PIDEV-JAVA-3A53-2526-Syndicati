@@ -196,7 +196,7 @@ public class ResidencePageView implements ViewInterface {
         );
         pages.setAlignment(Pos.CENTER);
 
-        Text info = text("Showing 6 of 6 residences â€¢ Page 1 of 2", 13, false, textMuted());
+        Text info = text("Showing 6 of 6 residences - Page 1 of 2", 13, false, textMuted());
         paginationBox.getChildren().addAll(pages, info);
         return paginationBox;
     }
@@ -468,7 +468,7 @@ public class ResidencePageView implements ViewInterface {
 
         card.getChildren().addAll(
             image,
-            text(apt.type + " â€¢ " + apt.rent + " TND", 15, true, "#ffffff"),
+            text(apt.type + " - " + apt.rent + " TND", 15, true, "#ffffff"),
             view
         );
         return card;
