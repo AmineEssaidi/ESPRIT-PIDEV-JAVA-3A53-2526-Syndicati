@@ -20,8 +20,10 @@ import javafx.scene.Node;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.*;
 import javafx.stage.Popup;
+import javafx.stage.FileChooser;
 import javafx.stage.Window;
 import javafx.util.Duration;
 import com.syndicati.interfaces.ViewInterface;
@@ -34,12 +36,15 @@ import java.time.format.DateTimeFormatter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Consumer;
 import javafx.scene.image.Image;
 import javafx.scene.paint.ImagePattern;
@@ -53,6 +58,7 @@ public class DashboardView implements ViewInterface {
 
     private final HBox root;
     private String activeSection = "general";
+    private String activeSyndicatTab = "Reclamations";
     private final Map<String, Button> sectionButtons = new HashMap<>();
     private VBox contentArea;
     private Runnable exitCallback;
@@ -1107,10 +1113,11 @@ public class DashboardView implements ViewInterface {
     private VBox buildSyndicatSection() {
         VBox s = moduleShell("Syndicat", "\uD83C\uDFDB\uFE0F");
         VBox body = new VBox(16);
-        HBox sub = moduleModeSwitcher(new String[]{"Reclamations", "Responses"}, "Reclamations", key -> {
+        HBox sub = moduleModeSwitcher(new String[]{"Reclamations", "Responses"}, activeSyndicatTab, key -> {
+            activeSyndicatTab = key;
             body.getChildren().setAll("Responses".equals(key) ? syndicatResponsesPane() : syndicatReclamationsPane());
         });
-        body.getChildren().add(syndicatReclamationsPane());
+        body.getChildren().add("Responses".equals(activeSyndicatTab) ? syndicatResponsesPane() : syndicatReclamationsPane());
         s.getChildren().addAll(sub, body);
         return s;
     }
@@ -1331,9 +1338,9 @@ public class DashboardView implements ViewInterface {
         
         String[][] rows;
         if (reclamations.isEmpty()) {
-            rows = new String[][]{{"-", "-", "-", "-", "-", "-"}};
+            rows = new String[][]{{"-", "-", "-", "-", "-", "-", "-"}};
         } else {
-            rows = new String[reclamations.size()][6];
+            rows = new String[reclamations.size()][7];
             for (int i = 0; i < reclamations.size(); i++) {
                 Reclamation r = reclamations.get(i);
                 
@@ -1354,6 +1361,7 @@ public class DashboardView implements ViewInterface {
                 rows[i][3] = formatDateTime(r.getCreatedAt());
                 rows[i][4] = safe(r.getDescreclamation());
                 rows[i][5] = String.valueOf(r.getIdreclamations());
+                rows[i][6] = safe(r.getImagereclamation());
             }
         }
         
@@ -1373,9 +1381,9 @@ public class DashboardView implements ViewInterface {
         
         String[][] rows;
         if (reponses.isEmpty()) {
-            rows = new String[][]{{"-", "-", "-", "-", "-", "-", "-"}};
+            rows = new String[][]{{"-", "-", "-", "-", "-", "-", "-", "-"}};
         } else {
-            rows = new String[reponses.size()][7];
+            rows = new String[reponses.size()][8];
             for (int i = 0; i < reponses.size(); i++) {
                 com.syndicati.models.entities.Reponse r = reponses.get(i);
                 
@@ -1403,8 +1411,9 @@ public class DashboardView implements ViewInterface {
                 rows[i][2] = safe(r.getTitrereponse());
                 rows[i][3] = safe(r.getMessagereponse());
                 rows[i][4] = formatDateTime(r.getCreatedAt());
-                rows[i][5] = "Delivered"; 
-                rows[i][6] = String.valueOf(r.getIdreponses());
+                rows[i][5] = "Delivered";
+                rows[i][6] = safe(r.getImagereponse());
+                rows[i][7] = String.valueOf(r.getIdreponses());
             }
         }
         
@@ -1650,13 +1659,27 @@ public class DashboardView implements ViewInterface {
         for (int r = 0; r < rows.length; r++) {
             String bg = (r % 2 == 0) ? "transparent" : "rgba(255,255,255,0.01)";
             for (int c = 0; c < cols.length && c < rows[r].length; c++) {
-                Text tx = t(rows[r][c], lightFont(), FontWeight.NORMAL, 14);
-                tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
-                HBox cb = new HBox(tx);
+                String cellValue = rows[r][c];
+                // Keep full row data for "View details", but shorten long message previews in Responses table.
+                if ("Response".equalsIgnoreCase(entityLabel) && c == 3 && cellValue != null && cellValue.length() > 30) {
+                    cellValue = cellValue.substring(0, 30) + "...";
+                }
+                HBox cb = new HBox();
                 cb.setPadding(new Insets(10,12,10,12));
                 cb.setStyle("-fx-background-color:" + bg + ";");
                 cb.setOnMouseEntered(e -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
                 cb.setOnMouseExited(e -> cb.setStyle("-fx-background-color:" + bg + ";"));
+
+                boolean responseImageCol = "Response".equalsIgnoreCase(entityLabel)
+                    && c < cols.length
+                    && "Image".equalsIgnoreCase(cols[c]);
+                if (responseImageCol) {
+                    cb.getChildren().add(responseImageCell(cellValue));
+                } else {
+                    Text tx = t(cellValue, lightFont(), FontWeight.NORMAL, 14);
+                    tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
+                    cb.getChildren().add(tx);
+                }
                 tbl.add(cb, c, r + 1);
             }
 
@@ -1773,7 +1796,7 @@ public class DashboardView implements ViewInterface {
                 s.addTitle = "Create Response";
                 s.addSubtitle = "Reply to the chosen reclamation";
                 s.saveAddLabel = "Send Response";
-                s.cancelLabel = "Back to Reclamation";
+                s.cancelLabel = "Back to Responses";
                 break;
             case "Residences":
                 s.viewTitle = "Residence Details";
@@ -1885,7 +1908,7 @@ public class DashboardView implements ViewInterface {
                 Button del = dangerAction(spec.viewDeleteLabel);
                 del.setOnAction(e -> {
                     if (handleDeleteAction(entityLabel, rowData)) {
-                        switchSection(activeSection);
+                        refreshAfterCrud(entityLabel);
                     } else {
                         switchToTableFace(container);
                     }
@@ -1895,9 +1918,9 @@ public class DashboardView implements ViewInterface {
             if ("Reclamation".equals(entityLabel)) {
                 Button addResp = pillAction("Add Response", true);
                 addResp.setOnAction(e -> {
-                    String[] responseCols = new String[]{"Title", "Message"};
+                    String[] responseCols = new String[]{"Title", "Message", "Image"};
                     // Pass reclamation ID in rowData[2] implicitly
-                    String[] responseData = new String[]{"", "", rowData[5]};
+                    String[] responseData = new String[]{"", "", "", rowData[5]};
                     switchToModalFace(container, crudSpec("Responses", "Response"), "Response", "add", responseCols, responseData);
                 });
                 actions.getChildren().add(addResp);
@@ -1910,7 +1933,7 @@ public class DashboardView implements ViewInterface {
             Button save = pillAction(saveLabel, true);
             save.setOnAction(e -> {
                 if (handleSaveAction(entityLabel, mode, cols, rowData, fields)) {
-                    switchSection(activeSection);
+                    refreshAfterCrud(entityLabel);
                 } else {
                     switchToTableFace(container);
                 }
@@ -1953,7 +1976,8 @@ public class DashboardView implements ViewInterface {
         if ("add".equals(mode)) {
             String title = safe(values.get("Title"));
             String message = safe(values.get("Message"));
-            String recIdStr = (originalRowData != null && originalRowData.length > 2) ? originalRowData[2] : "-";
+            String image = safe(values.get("Image"));
+            String recIdStr = (originalRowData != null && originalRowData.length > 3) ? originalRowData[3] : "-";
             
             if ("-".equals(recIdStr) || "-".equals(message)) return false;
             
@@ -1962,6 +1986,7 @@ public class DashboardView implements ViewInterface {
                 com.syndicati.models.entities.Reponse r = new com.syndicati.models.entities.Reponse();
                 r.setTitrereponse("-".equals(title) ? "" : title);
                 r.setMessagereponse(message);
+                r.setImagereponse("-".equals(image) ? null : image);
                 r.setReclamationId(recId);
                 r.setCreatedAt(java.time.LocalDateTime.now());
                 r.setUpdatedAt(java.time.LocalDateTime.now());
@@ -1970,6 +1995,27 @@ public class DashboardView implements ViewInterface {
                 r.setIdUser(currentUser != null && currentUser.getIdUser() != null ? currentUser.getIdUser() : 6);
                 
                 return com.syndicati.services.ReponseService.getInstance().createReponse(r);
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        if ("edit".equals(mode)) {
+            if (originalRowData == null || originalRowData.length < 8) {
+                return false;
+            }
+            String title = safe(values.get("Title"));
+            String message = safe(values.get("Message"));
+            String image = values.containsKey("Image")
+                ? safe(values.get("Image"))
+                : safe(originalRowData[6]);
+            if ("-".equals(message)) {
+                return false;
+            }
+            try {
+                int responseId = Integer.parseInt(originalRowData[7]);
+                String normalizedTitle = "-".equals(title) ? "" : title;
+                String normalizedImage = "-".equals(image) ? null : image;
+                return com.syndicati.services.ReponseService.getInstance().updateReponse(responseId, normalizedTitle, message, normalizedImage);
             } catch (NumberFormatException e) {
                 return false;
             }
@@ -2094,6 +2140,8 @@ public class DashboardView implements ViewInterface {
             return handleProfileDelete(rowData);
         } else if ("Reclamation".equalsIgnoreCase(entityLabel)) {
             return handleReclamationDelete(rowData);
+        } else if ("Response".equalsIgnoreCase(entityLabel)) {
+            return handleResponseDelete(rowData);
         }
         return false;
     }
@@ -2138,6 +2186,29 @@ public class DashboardView implements ViewInterface {
         }
     }
 
+    private boolean handleResponseDelete(String[] rowData) {
+        if (rowData == null || rowData.length < 8) {
+            return false;
+        }
+
+        String idStr = rowData[7];
+        try {
+            int id = Integer.parseInt(idStr);
+            return com.syndicati.services.ReponseService.getInstance().deleteReponse(id);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private void refreshAfterCrud(String entityLabel) {
+        if ("Response".equalsIgnoreCase(entityLabel)) {
+            activeSyndicatTab = "Responses";
+            switchSection("syndicat");
+            return;
+        }
+        switchSection(activeSection);
+    }
+
     private Map<String, String> readEditableFieldValues(VBox fields) {
         Map<String, String> values = new LinkedHashMap<>();
         for (Node node : fields.getChildren()) {
@@ -2154,6 +2225,12 @@ public class DashboardView implements ViewInterface {
                 String label = ((Text) labelNode).getText();
                 String value = ((TextField) inputNode).getText();
                 values.put(label, value);
+            } else if (labelNode instanceof Text && inputNode instanceof HBox) {
+                TextField tf = findTextField((HBox) inputNode);
+                if (tf != null) {
+                    String label = ((Text) labelNode).getText();
+                    values.put(label, tf.getText());
+                }
             }
         }
         return values;
@@ -2194,14 +2271,29 @@ public class DashboardView implements ViewInterface {
 
         for (int i = 0; i < cols.length; i++) {
             String val = (rowData != null && i < rowData.length) ? rowData[i] : "";
-            fields.getChildren().add(fieldRow(cols[i], val, editable));
+            boolean fieldEditable = editable;
+            if ("Response".equalsIgnoreCase(entityLabel) && "edit".equals(mode)) {
+                String colName = cols[i];
+                fieldEditable = "Title".equalsIgnoreCase(colName) || "Message".equalsIgnoreCase(colName);
+            }
+            fields.getChildren().add(fieldRow(cols[i], val, fieldEditable));
+        }
+        if ("Response".equalsIgnoreCase(entityLabel) && "view".equals(mode) && rowData != null && rowData.length > 6) {
+            fields.getChildren().add(fieldRow("Image", rowData[6], false));
         }
         
         if ("Reclamation".equalsIgnoreCase(entityLabel) && rowData != null && rowData.length >= 5) {
             fields.getChildren().add(fieldRow("Description", rowData[4], editable));
+            if ("view".equals(mode) && rowData.length > 6) {
+                fields.getChildren().add(fieldRow("Image", rowData[6], false));
+            }
+            if ("view".equals(mode) && rowData.length > 5) {
+                fields.getChildren().add(reclamationResponsesPanel(rowData[5]));
+            }
         }
 
-        if ("edit".equals(mode) || "add".equals(mode)) {
+        boolean hideMetaForResponseEdit = "Response".equalsIgnoreCase(entityLabel) && "edit".equals(mode);
+        if (("edit".equals(mode) || "add".equals(mode)) && !hideMetaForResponseEdit) {
             fields.getChildren().add(sectionTitle("Flags & Metadata"));
             fields.getChildren().add(infoChipRow(
                 "Active", "Verified", "Synced", "Tracked"
@@ -2279,6 +2371,31 @@ public class DashboardView implements ViewInterface {
         lbl.setFill(textMutedColor());
 
         if (editable) {
+            if ("Image".equalsIgnoreCase(label)) {
+                TextField imagePathField = new TextField(value);
+                imagePathField.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
+                imagePathField.setPrefWidth(300);
+                imagePathField.setStyle(
+                    "-fx-background-color:rgba(255,255,255,0.05);" +
+                    "-fx-border-color:rgba(255,255,255,0.12);" +
+                    "-fx-border-width:1;" +
+                    "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
+                    "-fx-background-radius:10px;" +
+                    "-fx-border-radius:10px;" +
+                    "-fx-padding:8 10 8 10;"
+                );
+                Button uploadBtn = pillAction("Upload", true);
+                uploadBtn.setOnAction(e -> {
+                    String uploadedPath = pickAndStoreResponseImage();
+                    if (uploadedPath != null) {
+                        imagePathField.setText(uploadedPath);
+                    }
+                });
+                HBox inputRow = new HBox(8, imagePathField, uploadBtn);
+                inputRow.setAlignment(Pos.CENTER_LEFT);
+                row.getChildren().addAll(lbl, inputRow);
+                return row;
+            }
             TextField input = new TextField(value);
             input.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
             input.setStyle(
@@ -2292,6 +2409,19 @@ public class DashboardView implements ViewInterface {
             );
             row.getChildren().addAll(lbl, input);
         } else {
+            if ("Image".equalsIgnoreCase(label)) {
+                VBox box = new VBox(responseImageCell(value));
+                box.setPadding(new Insets(8, 10, 8, 10));
+                box.setStyle(
+                    "-fx-background-color:rgba(255,255,255,0.03);" +
+                    "-fx-border-color:rgba(255,255,255,0.08);" +
+                    "-fx-border-width:1;" +
+                    "-fx-background-radius:10px;" +
+                    "-fx-border-radius:10px;"
+                );
+                row.getChildren().addAll(lbl, box);
+                return row;
+            }
             Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
             val.setFill(textSecondaryColor());
             VBox box = new VBox(val);
@@ -2306,6 +2436,127 @@ public class DashboardView implements ViewInterface {
             row.getChildren().addAll(lbl, box);
         }
         return row;
+    }
+
+    private TextField findTextField(HBox box) {
+        for (Node n : box.getChildren()) {
+            if (n instanceof TextField) {
+                return (TextField) n;
+            }
+        }
+        return null;
+    }
+
+    private String pickAndStoreResponseImage() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Select response image");
+        chooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.bmp"),
+            new FileChooser.ExtensionFilter("All Files", "*.*")
+        );
+        Window owner = root != null && root.getScene() != null ? root.getScene().getWindow() : null;
+        File selected = chooser.showOpenDialog(owner);
+        if (selected == null) {
+            return null;
+        }
+        try {
+            String original = selected.getName();
+            int dot = original.lastIndexOf('.');
+            String ext = dot >= 0 ? original.substring(dot) : ".png";
+            Path targetDir = Paths.get("uploads", "reponse_images");
+            if (!Files.exists(targetDir)) {
+                Files.createDirectories(targetDir);
+            }
+            String filename = UUID.randomUUID() + ext;
+            Path target = targetDir.resolve(filename);
+            Files.copy(selected.toPath(), target, StandardCopyOption.REPLACE_EXISTING);
+            return "uploads/reponse_images/" + filename;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Node responseImageCell(String imagePath) {
+        String normalized = safe(imagePath);
+        if ("-".equals(normalized)) {
+            Text tx = t("-", lightFont(), FontWeight.NORMAL, 14);
+            tx.setFill(textMutedColor());
+            return tx;
+        }
+        Image image = ImageLoaderUtil.loadImage(normalized, true);
+        if (image == null) {
+            String normalizedSlashes = normalized.replace("\\", "/");
+            if (!normalizedSlashes.contains("/")) {
+                image = ImageLoaderUtil.loadImage("uploads/reclamation_images/" + normalizedSlashes, true);
+                if (image == null) {
+                    image = ImageLoaderUtil.loadImage("uploads/reponse_images/" + normalizedSlashes, true);
+                }
+            }
+        }
+        if (image == null) {
+            Text tx = t("-", lightFont(), FontWeight.NORMAL, 14);
+            tx.setFill(textMutedColor());
+            return tx;
+        }
+        javafx.scene.image.ImageView view = new javafx.scene.image.ImageView(image);
+        view.setFitWidth(300);
+        view.setFitHeight(300);
+        view.setPreserveRatio(false);
+        view.setSmooth(true);
+        Rectangle clip = new Rectangle(300, 300);
+        clip.setArcWidth(12);
+        clip.setArcHeight(12);
+        view.setClip(clip);
+        return view;
+    }
+
+    private VBox reclamationResponsesPanel(String reclamationIdRaw) {
+        VBox wrap = new VBox(8);
+        wrap.getChildren().add(sectionTitle("Responses for this Reclamation"));
+
+        int reclamationId;
+        try {
+            reclamationId = Integer.parseInt(reclamationIdRaw);
+        } catch (Exception e) {
+            wrap.getChildren().add(notesBox("Responses", "No responses found."));
+            return wrap;
+        }
+
+        List<com.syndicati.models.entities.Reponse> all = com.syndicati.services.ReponseService.getInstance().getAllReponses();
+        List<com.syndicati.models.entities.Reponse> linked = new ArrayList<>();
+        for (com.syndicati.models.entities.Reponse rep : all) {
+            if (rep.getReclamationId() == reclamationId) {
+                linked.add(rep);
+            }
+        }
+
+        if (linked.isEmpty()) {
+            wrap.getChildren().add(notesBox("Responses", "No responses found for this reclamation."));
+            return wrap;
+        }
+
+        for (com.syndicati.models.entities.Reponse rep : linked) {
+            String title = safe(rep.getTitrereponse());
+            String message = safe(rep.getMessagereponse());
+            String sent = formatDateTime(rep.getCreatedAt());
+            VBox card = new VBox(4);
+            card.setPadding(new Insets(10, 12, 10, 12));
+            card.setStyle(
+                "-fx-background-color:rgba(255,255,255,0.03);" +
+                "-fx-border-color:rgba(255,255,255,0.08);" +
+                "-fx-border-width:1;" +
+                "-fx-background-radius:10px;" +
+                "-fx-border-radius:10px;"
+            );
+            card.getChildren().addAll(
+                t("Title: " + title, lightFont(), FontWeight.BOLD, 13),
+                t("Message: " + message, lightFont(), FontWeight.NORMAL, 13),
+                t("Sent: " + sent, lightFont(), FontWeight.NORMAL, 12)
+            );
+            wrap.getChildren().add(card);
+        }
+
+        return wrap;
     }
 
     private Button dangerAction(String text) {

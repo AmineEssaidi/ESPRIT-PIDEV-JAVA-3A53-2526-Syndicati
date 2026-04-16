@@ -82,4 +82,40 @@ public class ReponseService {
         }
         return list;
     }
+
+    public boolean deleteReponse(int idreponse) {
+        String query = "DELETE FROM reponses WHERE idreponses = ?";
+        try (Connection connection = databaseService.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+            if (connection == null) {
+                return false;
+            }
+            preparedStatement.setInt(1, idreponse);
+            return preparedStatement.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error deleting response: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public boolean updateReponse(int idreponse, String title, String message, String imagePath) {
+        String query = "UPDATE reponses SET titrereponse = ?, messagereponse = ?, imagereponse = ?, updated_at = ? WHERE idreponses = ?";
+        try (Connection connection = databaseService.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+            if (connection == null) {
+                return false;
+            }
+            preparedStatement.setString(1, title);
+            preparedStatement.setString(2, message);
+            preparedStatement.setString(3, imagePath);
+            preparedStatement.setTimestamp(4, Timestamp.valueOf(java.time.LocalDateTime.now()));
+            preparedStatement.setInt(5, idreponse);
+            return preparedStatement.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating response: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
 }
