@@ -2,11 +2,16 @@ package com.syndicati.models.forum;
 
 import com.syndicati.models.user.User;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Forum comment entity aligned with Horizon web schema.
  */
 public class Commentaire {
+
+    private static final int DESCRIPTION_MIN_LENGTH = 1;
+    private static final int DESCRIPTION_MAX_LENGTH = 255;
 
     private Integer idCommentaire;
     private String descriptionCommentaire;
@@ -79,5 +84,27 @@ public class Commentaire {
 
     public void setUser(User user) {
         this.user = user;
+    }
+
+    public List<String> validateForCreate() {
+        List<String> errors = new ArrayList<>();
+
+        if (descriptionCommentaire == null || descriptionCommentaire.trim().length() < DESCRIPTION_MIN_LENGTH || descriptionCommentaire.trim().length() > DESCRIPTION_MAX_LENGTH) {
+            errors.add("Comment text must be between " + DESCRIPTION_MIN_LENGTH + " and " + DESCRIPTION_MAX_LENGTH + " characters.");
+        }
+
+        if (publication == null || publication.getIdPublication() == null || publication.getIdPublication() <= 0) {
+            errors.add("Publication is required.");
+        }
+
+        if (user == null || user.getIdUser() == null || user.getIdUser() <= 0) {
+            errors.add("User is required.");
+        }
+
+        return errors;
+    }
+
+    public List<String> validateForUpdate() {
+        return validateForCreate();
     }
 }

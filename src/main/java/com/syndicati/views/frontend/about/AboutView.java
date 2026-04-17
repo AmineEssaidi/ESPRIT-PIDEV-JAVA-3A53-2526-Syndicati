@@ -49,15 +49,24 @@ public class AboutView implements ViewInterface {
         
         // Option 1: Our Story
         VBox option1 = createAboutCard("ST", "Our Story", "Learn about our journey and mission");
-        option1.setOnMouseClicked(e -> NavigationManager.getInstance().navigateTo("about-detail"));
+        option1.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("about-detail");
+        });
         
         // Option 2: Our Team
         VBox option2 = createAboutCard("TM", "Our Team", "Meet the people behind our success");
-        option2.setOnMouseClicked(e -> NavigationManager.getInstance().navigateTo("about-detail"));
+        option2.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("about-detail");
+        });
         
         // Option 3: Contact Us
         VBox option3 = createAboutCard("CT", "Contact Us", "Get in touch with our team");
-        option3.setOnMouseClicked(e -> NavigationManager.getInstance().navigateTo("about-detail"));
+        option3.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("about-detail");
+        });
         
         aboutGrid.getChildren().addAll(option1, option2, option3);
         

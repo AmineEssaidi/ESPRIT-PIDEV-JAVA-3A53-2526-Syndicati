@@ -2,10 +2,12 @@ package com.syndicati.controllers.forum;
 
 import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
+import com.syndicati.models.forum.Reaction;
 import com.syndicati.models.user.User;
 import com.syndicati.services.forum.ReactionService;
 import com.syndicati.services.forum.ReactionService.ReactionActionResult;
 import com.syndicati.services.forum.ReactionService.ReactionStatus;
+import java.util.List;
 
 /**
  * Controller facade for forum reactions.
@@ -56,6 +58,10 @@ public class ReactionController {
     public ReactionStatus commentStatus(Commentaire commentaire, User user) {
         Integer commentId = commentaire == null ? null : commentaire.getIdCommentaire();
         return reactionService.commentStatus(commentId, user);
+    }
+
+    public List<Reaction> reactions() {
+        return reactionService.reactions();
     }
 
     public ReactionService getReactionService() {

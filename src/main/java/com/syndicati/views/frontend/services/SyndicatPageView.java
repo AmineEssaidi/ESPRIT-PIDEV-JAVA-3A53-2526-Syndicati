@@ -3,6 +3,7 @@ package com.syndicati.views.frontend.services;
 import com.syndicati.MainApplication;
 import com.syndicati.controllers.syndicat.ReclamationController;
 import com.syndicati.interfaces.ViewInterface;
+import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
@@ -53,6 +54,11 @@ import java.util.List;
  */
 public class SyndicatPageView implements ViewInterface {
 
+    private static final int SUBJECT_MIN_LENGTH = 5;
+    private static final int SUBJECT_MAX_LENGTH = 255;
+    private static final int DESCRIPTION_MIN_LENGTH = 10;
+    private static final int DESCRIPTION_MAX_LENGTH = 255;
+
     private final VBox root;
     private final ThemeManager tm = ThemeManager.getInstance();
     private final ReclamationController controller = new ReclamationController();
@@ -61,6 +67,8 @@ public class SyndicatPageView implements ViewInterface {
     private TextField subjectField;
     private LocalDateTime selectedDateTime;
     private TextArea descriptionField;
+    private Label subjectValidationLabel;
+    private Label descriptionValidationLabel;
     private Button submitButton;
     private List<File> selectedFiles = new ArrayList<>();
     private Text fileStatusText;
@@ -139,7 +147,8 @@ public class SyndicatPageView implements ViewInterface {
         VBox subjectSection = new VBox(6);
         subjectSection.getChildren().add(label("Subject"));
         subjectField = input("What is this regarding?");
-        subjectSection.getChildren().add(subjectField);
+        subjectValidationLabel = createLiveValidationLabel("Start typing your subject...");
+        subjectSection.getChildren().addAll(subjectField, subjectValidationLabel);
 
         // Date field with label
         VBox dateSection = new VBox(6);
@@ -208,6 +217,8 @@ public class SyndicatPageView implements ViewInterface {
             }
         });
         descSection.getChildren().add(descriptionWrapper);
+        descriptionValidationLabel = createLiveValidationLabel("Describe your issue with at least 10 characters...");
+        descSection.getChildren().add(descriptionValidationLabel);
 
         // Attachments zone with drag-and-drop and click to upload
         VBox attachmentSection = new VBox(6);
@@ -298,6 +309,7 @@ public class SyndicatPageView implements ViewInterface {
         submitButton.setPrefHeight(48);
         addButtonPulse(submitButton);
         setupSubmitAction();
+        setupLiveValidation();
 
         form.getChildren().addAll(
             title, 
@@ -318,31 +330,59 @@ public class SyndicatPageView implements ViewInterface {
         submitButton.setOnAction(e -> handleSubmit());
     }
 
+    private void setupLiveValidation() {
+        subjectField.textProperty().addListener((obs, oldText, newText) -> updateSubjectValidation(newText));
+        descriptionField.textProperty().addListener((obs, oldText, newText) -> updateDescriptionValidation(newText));
+
+        updateSubjectValidation(subjectField.getText());
+        updateDescriptionValidation(descriptionField.getText());
+    }
+
+    private Label createLiveValidationLabel(String message) {
+        Label label = new Label(message);
+        label.setTextFill(Color.web(textMuted()));
+        label.setStyle("-fx-font-size: 11px; -fx-font-weight: 600;");
+        return label;
+    }
+
+    private void updateSubjectValidation(String value) {
+        String subject = value == null ? "" : value.trim();
+        if (subject.isEmpty()) {
+            subjectValidationLabel.setText("Start typing your subject...");
+            subjectValidationLabel.setTextFill(Color.web(textMuted()));
+            return;
+        }
+        String error = reclamationFieldError(subject, descriptionField.getText(), "Title ");
+        if (error != null) {
+            subjectValidationLabel.setText(error);
+            subjectValidationLabel.setTextFill(Color.web("#ff3b30"));
+            return;
+        }
+        subjectValidationLabel.setText("✓ Subject looks good");
+        subjectValidationLabel.setTextFill(Color.web(tm.getAccentHex()));
+    }
+
+    private void updateDescriptionValidation(String value) {
+        String description = value == null ? "" : value.trim();
+        if (description.isEmpty()) {
+            descriptionValidationLabel.setText("Describe your issue with at least 10 characters...");
+            descriptionValidationLabel.setTextFill(Color.web(textMuted()));
+            return;
+        }
+        String error = reclamationFieldError(subjectField.getText(), description, "Description ");
+        if (error != null) {
+            descriptionValidationLabel.setText(error);
+            descriptionValidationLabel.setTextFill(Color.web("#ff3b30"));
+            return;
+        }
+        descriptionValidationLabel.setText("✓ Description looks good");
+        descriptionValidationLabel.setTextFill(Color.web(tm.getAccentHex()));
+    }
+
     private void handleSubmit() {
         String subject = subjectField.getText().trim();
         String description = descriptionField.getText().trim();
         LocalDateTime date = selectedDateTime != null ? selectedDateTime : LocalDateTime.now();
-
-        // Validation
-        if (subject.isEmpty()) {
-            showError("Validation Error", "Please enter a subject");
-            return;
-        }
-
-        if (subject.length() < 5) {
-            showError("Validation Error", "Subject must be at least 5 characters");
-            return;
-        }
-
-        if (description.isEmpty()) {
-            showError("Validation Error", "Please enter a description");
-            return;
-        }
-
-        if (description.length() < 10) {
-            showError("Validation Error", "Description must be at least 10 characters");
-            return;
-        }
 
         // Get current user
         User currentUser = SessionManager.getInstance().getCurrentUser();
@@ -351,17 +391,18 @@ public class SyndicatPageView implements ViewInterface {
             return;
         }
 
-        // Process file uploads
+        Reclamation draft = buildReclamationDraft(subject, description, date, currentUser);
+        List<String> errors = draft.validateForCreate();
+        if (!errors.isEmpty()) {
+            showError("Validation Error", errors.getFirst());
+            return;
+        }
+
+        // Process file uploads (store first attachment only, aligned with single image DB field)
         String imagePath = null;
         if (!selectedFiles.isEmpty()) {
-            StringBuilder pathBuilder = new StringBuilder();
             try {
-                for (int i = 0; i < selectedFiles.size(); i++) {
-                    String uploadedPath = copyFileToUploads(selectedFiles.get(i));
-                    if (i > 0) pathBuilder.append(";");
-                    pathBuilder.append(uploadedPath);
-                }
-                imagePath = pathBuilder.toString();
+                imagePath = copyFileToUploads(selectedFiles.getFirst());
             } catch (IOException e) {
                 showError("Upload Error", "Failed to upload images: " + e.getMessage());
                 return;
@@ -381,8 +422,42 @@ public class SyndicatPageView implements ViewInterface {
             showSuccess("Success", "Your reclamation has been submitted successfully.\nWe will review it shortly.");
             clearForm();
         } else {
-            showError("Submission Failed", "There was an error submitting your reclamation. Please try again.");
+            showError("Submission Failed", "Unable to create reclamation. Please ensure subject/description are within allowed limits and try again.");
         }
+    }
+
+    private String reclamationFieldError(String title, String description, String fieldPrefix) {
+        Reclamation draft = buildReclamationDraft(
+            title == null ? "" : title.trim(),
+            description == null ? "" : description.trim(),
+            selectedDateTime != null ? selectedDateTime : LocalDateTime.now(),
+            validationUser()
+        );
+        for (String error : draft.validateForCreate()) {
+            if (error.startsWith(fieldPrefix)) {
+                return error;
+            }
+        }
+        return null;
+    }
+
+    private Reclamation buildReclamationDraft(String title, String description, LocalDateTime date, User user) {
+        Reclamation draft = new Reclamation();
+        draft.setTitreReclamations(title);
+        draft.setDescReclamation(description);
+        draft.setDateReclamation(date);
+        draft.setUser(user);
+        return draft;
+    }
+
+    private User validationUser() {
+        User current = SessionManager.getInstance().getCurrentUser();
+        if (current != null && current.getIdUser() != null && current.getIdUser() > 0) {
+            return current;
+        }
+        User placeholder = new User();
+        placeholder.setIdUser(1);
+        return placeholder;
     }
 
     private void clearForm() {

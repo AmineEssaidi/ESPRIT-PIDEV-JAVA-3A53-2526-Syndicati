@@ -150,9 +150,10 @@ public class CommentaireRepository {
 
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
                 LocalDateTime now = LocalDateTime.now();
+                LocalDateTime createdAt = commentaire.getCreatedAt() != null ? commentaire.getCreatedAt() : now;
                 ps.setString(1, commentaire.getDescriptionCommentaire());
                 ps.setString(2, commentaire.getImageCommentaire());
-                ps.setTimestamp(3, Timestamp.valueOf(now));
+                ps.setTimestamp(3, Timestamp.valueOf(createdAt));
                 ps.setTimestamp(4, Timestamp.valueOf(now));
                 ps.setBoolean(5, commentaire.isVisibility());
                 ps.setInt(6, commentaire.getPublication().getIdPublication());
@@ -164,7 +165,7 @@ public class CommentaireRepository {
                     if (generatedKeys.next()) {
                         int id = generatedKeys.getInt(1);
                         commentaire.setIdCommentaire(id);
-                        commentaire.setCreatedAt(now);
+                        commentaire.setCreatedAt(createdAt);
                         commentaire.setUpdatedAt(now);
                         return id;
                     }
@@ -182,7 +183,7 @@ public class CommentaireRepository {
             return false;
         }
 
-        String sql = "UPDATE commentaire SET description_commentaire = ?, image_commentaire = ?, updated_at = ?, visibility = ? WHERE id_commentaire = ?";
+        String sql = "UPDATE commentaire SET description_commentaire = ?, image_commentaire = ?, created_at = ?, updated_at = ?, visibility = ? WHERE id_commentaire = ?";
 
         try (Connection conn = databaseService.getConnection()) {
             if (conn == null) {
@@ -190,11 +191,13 @@ public class CommentaireRepository {
             }
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                LocalDateTime createdAt = commentaire.getCreatedAt() != null ? commentaire.getCreatedAt() : LocalDateTime.now();
                 ps.setString(1, commentaire.getDescriptionCommentaire());
                 ps.setString(2, commentaire.getImageCommentaire());
-                ps.setTimestamp(3, Timestamp.valueOf(LocalDateTime.now()));
-                ps.setBoolean(4, commentaire.isVisibility());
-                ps.setInt(5, commentaire.getIdCommentaire());
+                ps.setTimestamp(3, Timestamp.valueOf(createdAt));
+                ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.now()));
+                ps.setBoolean(5, commentaire.isVisibility());
+                ps.setInt(6, commentaire.getIdCommentaire());
 
                 return ps.executeUpdate() > 0;
             }

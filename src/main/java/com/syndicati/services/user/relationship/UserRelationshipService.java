@@ -167,6 +167,55 @@ public class UserRelationshipService {
         return findRelationship(currentUserId, targetUserId).isEmpty();
     }
 
+    public boolean removeConnection(int currentUserId, int otherUserId) {
+        if (currentUserId <= 0 || otherUserId <= 0 || currentUserId == otherUserId) {
+            return false;
+        }
+
+        Optional<UserRelationship> relationshipOpt = findRelationship(currentUserId, otherUserId);
+        if (relationshipOpt.isEmpty()) {
+            return false;
+        }
+
+        UserRelationship relationship = relationshipOpt.get();
+        Integer first = relationship.getUserFirstId();
+        Integer second = relationship.getUserSecondId();
+        boolean isParticipant = (first != null && (first == currentUserId || first == otherUserId))
+            || (second != null && (second == currentUserId || second == otherUserId));
+        if (!isParticipant || relationship.getId() == null) {
+            return false;
+        }
+
+        return relationshipRepository.deleteById(relationship.getId());
+    }
+
+    public boolean cancelOutgoingRequest(int senderUserId, int recipientUserId) {
+        if (senderUserId <= 0 || recipientUserId <= 0 || senderUserId == recipientUserId) {
+            return false;
+        }
+
+        Optional<UserRelationship> relationshipOpt = findRelationship(senderUserId, recipientUserId);
+        if (relationshipOpt.isEmpty()) {
+            return false;
+        }
+
+        UserRelationship relationship = relationshipOpt.get();
+        if (relationship.getId() == null) {
+            return false;
+        }
+
+        boolean isOutgoing = relationship.getUserFirstId() != null
+            && relationship.getUserSecondId() != null
+            && relationship.getUserFirstId() == senderUserId
+            && relationship.getUserSecondId() == recipientUserId
+            && STATUS_PENDING_FIRST_SECOND.equals(normalizeStatus(relationship.getStatus()));
+        if (!isOutgoing) {
+            return false;
+        }
+
+        return relationshipRepository.deleteById(relationship.getId());
+    }
+
     public boolean isPendingForCurrentUser(UserRelationship relationship, int currentUserId) {
         if (relationship == null || currentUserId <= 0) {
             return false;

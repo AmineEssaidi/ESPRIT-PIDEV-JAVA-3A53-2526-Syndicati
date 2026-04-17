@@ -263,6 +263,10 @@ public class ReactionService {
         return buildStatus(reactions, null, commentId);
     }
 
+    public List<Reaction> reactions() {
+        return reactionRepository.findAll();
+    }
+
     private ReactionActionResult publicationResult(Integer publicationId, Integer userId, String action, String emoji, String message) {
         ReactionStatus status = publicationStatus(publicationId, buildUser(userId));
         return ReactionActionResult.success(action, emoji, message, status);

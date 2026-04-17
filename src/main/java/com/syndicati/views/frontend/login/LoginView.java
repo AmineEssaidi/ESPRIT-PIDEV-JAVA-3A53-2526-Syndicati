@@ -1606,49 +1606,19 @@ public class LoginView implements ViewInterface {
     
     private java.util.List<String> validateSignUpForm(String firstName, String lastName, String email, String password, String confirmPassword) {
         java.util.List<String> errors = new java.util.ArrayList<>();
-        
-        // First Name validation
-        if (firstName.isEmpty()) {
-            errors.add("First name is required");
-        } else if (firstName.length() < 2) {
-            errors.add("First name must be at least 2 characters");
-        } else if (!firstName.matches("^[\\p{L}\\s-]+$")) {
-            errors.add("First name can only contain letters, spaces and hyphens");
-        }
-        
-        // Last Name validation
-        if (lastName.isEmpty()) {
-            errors.add("Last name is required");
-        } else if (lastName.length() < 2) {
-            errors.add("Last name must be at least 2 characters");
-        } else if (!lastName.matches("^[\\p{L}\\s-]+$")) {
-            errors.add("Last name can only contain letters, spaces and hyphens");
-        }
-        
-        // Email validation
-        if (email.isEmpty()) {
-            errors.add("Email address is required");
-        } else if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
-            errors.add("Please enter a valid email address");
-        } else {
-            // Check for duplicate email
+
+        User draft = new User();
+        draft.setFirstName(firstName);
+        draft.setLastName(lastName);
+        draft.setEmailUser(email);
+        draft.setPasswordUser(password);
+        draft.setRoleUser("RESIDENT");
+        errors.addAll(draft.validateForCreate());
+
+        if (email != null && !email.isBlank()) {
             Optional<User> existing = authController.findUserByEmail(email);
             if (existing.isPresent()) {
                 errors.add("Email is already registered");
-            }
-        }
-        
-        // Password validation
-        if (password.isEmpty()) {
-            errors.add("Password is required");
-        } else if (password.length() < 8) {
-            errors.add("Password must be at least 8 characters");
-        } else {
-            if (!password.matches(".*[A-Z].*")) {
-                errors.add("Password must contain at least one uppercase letter");
-            }
-            if (!password.matches(".*[!@#$%^&*(),.?\":{}|<>].*")) {
-                errors.add("Password must contain at least one special character");
             }
         }
         

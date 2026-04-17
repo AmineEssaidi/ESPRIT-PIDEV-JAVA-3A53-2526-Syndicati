@@ -48,6 +48,7 @@ public class ProfileSessionController {
             }
 
             currentStanding = standingController.findOrCreateByUserId(currentUser.getIdUser());
+            sessionManager.setCurrentStanding(currentStanding);
             currentCircleFriends = relationshipController.findFriends(currentUser, 8);
             currentPendingRelationships = relationshipController.findPendingRequestsFor(currentUser);
         }

@@ -21,4 +21,8 @@ public class UserStandingController {
     public boolean save(UserStanding standing) {
         return standingService.save(standing);
     }
+
+    public UserStanding addExperience(int userId, int xpDelta) {
+        return standingService.addExperience(userId, xpDelta);
+    }
 }

@@ -14,6 +14,11 @@ import java.util.Set;
  */
 public class Reclamation {
 
+    private static final int TITLE_MIN_LENGTH = 5;
+    private static final int TITLE_MAX_LENGTH = 255;
+    private static final int DESCRIPTION_MIN_LENGTH = 10;
+    private static final int DESCRIPTION_MAX_LENGTH = 255;
+
     public static final Set<String> STATUTS = new HashSet<>(Arrays.asList(
         "active", "en_attente", "refuse", "termine"
     ));
@@ -131,5 +136,46 @@ public class Reclamation {
         }
         reponses.add(reponse);
         reponse.setReclamation(this);
+    }
+
+    public List<String> validateForCreate() {
+        List<String> errors = new ArrayList<>();
+
+        if (!isTitleValid(titreReclamations)) {
+            errors.add("Title must start with a letter, cannot be only numbers, and must be between " + TITLE_MIN_LENGTH + " and " + TITLE_MAX_LENGTH + " characters.");
+        }
+
+        if (descReclamation == null || descReclamation.trim().length() < DESCRIPTION_MIN_LENGTH || descReclamation.trim().length() > DESCRIPTION_MAX_LENGTH) {
+            errors.add("Description must be between " + DESCRIPTION_MIN_LENGTH + " and " + DESCRIPTION_MAX_LENGTH + " characters.");
+        }
+
+        if (dateReclamation == null) {
+            errors.add("Reclamation date is required.");
+        }
+
+        if (statutReclamation != null && !statutReclamation.isBlank() && !STATUTS.contains(statutReclamation)) {
+            errors.add("Status is invalid.");
+        }
+
+        if (user == null || user.getIdUser() == null || user.getIdUser() <= 0) {
+            errors.add("User is required.");
+        }
+
+        return errors;
+    }
+
+    public List<String> validateForUpdate() {
+        return validateForCreate();
+    }
+
+    private boolean isTitleValid(String value) {
+        if (value == null) {
+            return false;
+        }
+        String cleaned = value.trim();
+        if (cleaned.length() < TITLE_MIN_LENGTH || cleaned.length() > TITLE_MAX_LENGTH) {
+            return false;
+        }
+        return Character.isLetter(cleaned.charAt(0)) && !cleaned.matches("\\d+");
     }
 }

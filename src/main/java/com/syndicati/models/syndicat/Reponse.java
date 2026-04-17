@@ -2,12 +2,19 @@ package com.syndicati.models.syndicat;
 
 import com.syndicati.models.user.User;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reponse entity aligned exactly with Horizon database schema.
  * Maps to reponses table.
  */
 public class Reponse {
+
+    private static final int TITLE_MIN_LENGTH = 5;
+    private static final int TITLE_MAX_LENGTH = 255;
+    private static final int MESSAGE_MIN_LENGTH = 2;
+    private static final int MESSAGE_MAX_LENGTH = 255;
 
     private Integer idReponses;
     private String titreReponse;
@@ -92,5 +99,42 @@ public class Reponse {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public List<String> validateForCreate() {
+        List<String> errors = new ArrayList<>();
+
+        if (!isTitleValid(titreReponse)) {
+            errors.add("Title must start with a letter, cannot be only numbers, and must be between " + TITLE_MIN_LENGTH + " and " + TITLE_MAX_LENGTH + " characters.");
+        }
+
+        if (messageReponse == null || messageReponse.trim().length() < MESSAGE_MIN_LENGTH || messageReponse.trim().length() > MESSAGE_MAX_LENGTH) {
+            errors.add("Message must be between " + MESSAGE_MIN_LENGTH + " and " + MESSAGE_MAX_LENGTH + " characters.");
+        }
+
+        if (reclamation == null || reclamation.getIdReclamations() == null || reclamation.getIdReclamations() <= 0) {
+            errors.add("Reclamation is required.");
+        }
+
+        if (user == null || user.getIdUser() == null || user.getIdUser() <= 0) {
+            errors.add("User is required.");
+        }
+
+        return errors;
+    }
+
+    public List<String> validateForUpdate() {
+        return validateForCreate();
+    }
+
+    private boolean isTitleValid(String value) {
+        if (value == null) {
+            return false;
+        }
+        String cleaned = value.trim();
+        if (cleaned.length() < TITLE_MIN_LENGTH || cleaned.length() > TITLE_MAX_LENGTH) {
+            return false;
+        }
+        return Character.isLetter(cleaned.charAt(0)) && !cleaned.matches("\\d+");
     }
 }

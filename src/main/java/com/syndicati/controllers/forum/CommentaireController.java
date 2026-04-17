@@ -4,6 +4,7 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.User;
 import com.syndicati.services.forum.CommentaireService;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,8 +39,16 @@ public class CommentaireController {
         return commentaireService.create(description, image, visibility, publication, user);
     }
 
+    public Integer commentaireCreate(String description, String image, boolean visibility, LocalDateTime createdAt, Publication publication, User user) {
+        return commentaireService.create(description, image, visibility, createdAt, publication, user);
+    }
+
     public boolean commentaireUpdate(Integer id, String description, String image, Boolean visibility) {
         return commentaireService.update(id, description, image, visibility);
+    }
+
+    public boolean commentaireUpdate(Integer id, String description, String image, Boolean visibility, LocalDateTime createdAt) {
+        return commentaireService.update(id, description, image, visibility, createdAt);
     }
 
     public boolean commentaireDelete(Integer id) {

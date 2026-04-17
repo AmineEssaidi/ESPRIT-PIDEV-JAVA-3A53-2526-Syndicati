@@ -49,15 +49,24 @@ public class ServicesView implements ViewInterface {
         
         // Service 1: Web Development
         VBox service1 = createServiceCard("WEB", "Web Development", "Modern web applications and websites");
-        service1.setOnMouseClicked(e -> NavigationManager.getInstance().navigateTo("service-detail"));
+        service1.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("service-detail");
+        });
         
         // Service 2: Mobile Apps
         VBox service2 = createServiceCard("APP", "Mobile Apps", "iOS and Android applications");
-        service2.setOnMouseClicked(e -> NavigationManager.getInstance().navigateTo("service-detail"));
+        service2.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("service-detail");
+        });
         
         // Service 3: Desktop Apps
         VBox service3 = createServiceCard("DESK", "Desktop Apps", "Cross-platform desktop applications");
-        service3.setOnMouseClicked(e -> NavigationManager.getInstance().navigateTo("service-detail"));
+        service3.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("service-detail");
+        });
         
         servicesGrid.getChildren().addAll(service1, service2, service3);
         

@@ -198,6 +198,11 @@ public class ReactionRepository {
         });
     }
 
+    public List<Reaction> findAll() {
+        String sql = "SELECT * FROM reaction ORDER BY updated_at DESC";
+        return selectMany(sql, ps -> {});
+    }
+
     public Integer create(Reaction reaction) {
         if (reaction == null || reaction.getUser() == null || reaction.getUser().getIdUser() == null) {
             return -1;

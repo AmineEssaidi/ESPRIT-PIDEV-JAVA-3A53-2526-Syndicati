@@ -41,5 +41,28 @@ public class UserStandingService {
         standing.setUpdatedAt(LocalDateTime.now());
         return standingRepository.save(standing);
     }
+
+    public UserStanding addExperience(int userId, int xpDelta) {
+        UserStanding standing = findOrCreateByUserId(userId);
+        int safeDelta = Math.max(0, xpDelta);
+        if (safeDelta == 0 || standing.getUserId() == null || standing.getUserId() <= 0) {
+            return standing;
+        }
+
+        int currentPoints = Math.max(0, standing.getPoints());
+        int newPoints = currentPoints + safeDelta;
+        standing.setPoints(newPoints);
+
+        int computedLevel = Math.max(1, (newPoints / 100) + 1);
+        standing.setLevel(Math.max(standing.getLevel(), computedLevel));
+
+        if (standing.getStandingLabel() == null || standing.getStandingLabel().isBlank()) {
+            standing.setStandingLabel("NORMAL");
+        }
+
+        standing.setUpdatedAt(LocalDateTime.now());
+        standingRepository.save(standing);
+        return standing;
+    }
 }
 

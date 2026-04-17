@@ -1,7 +1,6 @@
 package com.syndicati.views.backend.dashboard;
 
 import com.syndicati.models.syndicat.Reclamation;
-import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import javafx.animation.PauseTransition;
@@ -10,6 +9,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
@@ -20,12 +21,15 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.*;
+import javafx.stage.FileChooser;
 import javafx.stage.Popup;
+import javafx.stage.Window;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.services.dashboard.DashboardAdminService;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -466,7 +470,7 @@ public class DashboardView implements ViewInterface {
     private VBox buildActivityChart() {
         VBox card = sectionCard();
         Text title = t("Activity Pulse", boldFont(), FontWeight.BOLD, 15); title.setFill(textPrimaryColor());
-        Text sub   = t("Page Views ■  UI Clicks ■  — Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
+        Text sub   = t("Page Views â–   UI Clicks â–   â€” Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
         sub.setFill(textMutedColor());
 
         HBox cw = new HBox(8); cw.setAlignment(Pos.BOTTOM_LEFT);
@@ -497,7 +501,7 @@ public class DashboardView implements ViewInterface {
 
     private VBox buildTopUsers() {
         VBox card = sectionCard();
-        Text title = t("⭐  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
+        Text title = t("â­  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
         VBox list = new VBox(6);
         for (String[] u : new String[][]{
             {"Ahmed B.","SYNDIC","142"}, {"Leila M.","RESIDENT","118"},
@@ -1123,6 +1127,7 @@ public class DashboardView implements ViewInterface {
         row.setPadding(new Insets(4, 0, 4, 0));
         Text lbl = t(label, lightFont(), FontWeight.NORMAL, 11);
         lbl.setFill(textMutedColor());
+        Label liveHint = modalLiveHintLabel();
 
         boolean canEditThisField = editable;
         if ("Reclamation".equalsIgnoreCase(entityLabel) && "edit".equals(mode) && !"Status".equalsIgnoreCase(label)) {
@@ -1150,7 +1155,8 @@ public class DashboardView implements ViewInterface {
                     roleSelect.setValue(selectedRole);
                 }
                 styleSelect(roleSelect, "Select Role", this::formatRoleDisplay);
-                row.getChildren().addAll(lbl, roleSelect);
+                installLiveValidation(roleSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, roleSelect, liveHint);
                 return row;
             }
 
@@ -1159,7 +1165,8 @@ public class DashboardView implements ViewInterface {
                 verifiedSelect.getItems().addAll("Yes", "No");
                 verifiedSelect.setValue(isTruthyText(value) ? "Yes" : "No");
                 styleSelect(verifiedSelect, "Select Value", Function.identity());
-                row.getChildren().addAll(lbl, verifiedSelect);
+                installLiveValidation(verifiedSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, verifiedSelect, liveHint);
                 return row;
             }
 
@@ -1174,7 +1181,8 @@ public class DashboardView implements ViewInterface {
                     statusSelect.setValue(selectedStatus);
                 }
                 styleSelect(statusSelect, "Select Status", this::formatReclamationStatusDisplay);
-                row.getChildren().addAll(lbl, statusSelect);
+                installLiveValidation(statusSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, statusSelect, liveHint);
                 return row;
             }
 
@@ -1189,7 +1197,8 @@ public class DashboardView implements ViewInterface {
                     userSelect.setValue(selectedUser);
                 }
                 styleSelect(userSelect, "Select User", Function.identity());
-                row.getChildren().addAll(lbl, userSelect);
+                installLiveValidation(userSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, userSelect, liveHint);
                 return row;
             }
 
@@ -1204,12 +1213,111 @@ public class DashboardView implements ViewInterface {
                     reclamationSelect.setValue(selectedReclamation);
                 }
                 styleSelect(reclamationSelect, "Select Reclamation", Function.identity());
-                row.getChildren().addAll(lbl, reclamationSelect);
+                installLiveValidation(reclamationSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, reclamationSelect, liveHint);
                 return row;
             }
 
             if ("Reponse".equalsIgnoreCase(entityLabel) && "Date".equalsIgnoreCase(label)) {
                 canEditThisField = false;
+            }
+
+            if ("Publication".equalsIgnoreCase(entityLabel) && "Category".equalsIgnoreCase(label)) {
+                ComboBox<String> categorySelect = new ComboBox<>();
+                java.util.List<String> categories = java.util.List.of(
+                    "Announcement", "Suggestion", "Jeux Video", "Informatique", "NouveautÃ©", "Discussion General", "Culture", "Sport"
+                );
+                categorySelect.getItems().addAll(categories);
+                if (value != null && !value.isEmpty() && !value.equals("-")) {
+                    categorySelect.setValue(value);
+                } else {
+                    categorySelect.setValue("Discussion General");
+                }
+                styleSelect(categorySelect, "Select Category", Function.identity());
+                installLiveValidation(categorySelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, categorySelect, liveHint);
+                return row;
+            }
+
+            if ("Event".equalsIgnoreCase(entityLabel) && "Type".equalsIgnoreCase(label)) {
+                ComboBox<String> typeSelect = new ComboBox<>();
+                typeSelect.getItems().addAll(eventTypeOptions(value));
+                String selectedType = normalizeEventTypeValue(value);
+                if (!selectedType.equals("-") && !typeSelect.getItems().contains(selectedType)) {
+                    typeSelect.getItems().add(selectedType);
+                }
+                if (!selectedType.equals("-")) {
+                    typeSelect.setValue(selectedType);
+                } else if (!typeSelect.getItems().isEmpty()) {
+                    typeSelect.setValue(typeSelect.getItems().getFirst());
+                }
+                styleSelect(typeSelect, "Select Type", this::formatEventTypeDisplay);
+                installLiveValidation(typeSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, typeSelect, liveHint);
+                return row;
+            }
+
+            if ("Event".equalsIgnoreCase(entityLabel) && "Status".equalsIgnoreCase(label)) {
+                ComboBox<String> eventStatusSelect = new ComboBox<>();
+                eventStatusSelect.getItems().addAll(eventStatusOptions(value));
+                String selectedStatus = normalizeEventStatusValue(value);
+                if (!selectedStatus.equals("-") && !eventStatusSelect.getItems().contains(selectedStatus)) {
+                    eventStatusSelect.getItems().add(selectedStatus);
+                }
+                if (!selectedStatus.equals("-")) {
+                    eventStatusSelect.setValue(selectedStatus);
+                }
+                styleSelect(eventStatusSelect, "Select Status", this::formatEventStatusDisplay);
+                installLiveValidation(eventStatusSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, eventStatusSelect, liveHint);
+                return row;
+            }
+
+            if (isDateFieldLabel(label)) {
+                DatePicker datePicker = new DatePicker(parseDateForPicker(value));
+                styleDatePicker(datePicker);
+                installLiveValidation(datePicker, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, datePicker, liveHint);
+                return row;
+            }
+
+            if (isImageFieldLabel(label)) {
+                TextField imageInput = new TextField(value);
+                imageInput.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
+                imageInput.setPrefHeight(36);
+                imageInput.setMinHeight(36);
+                imageInput.setStyle(inputStyle(false, false));
+                imageInput.setOnMouseEntered(_ -> imageInput.setStyle(inputStyle(true, imageInput.isFocused())));
+                imageInput.setOnMouseExited(_ -> imageInput.setStyle(inputStyle(false, imageInput.isFocused())));
+                imageInput.focusedProperty().addListener((ignoredObservable, ignoredOldValue, newVal) -> imageInput.setStyle(inputStyle(false, newVal)));
+
+                Button browse = new Button("Browse");
+                browse.setFont(Font.font(lightFont(), FontWeight.SEMI_BOLD, 11));
+                browse.setPrefHeight(36);
+                browse.setMinHeight(36);
+                browse.setStyle(
+                    "-fx-background-color:" + accentGradient() + ";" +
+                    "-fx-text-fill:white;" +
+                    "-fx-background-radius:10px;" +
+                    "-fx-border-radius:10px;" +
+                    "-fx-cursor:hand;"
+                );
+                browse.setOnAction(_ -> {
+                    FileChooser chooser = new FileChooser();
+                    chooser.setTitle("Select Image");
+                    chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"));
+                    Window owner = root.getScene() != null ? root.getScene().getWindow() : null;
+                    java.io.File file = chooser.showOpenDialog(owner);
+                    if (file != null) {
+                        imageInput.setText(file.getAbsolutePath());
+                    }
+                });
+
+                HBox imageRow = new HBox(8, imageInput, browse);
+                HBox.setHgrow(imageInput, Priority.ALWAYS);
+                installLiveValidation(imageInput, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, imageRow, liveHint);
+                return row;
             }
 
             TextField input = new TextField(value);
@@ -1220,7 +1328,8 @@ public class DashboardView implements ViewInterface {
             input.setOnMouseEntered(_ -> input.setStyle(inputStyle(true, input.isFocused())));
             input.setOnMouseExited(_ -> input.setStyle(inputStyle(false, input.isFocused())));
             input.focusedProperty().addListener((ignoredObservable, ignoredOldValue, newVal) -> input.setStyle(inputStyle(false, newVal)));
-            row.getChildren().addAll(lbl, input);
+            installLiveValidation(input, liveHint, entityLabel, label);
+            row.getChildren().addAll(lbl, input, liveHint);
         } else {
             Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
             val.setFill(textSecondaryColor());
@@ -1236,6 +1345,207 @@ public class DashboardView implements ViewInterface {
             row.getChildren().addAll(lbl, box);
         }
         return row;
+    }
+
+    private Label modalLiveHintLabel() {
+        Label hint = new Label("Start typing...");
+        hint.setTextFill(textMutedColor());
+        hint.setFont(Font.font(lightFont(), FontWeight.SEMI_BOLD, 10));
+        return hint;
+    }
+
+    private void installLiveValidation(TextField input, Label hint, String entityLabel, String fieldLabel) {
+        Runnable refresh = () -> updateLiveHint(hint, dashboardFieldValidationError(entityLabel, fieldLabel, input.getText()));
+        input.textProperty().addListener((obs, oldValue, newValue) -> refresh.run());
+        refresh.run();
+    }
+
+    private void installLiveValidation(ComboBox<String> input, Label hint, String entityLabel, String fieldLabel) {
+        Runnable refresh = () -> updateLiveHint(hint, dashboardFieldValidationError(entityLabel, fieldLabel, input.getValue()));
+        input.valueProperty().addListener((obs, oldValue, newValue) -> refresh.run());
+        refresh.run();
+    }
+
+    private void installLiveValidation(DatePicker input, Label hint, String entityLabel, String fieldLabel) {
+        Runnable refresh = () -> {
+            String value = input.getValue() != null ? input.getValue().toString() : input.getEditor().getText();
+            updateLiveHint(hint, dashboardFieldValidationError(entityLabel, fieldLabel, value));
+        };
+        input.valueProperty().addListener((obs, oldValue, newValue) -> refresh.run());
+        input.getEditor().textProperty().addListener((obs, oldValue, newValue) -> refresh.run());
+        refresh.run();
+    }
+
+    private void updateLiveHint(Label hint, String error) {
+        if (error == null || error.isBlank()) {
+            hint.setText("âœ“ Looks good");
+            hint.setTextFill(Color.web(accentHex()));
+            return;
+        }
+        hint.setText(error);
+        hint.setTextFill(Color.web("#ff3b30"));
+    }
+
+    private String dashboardFieldValidationError(String entityLabel, String fieldLabel, String value) {
+        String normalizedField = fieldLabel == null ? "" : fieldLabel.trim().toLowerCase();
+        String normalizedEntity = entityLabel == null ? "" : entityLabel.trim().toLowerCase();
+        String cleaned = value == null ? "" : value.trim();
+
+        if (cleaned.isEmpty()) {
+            return normalizedField.contains("image") || normalizedField.contains("avatar") ? null : "This field is required";
+        }
+
+        if (normalizedField.contains("email")) {
+            return cleaned.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$") ? null : "Invalid email format";
+        }
+
+        if (normalizedField.contains("date")) {
+            return cleaned.length() >= 8 ? null : "Date value looks incomplete";
+        }
+
+        if (normalizedField.contains("place") || normalizedField.contains("number") || normalizedField.contains("accompagnant")) {
+            try {
+                int parsed = Integer.parseInt(cleaned);
+                return parsed >= 0 ? null : "Value must be 0 or higher";
+            } catch (NumberFormatException ignored) {
+                return "Must be a numeric value";
+            }
+        }
+
+        if (normalizedField.contains("title")
+            || normalizedField.contains("name")
+            || normalizedField.contains("subject")
+            || normalizedField.contains("message")
+            || normalizedField.contains("description")) {
+            return cleaned.length() >= 3 ? null : "At least 3 characters required";
+        }
+
+        if ("user".equals(normalizedEntity) && normalizedField.contains("phone")) {
+            return cleaned.length() >= 8 ? null : "Phone looks too short";
+        }
+
+        return cleaned.length() >= 2 ? null : "At least 2 characters required";
+    }
+
+    private boolean isImageFieldLabel(String label) {
+        String normalized = label == null ? "" : label.trim().toLowerCase();
+        return normalized.contains("image") || normalized.contains("avatar");
+    }
+
+    private boolean isDateFieldLabel(String label) {
+        String normalized = label == null ? "" : label.trim().toLowerCase();
+        return normalized.contains("date") || normalized.contains("created") || normalized.contains("updated");
+    }
+
+    private LocalDate parseDateForPicker(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        try {
+            return LocalDate.parse(trimmed, DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(trimmed, DateTimeFormatter.ofPattern("MMM dd, yyyy"));
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(trimmed + ", " + LocalDate.now().getYear(), DateTimeFormatter.ofPattern("MMM dd, yyyy"));
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void styleDatePicker(DatePicker picker) {
+        picker.setEditable(true);
+        picker.setPrefHeight(36);
+        picker.setMinHeight(36);
+        picker.setMaxWidth(Double.MAX_VALUE);
+        picker.setStyle(inputStyle(false, false));
+        picker.setOnMouseEntered(_ -> picker.setStyle(inputStyle(true, picker.isFocused())));
+        picker.setOnMouseExited(_ -> picker.setStyle(inputStyle(false, picker.isFocused())));
+        picker.focusedProperty().addListener((ignoredObservable, ignoredOldValue, newVal) -> picker.setStyle(inputStyle(false, newVal)));
+    }
+
+    private List<String> eventStatusOptions(String currentValue) {
+        LinkedHashSet<String> statuses = new LinkedHashSet<>();
+        statuses.add("planifie");
+        statuses.add("en_cours");
+        statuses.add("termine");
+        statuses.add("annule");
+
+        String current = normalizeEventStatusValue(currentValue);
+        if (!current.equals("-")) {
+            statuses.add(current);
+        }
+        return new ArrayList<>(statuses);
+    }
+
+    private List<String> eventTypeOptions(String currentValue) {
+        LinkedHashSet<String> types = new LinkedHashSet<>();
+        types.add("reunion");
+        types.add("social");
+        types.add("formation");
+        types.add("maintenance");
+        types.add("culturel");
+        types.add("sportif");
+
+        String current = normalizeEventTypeValue(currentValue);
+        if (!current.equals("-")) {
+            types.add(current);
+        }
+        return new ArrayList<>(types);
+    }
+
+    private String normalizeEventTypeValue(String typeValue) {
+        if (typeValue == null || typeValue.isBlank()) {
+            return "-";
+        }
+        String token = typeValue.trim().toLowerCase().replace(' ', '_');
+        return switch (token) {
+            case "reunion", "social", "formation", "maintenance", "culturel", "sportif" -> token;
+            default -> "-";
+        };
+    }
+
+    private String formatEventTypeDisplay(String typeValue) {
+        String type = normalizeEventTypeValue(typeValue);
+        return switch (type) {
+            case "reunion" -> "Reunion";
+            case "social" -> "Social";
+            case "formation" -> "Formation";
+            case "maintenance" -> "Maintenance";
+            case "culturel" -> "Culturel";
+            case "sportif" -> "Sportif";
+            default -> "Select Type";
+        };
+    }
+
+    private String normalizeEventStatusValue(String statusValue) {
+        if (statusValue == null || statusValue.isBlank()) {
+            return "-";
+        }
+        String token = statusValue.trim().toLowerCase().replace(' ', '_');
+        return switch (token) {
+            case "planifie", "en_cours", "termine", "annule" -> token;
+            case "planned" -> "planifie";
+            case "ongoing", "in_progress" -> "en_cours";
+            case "completed" -> "termine";
+            case "cancelled" -> "annule";
+            default -> "-";
+        };
+    }
+
+    private String formatEventStatusDisplay(String statusValue) {
+        String status = normalizeEventStatusValue(statusValue);
+        return switch (status) {
+            case "planifie" -> "Planned";
+            case "en_cours" -> "In Progress";
+            case "termine" -> "Completed";
+            case "annule" -> "Cancelled";
+            default -> "Select Status";
+        };
     }
 
     private List<String> reponseUserOptions(String currentValue) {

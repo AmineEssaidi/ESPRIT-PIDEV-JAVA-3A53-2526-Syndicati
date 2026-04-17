@@ -45,6 +45,10 @@ public class CommentaireService {
     }
 
     public Integer create(String description, String image, boolean visibility, Publication publication, User user) {
+        return create(description, image, visibility, null, publication, user);
+    }
+
+    public Integer create(String description, String image, boolean visibility, LocalDateTime createdAt, Publication publication, User user) {
         ValidationResult validation = validateCreate(description, publication, user);
         if (!validation.valid) {
             System.out.println("CommentaireService.create validation failed: " + validation.message);
@@ -57,13 +61,18 @@ public class CommentaireService {
         commentaire.setVisibility(visibility);
         commentaire.setPublication(publication);
         commentaire.setUser(user);
-        commentaire.setCreatedAt(LocalDateTime.now());
-        commentaire.setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        commentaire.setCreatedAt(createdAt != null ? createdAt : now);
+        commentaire.setUpdatedAt(now);
 
         return repository.create(commentaire);
     }
 
     public boolean update(Integer id, String description, String image, Boolean visibility) {
+        return update(id, description, image, visibility, null);
+    }
+
+    public boolean update(Integer id, String description, String image, Boolean visibility, LocalDateTime createdAt) {
         if (id == null || id <= 0) {
             return false;
         }
@@ -85,6 +94,10 @@ public class CommentaireService {
 
         if (visibility != null) {
             commentaire.setVisibility(visibility);
+        }
+
+        if (createdAt != null) {
+            commentaire.setCreatedAt(createdAt);
         }
 
         commentaire.setUpdatedAt(LocalDateTime.now());

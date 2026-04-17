@@ -3,6 +3,7 @@ package com.syndicati.views.frontend.home;
 import javafx.scene.layout.*;
 import javafx.beans.binding.Bindings;
 import javafx.scene.control.ScrollPane;
+import javafx.event.ActionEvent;
 import javafx.scene.paint.Color;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -155,6 +156,8 @@ public class LandingPageView implements ViewInterface {
         // Add window bar as a separate layer on top - this ensures it's above all shadows
         root.getChildren().add(windowBar);
         StackPane.setAlignment(windowBar, Pos.TOP_LEFT);
+
+        root.addEventFilter(ActionEvent.ACTION, e -> NavigationManager.getInstance().awardInteractionXp(1));
     }
     
     public StackPane getRoot() {
@@ -167,6 +170,10 @@ public class LandingPageView implements ViewInterface {
     
     public DynamicHeader getHeader() {
         return header;
+    }
+
+    public String getCurrentPageName() {
+        return currentPageName;
     }
     
     public void navigateToProfile() {

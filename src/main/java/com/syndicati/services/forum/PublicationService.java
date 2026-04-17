@@ -44,9 +44,13 @@ public class PublicationService {
     }
 
     public Integer create(String titre, String description, String categorie, String image, User user) {
-        ValidationResult validation = validateCreate(titre, description, categorie, user);
-        if (!validation.valid) {
-            System.out.println("PublicationService.create validation failed: " + validation.message);
+        return create(titre, description, categorie, image, null, user);
+    }
+
+    public Integer create(String titre, String description, String categorie, String image, LocalDateTime dateCreation, User user) {
+        String validationError = validateCreate(titre, description, categorie, user);
+        if (validationError != null) {
+            System.out.println("PublicationService.create validation failed: " + validationError);
             return -1;
         }
 
@@ -56,12 +60,16 @@ public class PublicationService {
         publication.setCategoriePub(categorie);
         publication.setImagePub(image);
         publication.setUser(user);
-        publication.setDateCreationPub(LocalDateTime.now());
+        publication.setDateCreationPub(dateCreation != null ? dateCreation : LocalDateTime.now());
 
         return repository.create(publication);
     }
 
     public boolean update(Integer id, String titre, String description, String categorie, String image) {
+        return update(id, titre, description, categorie, image, null);
+    }
+
+    public boolean update(Integer id, String titre, String description, String categorie, String image, LocalDateTime dateCreation) {
         if (id == null || id <= 0) {
             return false;
         }
@@ -98,7 +106,9 @@ public class PublicationService {
             publication.setImagePub(image);
         }
 
-        if (publication.getDateCreationPub() == null) {
+        if (dateCreation != null) {
+            publication.setDateCreationPub(dateCreation);
+        } else if (publication.getDateCreationPub() == null) {
             publication.setDateCreationPub(LocalDateTime.now());
         }
 
@@ -112,60 +122,43 @@ public class PublicationService {
         return repository.delete(id);
     }
 
-    private ValidationResult validateCreate(String titre, String description, String categorie, User user) {
+    private String validateCreate(String titre, String description, String categorie, User user) {
         if (titre == null || titre.isBlank()) {
-            return ValidationResult.invalid("titre_pub is required");
+            return "titre_pub is required";
         }
         if (titre.length() < 5) {
-            return ValidationResult.invalid("titre_pub must be at least 5 characters");
+            return "titre_pub must be at least 5 characters";
         }
         if (titre.length() > 255) {
-            return ValidationResult.invalid("titre_pub must not exceed 255 characters");
+            return "titre_pub must not exceed 255 characters";
         }
 
         if (description == null || description.isBlank()) {
-            return ValidationResult.invalid("description_pub is required");
+            return "description_pub is required";
         }
         if (description.length() < 10) {
-            return ValidationResult.invalid("description_pub must be at least 10 characters");
+            return "description_pub must be at least 10 characters";
         }
         if (description.length() > 255) {
-            return ValidationResult.invalid("description_pub must not exceed 255 characters");
+            return "description_pub must not exceed 255 characters";
         }
 
         if (categorie == null || categorie.isBlank()) {
-            return ValidationResult.invalid("categorie_pub is required");
+            return "categorie_pub is required";
         }
         if (!Publication.CATEGORIES.contains(categorie)) {
-            return ValidationResult.invalid("Invalid publication category");
+            return "Invalid publication category";
         }
 
         if (user == null || user.getIdUser() == null || user.getIdUser() <= 0) {
-            return ValidationResult.invalid("user is required");
+            return "user is required";
         }
 
-        return ValidationResult.valid();
+        return null;
     }
 
     public PublicationRepository getRepository() {
         return repository;
     }
 
-    private static class ValidationResult {
-        final boolean valid;
-        final String message;
-
-        ValidationResult(boolean valid, String message) {
-            this.valid = valid;
-            this.message = message;
-        }
-
-        static ValidationResult valid() {
-            return new ValidationResult(true, "");
-        }
-
-        static ValidationResult invalid(String message) {
-            return new ValidationResult(false, message);
-        }
-    }
 }

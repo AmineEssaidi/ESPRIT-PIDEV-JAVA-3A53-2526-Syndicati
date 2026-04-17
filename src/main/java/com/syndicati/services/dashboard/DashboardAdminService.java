@@ -6,12 +6,25 @@ import com.syndicati.models.syndicat.Reponse;
 import com.syndicati.controllers.user.onboarding.OnboardingController;
 import com.syndicati.controllers.user.profile.ProfileController;
 import com.syndicati.controllers.user.user.UserController;
+import com.syndicati.controllers.forum.PublicationController;
+import com.syndicati.controllers.forum.CommentaireController;
+import com.syndicati.controllers.forum.ReactionController;
+import com.syndicati.controllers.evenement.EvenementController;
+import com.syndicati.controllers.evenement.ParticipationController;
 import com.syndicati.models.user.Onboarding;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
+import com.syndicati.models.forum.Publication;
+import com.syndicati.models.forum.Commentaire;
+import com.syndicati.models.forum.Reaction;
+import com.syndicati.models.evenement.Evenement;
+import com.syndicati.models.evenement.Participation;
+import com.syndicati.utils.session.SessionManager;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 
@@ -29,12 +42,22 @@ public class DashboardAdminService {
     private final ProfileController profileController;
     private final OnboardingController onboardingController;
     private final ReclamationController reclamationController;
+    private final PublicationController publicationController;
+    private final CommentaireController commentaireController;
+    private final ReactionController reactionController;
+    private final EvenementController evenementController;
+    private final ParticipationController participationController;
 
     public DashboardAdminService() {
         this.userController = new UserController();
         this.profileController = new ProfileController();
         this.onboardingController = new OnboardingController();
         this.reclamationController = new ReclamationController();
+        this.publicationController = new PublicationController();
+        this.commentaireController = new CommentaireController();
+        this.reactionController = new ReactionController();
+        this.evenementController = new EvenementController();
+        this.participationController = new ParticipationController();
     }
 
     public List<User> users() {
@@ -57,6 +80,26 @@ public class DashboardAdminService {
         return reclamationController.reponses();
     }
 
+    public List<Publication> publications() {
+        return publicationController.publications();
+    }
+
+    public List<Commentaire> commentaires() {
+        return commentaireController.commentaires();
+    }
+
+    public List<com.syndicati.models.forum.Reaction> reactions() {
+        return reactionController.reactions();
+    }
+
+    public List<Evenement> evenements() {
+        return evenementController.evenements();
+    }
+
+    public List<Participation> participations() {
+        return participationController.participations();
+    }
+
     public boolean saveEntity(String entityLabel, String mode, String[] originalRowData, VBox fields) {
         if ("User".equalsIgnoreCase(entityLabel)) {
             return saveUser(mode, originalRowData, fields);
@@ -72,6 +115,15 @@ public class DashboardAdminService {
         }
         if ("Reponse".equalsIgnoreCase(entityLabel)) {
             return saveReponse(mode, originalRowData, fields);
+        }
+        if ("Publication".equalsIgnoreCase(entityLabel)) {
+            return savePublication(mode, originalRowData, fields);
+        }
+        if ("Comment".equalsIgnoreCase(entityLabel)) {
+            return saveCommentaire(mode, originalRowData, fields);
+        }
+        if ("Event".equalsIgnoreCase(entityLabel)) {
+            return saveEvenement(mode, originalRowData, fields);
         }
         return false;
     }
@@ -89,6 +141,15 @@ public class DashboardAdminService {
         if ("Reponse".equalsIgnoreCase(entityLabel)) {
             return deleteReponse(rowData);
         }
+        if ("Publication".equalsIgnoreCase(entityLabel)) {
+            return deletePublication(rowData);
+        }
+        if ("Comment".equalsIgnoreCase(entityLabel)) {
+            return deleteCommentaire(rowData);
+        }
+        if ("Event".equalsIgnoreCase(entityLabel)) {
+            return deleteEvenement(rowData);
+        }
         return false;
     }
 
@@ -96,7 +157,7 @@ public class DashboardAdminService {
         Map<String, String> values = readEditableFieldValues(fields);
         String name = safe(values.get("Name"));
         String email = safe(values.get("Email"));
-        String role = safe(values.get("Role")).toUpperCase();
+        String role = normalizeUserRoleForPersistence(safe(values.get("Role")));
         String verifiedText = safe(values.get("Verified"));
         String statusText = safe(values.get("Status"));
 
@@ -144,6 +205,22 @@ public class DashboardAdminService {
         }
 
         return false;
+    }
+
+    private String normalizeUserRoleForPersistence(String rawRole) {
+        if (rawRole == null || rawRole.isBlank() || "-".equals(rawRole.trim())) {
+            return "-";
+        }
+
+        String token = rawRole.trim().toUpperCase().replace(' ', '_');
+        if (token.startsWith("ROLE_")) {
+            token = token.substring(5);
+        }
+
+        return switch (token) {
+            case "ADMINISTRATOR" -> "ADMIN";
+            default -> token;
+        };
     }
 
     private boolean saveProfile(String mode, String[] originalRowData, VBox fields) {
@@ -441,6 +518,359 @@ public class DashboardAdminService {
         return Optional.empty();
     }
 
+    private boolean savePublication(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        String title = safe(values.get("Title"));
+        String category = safe(values.get("Category"));
+        String description = safe(values.get("Description"));
+        String image = safe(values.get("Image"));
+        String dateText = safe(values.get("Date"));
+
+        if ("-".equals(title) || "-".equals(category) || "-".equals(description)) {
+            return false;
+        }
+        String imageValue = "-".equals(image) ? null : image;
+
+        if ("add".equals(mode)) {
+            User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+            if (currentUser == null) {
+                return false;
+            }
+
+            LocalDateTime publicationDate = "-".equals(dateText)
+                ? LocalDateTime.now()
+                : parseDateStrict(dateText).orElse(null);
+            if (publicationDate == null) {
+                return false;
+            }
+
+            Integer createdId = publicationController.publicationCreate(
+                title,
+                description,
+                category,
+                imageValue,
+                publicationDate,
+                currentUser
+            );
+            return createdId != null && createdId > 0;
+        }
+
+        if ("edit".equals(mode)) {
+            Optional<Publication> targetOpt = findPublicationByRow(originalRowData);
+            if (targetOpt.isEmpty()) {
+                return false;
+            }
+
+            Publication target = targetOpt.get();
+            if (target.getIdPublication() == null) {
+                return false;
+            }
+
+            LocalDateTime publicationDate;
+            if ("-".equals(dateText)) {
+                publicationDate = target.getDateCreationPub() != null ? target.getDateCreationPub() : LocalDateTime.now();
+            } else {
+                publicationDate = parseDateStrict(dateText).orElse(null);
+            }
+            if (publicationDate == null) {
+                return false;
+            }
+
+            return publicationController.publicationUpdate(
+                target.getIdPublication(),
+                title,
+                description,
+                category,
+                imageValue,
+                publicationDate
+            );
+        }
+
+        return false;
+    }
+
+    private boolean saveCommentaire(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        String description = safe(values.get("Description"));
+        String image = safe(values.get("Image"));
+        String dateText = safe(values.get("Date"));
+        String publicationTitle = safe(values.get("Publication"));
+        String authorDisplayName = safe(values.get("Author"));
+
+        if ("-".equals(description) || "-".equals(publicationTitle)) {
+            return false;
+        }
+        String imageValue = "-".equals(image) ? null : image;
+
+        if ("add".equals(mode)) {
+            Optional<Publication> pubOpt = findPublicationByTitle(publicationTitle);
+            Optional<User> authorOpt = findUserByDisplayName(authorDisplayName);
+            
+            if (pubOpt.isEmpty() || authorOpt.isEmpty()) {
+                return false;
+            }
+
+            LocalDateTime createdAt = "-".equals(dateText)
+                ? LocalDateTime.now()
+                : parseDateStrict(dateText).orElse(null);
+            if (createdAt == null) {
+                return false;
+            }
+
+            Integer createdId = commentaireController.commentaireCreate(
+                description,
+                imageValue,
+                true,
+                createdAt,
+                pubOpt.get(),
+                authorOpt.get()
+            );
+            return createdId != null && createdId > 0;
+        }
+
+        if ("edit".equals(mode)) {
+            Optional<Commentaire> targetOpt = findCommentaireByRow(originalRowData);
+            if (targetOpt.isEmpty()) {
+                return false;
+            }
+
+            Commentaire target = targetOpt.get();
+            if (target.getIdCommentaire() == null) {
+                return false;
+            }
+
+            LocalDateTime createdAt;
+            if ("-".equals(dateText)) {
+                createdAt = target.getCreatedAt() != null ? target.getCreatedAt() : LocalDateTime.now();
+            } else {
+                createdAt = parseDateStrict(dateText).orElse(null);
+            }
+            if (createdAt == null) {
+                return false;
+            }
+
+            return commentaireController.commentaireUpdate(
+                target.getIdCommentaire(),
+                description,
+                imageValue,
+                target.isVisibility(),
+                createdAt
+            );
+        }
+
+        return false;
+    }
+
+    private boolean deletePublication(String[] rowData) {
+        Optional<Publication> targetOpt = findPublicationByRow(rowData);
+        if (targetOpt.isEmpty() || targetOpt.get().getIdPublication() == null) {
+            return false;
+        }
+        return publicationController.publicationDelete(targetOpt.get().getIdPublication());
+    }
+
+    private boolean deleteCommentaire(String[] rowData) {
+        Optional<Commentaire> targetOpt = findCommentaireByRow(rowData);
+        if (targetOpt.isEmpty() || targetOpt.get().getIdCommentaire() == null) {
+            return false;
+        }
+        return commentaireController.commentaireDelete(targetOpt.get().getIdCommentaire());
+    }
+
+    private boolean saveEvenement(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        String title = safe(values.get("Title"));
+        String type = safe(values.get("Type")).toLowerCase();
+        String description = safe(values.get("Description"));
+        String dateText = safe(values.get("Date"));
+        String location = safe(values.get("Location"));
+        String totalPlacesText = safe(values.get("Total Places"));
+        String availablePlacesText = safe(values.get("Available Places"));
+        String image = safe(values.get("Image"));
+
+        if ("-".equals(title) || "-".equals(type) || "-".equals(description) || "-".equals(dateText) || "-".equals(location)) {
+            return false;
+        }
+
+        Optional<LocalDateTime> dateOpt = parseDateStrict(dateText);
+        if (dateOpt.isEmpty()) {
+            return false;
+        }
+
+        Integer totalPlaces = parseIntOrNull(totalPlacesText, null);
+        Integer availablePlaces = parseIntOrNull(availablePlacesText, null);
+        if (totalPlaces == null || availablePlaces == null) {
+            return false;
+        }
+        if (totalPlaces < 0 || availablePlaces < 0 || availablePlaces > totalPlaces) {
+            return false;
+        }
+
+        String imageValue = "-".equals(image) ? null : image;
+
+        if ("add".equals(mode)) {
+            User currentUser = SessionManager.getInstance().getCurrentUser();
+            if (currentUser == null) {
+                return false;
+            }
+
+            Integer createdId = evenementController.evenementCreate(
+                title,
+                description,
+                dateOpt.get(),
+                location,
+                totalPlaces,
+                type,
+                imageValue,
+                currentUser
+            );
+
+            if (createdId == null || createdId <= 0) {
+                return false;
+            }
+
+            return evenementController.evenementUpdateForDashboard(
+                createdId,
+                title,
+                description,
+                dateOpt.get(),
+                location,
+                totalPlaces,
+                availablePlaces,
+                type,
+                imageValue
+            );
+        }
+
+        if ("edit".equals(mode)) {
+            Optional<Evenement> targetOpt = findEvenementByRow(originalRowData);
+            if (targetOpt.isEmpty() || targetOpt.get().getIdEvent() == null) {
+                return false;
+            }
+
+            return evenementController.evenementUpdateForDashboard(
+                targetOpt.get().getIdEvent(),
+                title,
+                description,
+                dateOpt.get(),
+                location,
+                totalPlaces,
+                availablePlaces,
+                type,
+                imageValue
+            );
+        }
+
+        return false;
+    }
+
+    private boolean deleteEvenement(String[] rowData) {
+        Optional<Evenement> targetOpt = findEvenementByRow(rowData);
+        if (targetOpt.isEmpty() || targetOpt.get().getIdEvent() == null) {
+            return false;
+        }
+        return evenementController.evenementDelete(targetOpt.get().getIdEvent());
+    }
+
+    private Optional<Evenement> findEvenementByRow(String[] originalRowData) {
+        if (originalRowData == null || originalRowData.length < 5) {
+            return Optional.empty();
+        }
+
+        String rowTitle = safe(originalRowData[0]);
+        String rowType = safe(originalRowData[1]);
+        String rowDate = safe(originalRowData[3]);
+        String rowLocation = safe(originalRowData[4]);
+
+        for (Evenement event : evenementController.evenements()) {
+            String eventTitle = safe(event.getTitreEvent());
+            String eventType = safe(event.getTypeEvent());
+            String eventDate = event.getDateEvent() != null ? event.getDateEvent().toLocalDate().toString() : "-";
+            String eventLocation = safe(event.getLieuEvent());
+
+            if (eventTitle.equals(rowTitle)
+                && eventType.equals(rowType)
+                && eventDate.equals(rowDate)
+                && eventLocation.equals(rowLocation)) {
+                return Optional.of(event);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Publication> findPublicationByRow(String[] originalRowData) {
+        if (originalRowData == null || originalRowData.length < 5) {
+            return Optional.empty();
+        }
+
+        String rowTitle = safe(originalRowData[0]);
+        String rowCategory = safe(originalRowData[1]);
+        String rowDescription = safe(originalRowData[2]);
+        String rowDate = safe(originalRowData[4]);
+
+        for (Publication pub : publicationController.publications()) {
+            String pubTitle = safe(pub.getTitrePub());
+            String pubCategory = safe(pub.getCategoriePub());
+            String pubDescription = safe(pub.getDescriptionPub());
+            String pubDate = pub.getDateCreationPub() != null ? pub.getDateCreationPub().toLocalDate().toString() : "-";
+            if (pubTitle.equals(rowTitle)
+                && pubCategory.equals(rowCategory)
+                && pubDescription.equals(rowDescription)
+                && pubDate.equals(rowDate)) {
+                return Optional.of(pub);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Publication> findPublicationByTitle(String title) {
+        String normalized = safe(title);
+        if ("-".equals(normalized)) {
+            return Optional.empty();
+        }
+
+        for (Publication pub : publicationController.publications()) {
+            if (safe(pub.getTitrePub()).equals(normalized)) {
+                return Optional.of(pub);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Commentaire> findCommentaireByRow(String[] originalRowData) {
+        if (originalRowData == null || originalRowData.length < 5) {
+            return Optional.empty();
+        }
+
+        String rowPublication = safe(originalRowData[0]);
+        String rowAuthor = safe(originalRowData[1]);
+        String rowDescription = safe(originalRowData[2]);
+        String rowImage = safe(originalRowData[3]);
+        String rowDate = safe(originalRowData[4]);
+
+        for (Commentaire comment : commentaireController.commentaires()) {
+            String commentPub = comment.getPublication() != null ? safe(comment.getPublication().getTitrePub()) : "Unknown";
+            String commentAuthor = comment.getUser() != null ? safe(comment.getUser().getFirstName()) + " " + safe(comment.getUser().getLastName()) : "Unknown";
+            String commentDescription = safe(comment.getDescriptionCommentaire());
+            String commentImage = safe(comment.getImageCommentaire());
+            String commentDate = comment.getCreatedAt() != null ? comment.getCreatedAt().toLocalDate().toString() : "-";
+            commentAuthor = commentAuthor.trim();
+
+            if (commentPub.equals(rowPublication)
+                && commentAuthor.equals(rowAuthor)
+                && commentDescription.equals(rowDescription)
+                && commentImage.equals(rowImage)
+                && commentDate.equals(rowDate)) {
+                return Optional.of(comment);
+            }
+        }
+
+        return Optional.empty();
+    }
+
     private String toReponseTableMessage(String message) {
         String normalized = safe(message);
         if (normalized.length() > 50) {
@@ -490,6 +920,19 @@ public class DashboardAdminService {
             return LocalDate.parse(normalized).atStartOfDay();
         } catch (DateTimeParseException e) {
             return LocalDateTime.now();
+        }
+    }
+
+    private Optional<LocalDateTime> parseDateStrict(String dateValue) {
+        String normalized = safe(dateValue);
+        if ("-".equals(normalized)) {
+            return Optional.empty();
+        }
+
+        try {
+            return Optional.of(LocalDate.parse(normalized).atStartOfDay());
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
         }
     }
 
@@ -578,6 +1021,28 @@ public class DashboardAdminService {
                 String label = ((Text) labelNode).getText();
                 Object selected = ((ComboBox<?>) inputNode).getValue();
                 values.put(label, selected == null ? "" : selected.toString());
+                continue;
+            }
+            if (labelNode instanceof Text && inputNode instanceof DatePicker) {
+                String label = ((Text) labelNode).getText();
+                DatePicker picker = (DatePicker) inputNode;
+                values.put(label, picker.getValue() == null ? picker.getEditor().getText() : picker.getValue().toString());
+                continue;
+            }
+            if (labelNode instanceof Text && inputNode instanceof HBox) {
+                String label = ((Text) labelNode).getText();
+                HBox rowInput = (HBox) inputNode;
+                for (Node child : rowInput.getChildren()) {
+                    if (child instanceof TextField) {
+                        values.put(label, ((TextField) child).getText());
+                        break;
+                    }
+                    if (child instanceof DatePicker) {
+                        DatePicker picker = (DatePicker) child;
+                        values.put(label, picker.getValue() == null ? picker.getEditor().getText() : picker.getValue().toString());
+                        break;
+                    }
+                }
             }
         }
         return values;

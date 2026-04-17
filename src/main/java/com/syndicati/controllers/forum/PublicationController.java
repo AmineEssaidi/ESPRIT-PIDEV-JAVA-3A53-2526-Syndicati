@@ -3,6 +3,7 @@ package com.syndicati.controllers.forum;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.User;
 import com.syndicati.services.forum.PublicationService;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,8 +38,16 @@ public class PublicationController {
         return publicationService.create(titre, description, categorie, image, user);
     }
 
+    public Integer publicationCreate(String titre, String description, String categorie, String image, LocalDateTime dateCreation, User user) {
+        return publicationService.create(titre, description, categorie, image, dateCreation, user);
+    }
+
     public boolean publicationUpdate(Integer id, String titre, String description, String categorie, String image) {
         return publicationService.update(id, titre, description, categorie, image);
+    }
+
+    public boolean publicationUpdate(Integer id, String titre, String description, String categorie, String image, LocalDateTime dateCreation) {
+        return publicationService.update(id, titre, description, categorie, image, dateCreation);
     }
 
     public boolean publicationDelete(Integer id) {

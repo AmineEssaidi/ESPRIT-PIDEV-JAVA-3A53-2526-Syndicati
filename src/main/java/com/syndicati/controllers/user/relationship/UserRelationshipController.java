@@ -65,4 +65,12 @@ public class UserRelationshipController {
     public boolean canConnect(int currentUserId, int targetUserId) {
         return relationshipService.canConnect(currentUserId, targetUserId);
     }
+
+    public boolean removeConnection(int currentUserId, int otherUserId) {
+        return relationshipService.removeConnection(currentUserId, otherUserId);
+    }
+
+    public boolean cancelOutgoingRequest(int senderUserId, int recipientUserId) {
+        return relationshipService.cancelOutgoingRequest(senderUserId, recipientUserId);
+    }
 }
