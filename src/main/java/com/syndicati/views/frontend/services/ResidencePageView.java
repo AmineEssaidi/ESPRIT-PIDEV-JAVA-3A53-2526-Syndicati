@@ -2,10 +2,10 @@ package com.syndicati.views.frontend.services;
 
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
-import com.syndicati.models.entities.Appartement;
-import com.syndicati.models.entities.Residence;
-import com.syndicati.models.services.ServiceAppartement;
-import com.syndicati.models.services.ServiceResidence;
+import com.syndicati.models.residence.Appartement;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.services.residence.ServiceAppartement;
+import com.syndicati.services.residence.ServiceResidence;
 import com.syndicati.utils.theme.ThemeManager;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

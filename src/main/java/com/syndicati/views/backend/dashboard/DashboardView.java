@@ -1,10 +1,15 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.backend.users.UserController;
-import com.syndicati.models.entities.*;
-import com.syndicati.models.services.ServiceAppartement;
-import com.syndicati.models.services.ServiceMaintenance;
-import com.syndicati.models.services.ServiceResidence;
+import com.syndicati.controllers.users.UserController;
+import com.syndicati.models.residence.Appartement;
+import com.syndicati.models.residence.Maintenance;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.services.residence.ServiceAppartement;
+import com.syndicati.services.residence.ServiceMaintenance;
+import com.syndicati.services.residence.ServiceResidence;
+import com.syndicati.models.user.Onboarding;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.User;
 import javafx.application.Platform;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;

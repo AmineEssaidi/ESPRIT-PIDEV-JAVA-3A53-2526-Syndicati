@@ -1,10 +1,10 @@
 package com.syndicati.views.frontend.home;
 
-import com.syndicati.models.entities.Onboarding;
-import com.syndicati.models.entities.Profile;
-import com.syndicati.models.entities.User;
-import com.syndicati.models.services.OnboardingService;
-import com.syndicati.models.services.ProfileService;
+import com.syndicati.models.user.Onboarding;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.User;
+import com.syndicati.services.user.OnboardingService;
+import com.syndicati.services.user.ProfileService;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.geometry.Insets;

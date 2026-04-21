@@ -1,13 +1,13 @@
 package com.syndicati.components.shared;
 
 import com.syndicati.MainApplication;
-import com.syndicati.models.entities.Profile;
-import com.syndicati.models.entities.User;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.User;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
-import com.syndicati.models.services.ProfileService;
+import com.syndicati.services.user.ProfileService;
 import javafx.animation.PauseTransition;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -34,9 +34,6 @@ import javafx.util.Duration;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public class DynamicHeader {
 

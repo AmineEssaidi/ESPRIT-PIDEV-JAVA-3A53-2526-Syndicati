@@ -1,9 +1,10 @@
 package com.syndicati.views.frontend.login;
 
-import com.syndicati.controllers.frontend.auth.AuthController;
+import com.syndicati.controllers.users.auth.AuthController;
+import com.syndicati.services.user.UserService;
 import com.syndicati.utils.session.SessionManager;
-import com.syndicati.models.services.ProfileService;
-import com.syndicati.models.entities.User;
+import com.syndicati.services.user.ProfileService;
+import com.syndicati.models.user.User;
 import com.syndicati.services.biometric.RealCameraService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -20,8 +21,6 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.scene.Parent;
-import javafx.scene.Node;
-import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.animation.AnimationTimer;
 import com.syndicati.interfaces.ViewInterface;
@@ -1198,8 +1197,8 @@ public class LoginView implements ViewInterface {
             
             // Check if email already exists (basic check)
             if (valid && !trimmed.isEmpty()) {
-                java.util.Optional<com.syndicati.models.entities.User> existing = 
-                    new com.syndicati.models.services.UserService().findByEmail(trimmed);
+                java.util.Optional<User> existing =
+                    new UserService().findByEmail(trimmed);
                 if (existing.isPresent()) {
                     valid = false;
                     message = "Email already registered";
@@ -1637,8 +1636,8 @@ public class LoginView implements ViewInterface {
             errors.add("Please enter a valid email address");
         } else {
             // Check for duplicate email
-            java.util.Optional<com.syndicati.models.entities.User> existing = 
-                new com.syndicati.models.services.UserService().findByEmail(email);
+            java.util.Optional<User> existing =
+                new UserService().findByEmail(email);
             if (existing.isPresent()) {
                 errors.add("Email is already registered");
             }
@@ -1978,7 +1977,7 @@ public class LoginView implements ViewInterface {
         if ("admin".equals(username) && "admin".equals(password)) {
             loginSuccessFired = true;
             // Store dummy admin user in session for header profile
-            com.syndicati.models.entities.User adminUser = new com.syndicati.models.entities.User();
+            User adminUser = new User();
             adminUser.setFirstName("Admin");
             adminUser.setLastName("");
             adminUser.setEmailUser("admin@syndicati.tn");
@@ -2650,7 +2649,7 @@ public class LoginView implements ViewInterface {
                     Thread.sleep(1000);
 
                     // Fetch actual user from database
-                    Optional<User> authenticatedUserOpt = new com.syndicati.models.services.UserService().findByEmail(email);
+                    Optional<User> authenticatedUserOpt = new UserService().findByEmail(email);
                     
                     if (!authenticatedUserOpt.isPresent()) {
                         javafx.application.Platform.runLater(() -> {

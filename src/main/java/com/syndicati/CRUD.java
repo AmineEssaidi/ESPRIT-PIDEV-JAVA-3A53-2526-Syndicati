@@ -1,11 +1,9 @@
 package com.syndicati;
 
-import com.syndicati.models.entities.Appartement;
-import com.syndicati.models.entities.Residence;
-import com.syndicati.models.entities.Maintenance;
-import com.syndicati.models.services.ServiceAppartement;
-import com.syndicati.models.services.ServiceResidence;
-import com.syndicati.models.services.ServiceMaintenance;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.services.residence.ServiceAppartement;
+import com.syndicati.services.residence.ServiceResidence;
+import com.syndicati.services.residence.ServiceMaintenance;
 
 import java.sql.SQLDataException;
 import java.sql.SQLException;

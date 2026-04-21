@@ -1,11 +1,10 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.backend.residence.DetailAppartementController;
-import com.syndicati.models.entities.Appartement;
-import com.syndicati.models.entities.Maintenance;
-import com.syndicati.models.services.ServiceAppartement;
-import com.syndicati.models.services.ServiceMaintenance;
-import com.syndicati.models.services.ServiceResidence;
+import com.syndicati.controllers.residence.DetailAppartementController;
+import com.syndicati.models.residence.Appartement;
+import com.syndicati.models.residence.Maintenance;
+import com.syndicati.services.residence.ServiceMaintenance;
+import com.syndicati.services.residence.ServiceResidence;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -21,8 +20,6 @@ import javafx.stage.Stage;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.sql.SQLDataException;
 
 public class AppartementShow extends BaseDashboardPage {
@@ -148,9 +145,6 @@ public class AppartementShow extends BaseDashboardPage {
                 throw new RuntimeException(e);
             }
             System.out.println(appartement.getId_app());
-
-            System.out.println("Maintenance trouve: "+maintenance.toString());
-
             card.getChildren().add(detailSection("Etat de l'appartement"));
             card.getChildren().add(detailSection("Maintenance"));
 

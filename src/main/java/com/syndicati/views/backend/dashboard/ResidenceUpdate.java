@@ -1,8 +1,8 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.backend.residence.ModifierResidenceController;
-import com.syndicati.models.entities.Residence;
-import com.syndicati.models.services.ServiceResidence;
+import com.syndicati.controllers.residence.ModifierResidenceController;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.services.residence.ServiceResidence;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;

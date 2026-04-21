@@ -1,7 +1,7 @@
 package com.syndicati.utils.session;
 
-import com.syndicati.models.entities.User;
-import com.syndicati.models.entities.Profile;
+import com.syndicati.models.user.User;
+import com.syndicati.models.user.Profile;
 
 /**
  * Session manager to track the currently logged-in user.

@@ -1,11 +1,11 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.backend.residence.AjouterAppartementController;
-import com.syndicati.models.entities.Maintenance;
-import com.syndicati.models.entities.Residence;
-import com.syndicati.models.services.ServiceAppartement;
-import com.syndicati.models.services.ServiceMaintenance;
-import com.syndicati.models.services.ServiceResidence;
+import com.syndicati.controllers.residence.AjouterAppartementController;
+import com.syndicati.models.residence.Maintenance;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.services.residence.ServiceAppartement;
+import com.syndicati.services.residence.ServiceMaintenance;
+import com.syndicati.services.residence.ServiceResidence;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
