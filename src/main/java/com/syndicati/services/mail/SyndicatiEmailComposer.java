@@ -41,9 +41,9 @@ public final class SyndicatiEmailComposer {
             "<div style='margin-top:25px;padding:20px;background:rgba(0,0,0,0.4);border-radius:16px;border-left:4px solid #ff4b5c;'>" +
             "<p style='margin:0;font-size:14px;color:rgba(255,255,255,0.7);line-height:1.6;'><strong>Warning:</strong> For your security, this code will expire in 15 minutes.</p>" +
             "</div>" +
-            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Neural Network • Advanced Identity Protection</p>";
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Neural Network - Advanced Identity Protection</p>";
 
-        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Protocol: AUTH-2FA-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " • Encrypted Transmission</p>";
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Protocol: AUTH-2FA-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " - Encrypted Transmission</p>";
         return wrap(body, footerExtra);
     }
 
@@ -63,9 +63,9 @@ public final class SyndicatiEmailComposer {
             "</div>" +
             "</div>" +
             "<div class='button-container'><a href='#' class='button'>Log In Now</a></div>" +
-            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Security Services • Threat Mitigation Unit</p>";
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Security Services - Threat Mitigation Unit</p>";
 
-        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: PWD-RST-" + DateTimeFormatter.ofPattern("HHmmss").format(LocalDateTime.now()) + " • Zero Trust Protocol</p>";
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: PWD-RST-" + DateTimeFormatter.ofPattern("HHmmss").format(LocalDateTime.now()) + " - Zero Trust Protocol</p>";
         return wrap(body, footerExtra);
     }
 
@@ -77,7 +77,7 @@ public final class SyndicatiEmailComposer {
             + "<tr><td class='content'>" + body + "</td></tr>"
             + "<tr><td class='footer'>"
             + "<p>&copy; " + DateTimeFormatter.ofPattern("yyyy").format(LocalDateTime.now()) + " Syndicati Community. All rights reserved.</p>"
-            + "<p style='letter-spacing:2px;text-transform:uppercase;font-size:10px;margin-top:15px;color:rgba(255,75,92,0.5);'>Obsidian Engine • Red Protocol</p>"
+            + "<p style='letter-spacing:2px;text-transform:uppercase;font-size:10px;margin-top:15px;color:rgba(255,75,92,0.5);'>Obsidian Engine - Red Protocol</p>"
             + footerExtra
             + "</td></tr></table></div></body></html>";
     }
@@ -98,3 +98,4 @@ public final class SyndicatiEmailComposer {
             .replace("'", "&#39;");
     }
 }
+

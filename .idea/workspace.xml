@@ -4,11 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6b87a8d-8efa-4a60-acc9-8c473dca5fba" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/CommentaireController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/CommentaireController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/PublicationController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/PublicationController.java" afterDir="false" />
-    </list>
+    <list default="true" id="c6b87a8d-8efa-4a60-acc9-8c473dca5fba" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -64,11 +60,11 @@
     &quot;com.codeium.enabled&quot;: &quot;true&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultAutoModeForALLUsers.v1&quot;: &quot;true&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;Forum&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;User&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/wamp64/www/ESPRIT-PIDEV-JAVA-3A53-2526-Syndicati&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/amine/OneDrive/Desktop/ESPRIT-PIDEV-JAVA-3A53-2526-Syndicati&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
@@ -139,7 +135,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-jdk-30f59d01ecdd-2fc7cc6b9a17-intellij.indexing.shared.core-IU-253.30387.90" />
+        <option value="bundled-jdk-30f59d01ecdd-2fc7cc6b9a17-intellij.indexing.shared.core-IU-253.31033.145" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-IU-253.31033.145" />
       </set>
     </attachedChunks>
   </component>
@@ -205,6 +202,9 @@
       <workItem from="1775631202765" duration="12438000" />
       <workItem from="1775808788826" duration="4791000" />
       <workItem from="1775818747704" duration="579000" />
+      <workItem from="1776082600871" duration="461000" />
+      <workItem from="1776237311210" duration="9705000" />
+      <workItem from="1776326855371" duration="54003000" />
     </task>
     <servers />
   </component>

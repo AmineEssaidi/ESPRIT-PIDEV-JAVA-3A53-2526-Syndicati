@@ -126,7 +126,7 @@ public class ConnectionController {
         
         // Log status change
         if (statusChanged) {
-            System.out.println("ðŸ”„ Database connection status changed: " + (connected ? "Connected" : "Offline"));
+            System.out.println("[INFO] Database connection status changed: " + (connected ? "Connected" : "Offline"));
         } else {
             System.out.println("Database connection status: " + (connected ? "Connected" : "Offline"));
         }
@@ -213,4 +213,5 @@ public class ConnectionController {
         }
     }
 }
+
 

@@ -1,11 +1,11 @@
 package com.syndicati.controllers.biometric;
 
-import com.syndicati.models.entities.biometric.FaceCredential;
-import com.syndicati.models.entities.User;
-import com.syndicati.models.repositories.FaceCredentialRepository;
+import com.syndicati.models.biometric.FaceCredential;
+import com.syndicati.models.user.User;
+import com.syndicati.models.biometric.data.FaceCredentialRepository;
 import com.syndicati.services.security.FaceEncryptionService;
 import com.syndicati.utils.session.SessionManager;
-import com.syndicati.models.services.UserService;
+import com.syndicati.services.user.user.UserService;
 
 import java.net.InetAddress;
 import java.time.LocalDateTime;
@@ -346,3 +346,4 @@ public class FaceController {
         return deviceId.trim();
     }
 }
+

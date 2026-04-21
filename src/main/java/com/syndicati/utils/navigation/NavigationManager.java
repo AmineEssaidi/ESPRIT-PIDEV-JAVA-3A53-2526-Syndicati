@@ -14,6 +14,7 @@ import com.syndicati.views.frontend.services.ForumPageView;
 import com.syndicati.views.frontend.services.SyndicatPageView;
 import com.syndicati.views.frontend.services.EvenementPageView;
 import com.syndicati.utils.security.AccessControlService;
+import com.syndicati.utils.session.SessionManager;
 import javafx.scene.control.Alert;
 
 /**
@@ -118,6 +119,10 @@ public class NavigationManager {
         if (evenementView == null) evenementView = new EvenementPageView();
         return evenementView;
     }
+
+    public void awardInteractionXp(int xpDelta) {
+        SessionManager.getInstance().awardXp(xpDelta);
+    }
     
     public Pane getPage(String pageName) {
         switch (pageName.toLowerCase()) {
@@ -128,7 +133,8 @@ public class NavigationManager {
             case "about":
                 return aboutView().getRoot();
             case "profile":
-                return profileView().getRoot();
+                profileView = new ProfileView();
+                return profileView.getRoot();
             case "dashboard":
                 return dashboardView().getRoot();
             case "service-detail":
@@ -178,6 +184,12 @@ public class NavigationManager {
         alert.setTitle("Access Denied");
         alert.setHeaderText("Permission Required");
         alert.setContentText(message);
+        if (landingPageView != null) {
+            Pane root = landingPageView.getRoot();
+            if (root != null && root.getScene() != null && root.getScene().getWindow() != null) {
+                alert.initOwner(root.getScene().getWindow());
+            }
+        }
         alert.showAndWait();
     }
 
@@ -186,4 +198,5 @@ public class NavigationManager {
         return dashboardView();
     }
 }
+
 
