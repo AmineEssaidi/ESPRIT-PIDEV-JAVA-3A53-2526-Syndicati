@@ -31,6 +31,7 @@ public class MainApplication extends Application {
     private javafx.animation.Timeline loginChecker; // Keep reference to stop it later
     private String boldFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private String lightFontFamily = "Clash Grotesk"; // default name in case load resolves differently
+    private boolean windowChromeListenerInstalled = false;
     
     @Override
     public void start(Stage primaryStage) {
@@ -55,6 +56,9 @@ public class MainApplication extends Application {
         // Set up theme manager
         ThemeManager themeManager = ThemeManager.getInstance();
         themeManager.setScene(scene);
+
+        installWindowChromeListener();
+        applyRoundedShape(scene);
         
         // Start database connection monitoring
         com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
@@ -512,7 +516,30 @@ public class MainApplication extends Application {
     }
     
     private void applyRoundedShape(Scene scene) {
-        // Create rounded rectangle clip for the scene root
+        updateWindowClip(scene, primaryStage != null && primaryStage.isMaximized());
+    }
+
+    private void installWindowChromeListener() {
+        if (windowChromeListenerInstalled || primaryStage == null) {
+            return;
+        }
+
+        primaryStage.maximizedProperty().addListener((observable, oldValue, maximized) -> {
+            updateWindowClip(primaryStage.getScene(), maximized);
+        });
+        windowChromeListenerInstalled = true;
+    }
+
+    private void updateWindowClip(Scene scene, boolean maximized) {
+        if (scene == null || scene.getRoot() == null) {
+            return;
+        }
+
+        if (maximized) {
+            scene.getRoot().setClip(null);
+            return;
+        }
+
         javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
         clip.setArcWidth(20);
         clip.setArcHeight(20);
