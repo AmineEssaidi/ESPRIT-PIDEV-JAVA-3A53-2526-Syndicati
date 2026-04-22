@@ -104,9 +104,9 @@ public class DashboardView implements ViewInterface {
     String accentGradient() { return theme().getEffectiveAccentGradient(); }
     String accentRgba(double alpha) { return theme().toRgba(accentHex(), alpha); }
     boolean isDark() { return theme().isDarkMode(); }
-    private Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
-    private Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
-    private Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
+    Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
+    Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
+    Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
 
     String currentDisplayName() {
         User user = SessionManager.getInstance().getCurrentUser();
@@ -370,7 +370,31 @@ public class DashboardView implements ViewInterface {
     // GENERAL section
     VBox buildGeneralSection() {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
-        VBox subContent = new VBox(20); subContent.setFillWidth(true);
+        VBox moduleContent = new VBox(20); moduleContent.setFillWidth(true);
+
+        HBox topStatsBar = mainSwitcher(key -> {
+            moduleContent.getChildren().setAll(
+                "Users".equals(key)     ? buildUsersStatsDashboard() :
+                "Forum".equals(key)     ? buildForumStatsDashboard() :
+                "Syndicat".equals(key)  ? buildSyndicatStatsDashboard() :
+                "Residence".equals(key) ? buildResidenceStatsDashboard() :
+                "Evenement".equals(key) ? buildEvenementStatsDashboard() :
+                buildGeneralStatsModule()
+            );
+        });
+
+        moduleContent.getChildren().add(buildGeneralStatsModule());
+        s.getChildren().addAll(topStatsBar, moduleContent);
+        return s;
+    }
+
+    private VBox buildGeneralStatsModule() {
+        VBox wrap = new VBox(20);
+        wrap.setFillWidth(true);
+
+        VBox subContent = new VBox(20);
+        subContent.setFillWidth(true);
+
         HBox subBar = subTabBar(new String[]{"Overview", "Engagement", "System"}, key -> {
             subContent.getChildren().setAll(
                 "Engagement".equals(key) ? buildEngagementContent() :
@@ -378,18 +402,25 @@ public class DashboardView implements ViewInterface {
                 buildGeneralOverview()
             );
         });
+
         subContent.getChildren().add(buildGeneralOverview());
-        s.getChildren().addAll(mainSwitcher(), subBar, subContent);
-        return s;
+        wrap.getChildren().addAll(subBar, subContent);
+        return wrap;
     }
 
     private VBox buildGeneralOverview() {
         VBox v = new VBox(20); v.setFillWidth(true);
         HBox stats = new HBox(16); stats.setFillHeight(true);
+        Map<String, Integer> heartbeat = dashboardAdminService.activityHeartbeat();
         addStatCards(stats,
             new String[]{"USR","OK","ACT","PLS"},
             new String[]{"Total Residents","Active Today","Interactions Today","Community Pulse"},
-            new String[]{"1,247","84","502","38"},
+            new String[]{
+                String.valueOf(heartbeat.getOrDefault("total_users", 0)),
+                String.valueOf(heartbeat.getOrDefault("active_today", 0)),
+                String.valueOf(heartbeat.getOrDefault("interactions_today", 0)),
+                String.valueOf(heartbeat.getOrDefault("active_week", 0))
+            },
             new String[]{"#a78bfa","#34d399","#60a5fa","#fbbf24"}
         );
         HBox grid = new HBox(16); grid.setFillHeight(true);
@@ -401,43 +432,255 @@ public class DashboardView implements ViewInterface {
     }
 
     private VBox buildEngagementContent() {
-        VBox rows = new VBox(10);
-        String[][] pages = {
-            {"1","#a78bfa","/frontend/home",      "284 views"},
-            {"2","#60a5fa","/frontend/forum",     "211 views"},
-            {"3","#34d399","/frontend/profile",   "183 views"},
-            {"4","#fbbf24","/frontend/evenement", "124 views"},
-            {"5","#f87171","/admin/dashboard",    "98 views"}
-        };
-        for (String[] p : pages) {
-            rows.getChildren().add(buildRowCard(p[1], p[2], p[3], p[0], 10));
+        VBox rows = new VBox(16);
+        List<String[]> pages = dashboardAdminService.topPages();
+        if (pages.isEmpty()) {
+            pages = new ArrayList<>();
+            pages.add(new String[]{"/frontend/home", "284"});
+            pages.add(new String[]{"/frontend/forum", "211"});
+            pages.add(new String[]{"/frontend/profile", "183"});
+        }
+        for (int i = 0; i < pages.size(); i++) {
+            String[] p = pages.get(i);
+            rows.getChildren().add(buildRowCard(i == 0 ? "#a78bfa" : i == 1 ? "#60a5fa" : "#34d399", p[0], p[1] + " views", String.valueOf(i + 1), 10));
         }
         VBox card = sectionCard();
         card.getChildren().addAll(t("Top Pages - Most Visited Routes", boldFont(), FontWeight.BOLD, 18), rows);
-        return new VBox(card);
+
+        VBox arrivals = sectionCard();
+        arrivals.getChildren().add(t("Recent Arrivals", boldFont(), FontWeight.BOLD, 18));
+        List<User> recentUsers = dashboardAdminService.recentSignups(5);
+        if (recentUsers.isEmpty()) {
+            arrivals.getChildren().add(buildRowCard("#60a5fa", "No recent signups", "-", null, 8));
+        } else {
+            for (User u : recentUsers) {
+                String fullName = (safe(u.getFirstName()) + " " + safe(u.getLastName())).trim();
+                String role = safe(u.getRoleUser());
+                String joined = u.getCreatedAt() == null ? "-" : u.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd"));
+                arrivals.getChildren().add(buildRowCard("#60a5fa", fullName + " • " + role, joined, null, 8));
+            }
+        }
+
+        return new VBox(16, card, arrivals);
     }
 
     private VBox buildSystemContent() {
-        HBox stats = new HBox(16); stats.setFillHeight(true);
-        addStatCards(stats,
-            new String[]{"SRV","DB","RT","PRC"},
-            new String[]{"Server Status","DB Size","Avg Response","Active Processes"},
-            new String[]{"Online","248 MB","124 ms","7"},
-            new String[]{"#34d399","#60a5fa","#a78bfa","#fbbf24"}
-        );
         VBox logs = new VBox(8);
-        for (String[] ev : new String[][]{
-            {"#34d399","Mar 12 09:14","User admin logged in"},
-            {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
-            {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"},
-            {"#34d399","Mar 11 22:00","Cache cleared successfully"},
-            {"#fbbf24","Mar 11 20:18","New user registration: Karim S."}
-        }) {
-            logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
+        List<com.syndicati.models.log.AppEventLog> recent = dashboardAdminService.recentActivityLogs(5);
+        if (recent.isEmpty()) {
+            for (String[] ev : new String[][]{
+                {"#34d399","Mar 12 09:14","User admin logged in"},
+                {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
+                {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"}
+            }) {
+                logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
+            }
+        } else {
+            for (com.syndicati.models.log.AppEventLog ev : recent) {
+                String actor = ev.getUser() == null ? "Anonymous" : safe(ev.getUser().getFirstName()) + " " + safe(ev.getUser().getLastName());
+                String label = safe(ev.getEventType()) + " • " + safe(ev.getEntityType()) + " • " + actor.trim();
+                String when = ev.getCreatedAt() == null ? "-" : ev.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd HH:mm"));
+                logs.getChildren().add(buildRowCard("#34d399", label, when, null, 8));
+            }
         }
         VBox logCard = sectionCard();
-        logCard.getChildren().addAll(t("Recent System Events", boldFont(), FontWeight.BOLD, 18), logs);
-        return new VBox(20, stats, logCard);
+        logCard.getChildren().addAll(t("Live Navigation Log", boldFont(), FontWeight.BOLD, 18), logs);
+
+        VBox deviceCard = sectionCard();
+        deviceCard.getChildren().add(t("System Access (Last 30 Days)", boldFont(), FontWeight.BOLD, 18));
+        List<String[]> deviceRows = dashboardAdminService.deviceBreakdown();
+        if (deviceRows.isEmpty()) {
+            deviceCard.getChildren().add(buildRowCard("#34d399", "No device data", "-", null, 8));
+        } else {
+            for (String[] row : deviceRows) {
+                deviceCard.getChildren().add(buildRowCard("#34d399", safe(row[0]), safe(row[1]) + "%", null, 8));
+            }
+        }
+
+        HBox grid = new HBox(16, logCard, deviceCard);
+        HBox.setHgrow(logCard, Priority.ALWAYS);
+        HBox.setHgrow(deviceCard, Priority.ALWAYS);
+        return new VBox(20, grid);
+    }
+
+    private VBox buildUsersStatsDashboard() {
+        Map<String, Object> stats = dashboardAdminService.getModuleStats("users");
+        VBox wrap = new VBox(16);
+        HBox cards = new HBox(16);
+        cards.setFillHeight(true);
+        addStatCards(cards,
+            new String[]{"TOT", "VER", "ACT", "ROL"},
+            new String[]{"Total Users", "Verified", "Active This Week", "Roles"},
+            new String[]{
+                String.valueOf(intStat(stats, "total")),
+                String.valueOf(intStat(stats, "verified")),
+                String.valueOf(intStat(stats, "active_this_week")),
+                String.valueOf(roleCount(stats))
+            },
+            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
+        );
+
+        VBox recent = sectionCard();
+        recent.getChildren().add(t("Recent Users", boldFont(), FontWeight.BOLD, 18));
+        List<String[]> rows = listStat(stats, "recent_users");
+        if (rows.isEmpty()) {
+            recent.getChildren().add(buildRowCard("#60a5fa", "No users", "-", null, 8));
+        } else {
+            for (String[] row : rows) {
+                String name = safe(cell(row, 0)) + " " + safe(cell(row, 1));
+                recent.getChildren().add(buildRowCard("#60a5fa", name.trim() + " • " + safe(cell(row, 2)), safe(cell(row, 3)), null, 8));
+            }
+        }
+
+        wrap.getChildren().addAll(cards, recent);
+        return wrap;
+    }
+
+    private VBox buildForumStatsDashboard() {
+        Map<String, Object> stats = dashboardAdminService.getModuleStats("forum");
+        VBox wrap = new VBox(16);
+        HBox cards = new HBox(16);
+        cards.setFillHeight(true);
+        addStatCards(cards,
+            new String[]{"PUB", "COM", "TOD", "AUT"},
+            new String[]{"Publications", "Comments", "Today", "Top Authors"},
+            new String[]{
+                String.valueOf(intStat(stats, "publications")),
+                String.valueOf(intStat(stats, "comments")),
+                String.valueOf(intStat(stats, "pubs_today")),
+                String.valueOf(listStat(stats, "top_authors").size())
+            },
+            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
+        );
+
+        VBox topAuthors = sectionCard();
+        topAuthors.getChildren().add(t("Top Authors", boldFont(), FontWeight.BOLD, 18));
+        for (String[] row : listStat(stats, "top_authors")) {
+            String name = safe(cell(row, 0)) + " " + safe(cell(row, 1));
+            topAuthors.getChildren().add(buildRowCard("#a78bfa", name.trim(), safe(cell(row, 2)) + " posts", null, 8));
+        }
+
+        VBox recent = sectionCard();
+        recent.getChildren().add(t("Recent Publications", boldFont(), FontWeight.BOLD, 18));
+        for (String[] row : listStat(stats, "recent_pubs")) {
+            String author = safe(cell(row, 3)) + " " + safe(cell(row, 4));
+            recent.getChildren().add(buildRowCard("#34d399", safe(cell(row, 0)) + " • " + author.trim(), safe(cell(row, 2)), null, 8));
+        }
+
+        wrap.getChildren().addAll(cards, topAuthors, recent);
+        return wrap;
+    }
+
+    private VBox buildSyndicatStatsDashboard() {
+        Map<String, Object> stats = dashboardAdminService.getModuleStats("syndicat");
+        VBox wrap = new VBox(16);
+        HBox cards = new HBox(16);
+        cards.setFillHeight(true);
+        addStatCards(cards,
+            new String[]{"SYN", "REC", "PND", "REP"},
+            new String[]{"Syndics", "Reclamations", "Pending", "Responses"},
+            new String[]{
+                String.valueOf(intStat(stats, "total")),
+                String.valueOf(intStat(stats, "reclamations")),
+                String.valueOf(intStat(stats, "reclamations_pending")),
+                String.valueOf(intStat(stats, "reponses"))
+            },
+            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
+        );
+
+        VBox recent = sectionCard();
+        recent.getChildren().add(t("Recent Reclamations", boldFont(), FontWeight.BOLD, 18));
+        for (String[] row : listStat(stats, "recent_reclamations")) {
+            recent.getChildren().add(buildRowCard("#34d399", safe(cell(row, 0)), safe(cell(row, 2)), null, 8));
+        }
+
+        wrap.getChildren().addAll(cards, recent);
+        return wrap;
+    }
+
+    private VBox buildResidenceStatsDashboard() {
+        Map<String, Object> stats = dashboardAdminService.getModuleStats("residence");
+        VBox wrap = new VBox(16);
+        HBox cards = new HBox(16);
+        cards.setFillHeight(true);
+        addStatCards(cards,
+            new String[]{"RES", "BUI", "APT", "REC"},
+            new String[]{"Residents", "Residences", "Appartements", "Recent"},
+            new String[]{
+                String.valueOf(intStat(stats, "total")),
+                String.valueOf(intStat(stats, "residences")),
+                String.valueOf(intStat(stats, "appartements")),
+                String.valueOf(listStat(stats, "recent_residences").size())
+            },
+            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
+        );
+
+        VBox recent = sectionCard();
+        recent.getChildren().add(t("Recent Residences", boldFont(), FontWeight.BOLD, 18));
+        for (String[] row : listStat(stats, "recent_residences")) {
+            recent.getChildren().add(buildRowCard("#60a5fa", safe(cell(row, 0)), safe(cell(row, 2)), null, 8));
+        }
+
+        wrap.getChildren().addAll(cards, recent);
+        return wrap;
+    }
+
+    private VBox buildEvenementStatsDashboard() {
+        Map<String, Object> stats = dashboardAdminService.getModuleStats("evenement");
+        VBox wrap = new VBox(16);
+        HBox cards = new HBox(16);
+        cards.setFillHeight(true);
+        addStatCards(cards,
+            new String[]{"EVT", "UPC", "PAR", "REC"},
+            new String[]{"Events", "Upcoming", "Participations", "Recent"},
+            new String[]{
+                String.valueOf(intStat(stats, "total")),
+                String.valueOf(intStat(stats, "upcoming")),
+                String.valueOf(intStat(stats, "participations")),
+                String.valueOf(listStat(stats, "recent_events").size())
+            },
+            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
+        );
+
+        VBox recent = sectionCard();
+        recent.getChildren().add(t("Recent Events", boldFont(), FontWeight.BOLD, 18));
+        for (String[] row : listStat(stats, "recent_events")) {
+            recent.getChildren().add(buildRowCard("#34d399", safe(cell(row, 0)), safe(cell(row, 3)) + " • " + safe(cell(row, 2)), null, 8));
+        }
+
+        wrap.getChildren().addAll(cards, recent);
+        return wrap;
+    }
+
+    private VBox buildSignalsContent() {
+        VBox rows = new VBox(16);
+
+        VBox topClicksCard = sectionCard();
+        topClicksCard.getChildren().add(t("Top UI Click Signals", boldFont(), FontWeight.BOLD, 18));
+        List<String[]> clicks = dashboardAdminService.topClicks();
+        if (clicks.isEmpty()) {
+            clicks = new ArrayList<>();
+            clicks.add(new String[]{"Explore Events", "button#explore", "34"});
+            clicks.add(new String[]{"Join", "button#join", "22"});
+            clicks.add(new String[]{"Profile", "nav#profile", "17"});
+        }
+        for (int i = 0; i < clicks.size(); i++) {
+            String[] row = clicks.get(i);
+            String label = safe(row[0]) + " • " + safe(row[1]);
+            String count = safe(row[2]) + " clicks";
+            topClicksCard.getChildren().add(buildRowCard(i == 0 ? "#a78bfa" : i == 1 ? "#34d399" : "#60a5fa", label, count, String.valueOf(i + 1), 10));
+        }
+
+        VBox devicesCard = sectionCard();
+        devicesCard.getChildren().add(t("Device & Browser Breakdown", boldFont(), FontWeight.BOLD, 18));
+        for (String[] row : dashboardAdminService.deviceBreakdown()) {
+            String metricLabel = safe(row[0]);
+            String pct = safe(row[1]) + "%";
+            devicesCard.getChildren().add(buildRowCard("#fbbf24", metricLabel, pct, null, 8));
+        }
+
+        rows.getChildren().addAll(topClicksCard, devicesCard);
+        return rows;
     }
 
     private HBox buildRowCard(String color, String title, String value, String index, int radius) {
@@ -470,20 +713,36 @@ public class DashboardView implements ViewInterface {
     private VBox buildActivityChart() {
         VBox card = sectionCard();
         Text title = t("Activity Pulse", boldFont(), FontWeight.BOLD, 15); title.setFill(textPrimaryColor());
-        Text sub   = t("Page Views â–   UI Clicks â–   â€” Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
+        Text sub   = t("Page Views | UI Clicks | Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
         sub.setFill(textMutedColor());
+
+        Map<String, Integer> community = dashboardAdminService.communityStats();
+        int newPosts = community.getOrDefault("new_posts", 0);
+        int newEvents = community.getOrDefault("new_events", 0);
+        int totalCommunity = newPosts + newEvents;
 
         HBox cw = new HBox(8); cw.setAlignment(Pos.BOTTOM_LEFT);
         cw.setPrefHeight(140); cw.setPadding(new Insets(8,0,0,0));
-        String[] days  = {"MON","TUE","WED","THU","FRI","SAT","SUN"};
-        int[] views    = {65,82,58,90,74,45,60};
-        int[] clicks   = {42,55,38,70,52,30,44};
-        for (int i = 0; i < days.length; i++) {
+        List<String[]> trends = dashboardAdminService.interactionTrends();
+        if (trends.isEmpty()) {
+            trends = new ArrayList<>();
+            trends.add(new String[]{"MON", "65", "42"});
+            trends.add(new String[]{"TUE", "82", "55"});
+            trends.add(new String[]{"WED", "58", "38"});
+            trends.add(new String[]{"THU", "90", "70"});
+            trends.add(new String[]{"FRI", "74", "52"});
+            trends.add(new String[]{"SAT", "45", "30"});
+            trends.add(new String[]{"SUN", "60", "44"});
+        }
+
+        for (String[] trend : trends) {
             VBox col = new VBox(4); col.setAlignment(Pos.BOTTOM_CENTER);
             HBox.setHgrow(col, Priority.ALWAYS);
             HBox pair = new HBox(3); pair.setAlignment(Pos.BOTTOM_CENTER);
-            pair.getChildren().addAll(barR(Math.max(8, views[i]*120/100), "#a78bfa"), barR(Math.max(8, clicks[i]*120/100), "#34d399"));
-            Text d = t(days[i], lightFont(), FontWeight.NORMAL, 11); d.setFill(textMutedColor());
+            int views = parseInt(trend, 1);
+            int clicks = parseInt(trend, 2);
+            pair.getChildren().addAll(barR(Math.max(8, views * 2), "#a78bfa"), barR(Math.max(8, clicks * 2), "#34d399"));
+            Text d = t(trend[0], lightFont(), FontWeight.NORMAL, 11); d.setFill(textMutedColor());
             col.getChildren().addAll(pair, d);
             cw.getChildren().add(col);
         }
@@ -491,9 +750,9 @@ public class DashboardView implements ViewInterface {
         footer.setPadding(new Insets(10,0,0,0));
         footer.setStyle("-fx-border-color:rgba(255,255,255,0.06);-fx-border-width:1 0 0 0;");
         footer.getChildren().addAll(
-            metric("P","New Posts","+12","#a78bfa"),
-            metric("E","New Events","+5","#34d399"),
-            metric("G","Engagement","High","#60a5fa")
+            metric("P","New Posts","+" + newPosts,"#a78bfa"),
+            metric("E","New Events","+" + newEvents,"#34d399"),
+            metric("G","Community Pulse",String.valueOf(totalCommunity),"#60a5fa")
         );
         card.getChildren().addAll(title, sub, cw, footer);
         return card;
@@ -503,22 +762,26 @@ public class DashboardView implements ViewInterface {
         VBox card = sectionCard();
         Text title = t("â­  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
         VBox list = new VBox(6);
-        for (String[] u : new String[][]{
-            {"Ahmed B.","SYNDIC","142"}, {"Leila M.","RESIDENT","118"},
-            {"Karim S.","ADMIN","95"},   {"Sara A.","RESIDENT","87"},
-            {"Omar Z.","SYNDIC","76"}
-        }) {
+        List<String[]> users = dashboardAdminService.topUsers();
+        if (users.isEmpty()) {
+            users = new ArrayList<>();
+            users.add(new String[]{"Ahmed", "B.", "SYNDIC", "142"});
+            users.add(new String[]{"Leila", "M.", "RESIDENT", "118"});
+            users.add(new String[]{"Karim", "S.", "ADMIN", "95"});
+        }
+        for (String[] u : users) {
             HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
             row.setPadding(new Insets(6,8,6,8));
             row.setStyle("-fx-background-color:rgba(255,255,255,0.025);-fx-background-radius:8;");
-            Text ini = t(u[0].substring(0,1), boldFont(), FontWeight.BOLD, 14); ini.setFill(Color.web("#fbbf24"));
+            Text ini = t((u[0] == null || u[0].isBlank()) ? "U" : u[0].substring(0, 1), boldFont(), FontWeight.BOLD, 14); ini.setFill(Color.web("#fbbf24"));
             StackPane av = new StackPane(ini); av.setPrefSize(32,32);
             av.setStyle("-fx-background-color:rgba(251,191,36,0.15);-fx-background-radius:16;");
             VBox info = new VBox(1); HBox.setHgrow(info, Priority.ALWAYS);
-            Text nm = t(u[0], lightFont(), FontWeight.NORMAL, 14); nm.setFill(textSecondaryColor());
-            Text rl = t(u[1], lightFont(), FontWeight.NORMAL, 12); rl.setFill(Color.web("#fbbf24"));
+            String fullName = (u[0] + " " + u[1]).trim();
+            Text nm = t(fullName, lightFont(), FontWeight.NORMAL, 14); nm.setFill(textSecondaryColor());
+            Text rl = t(u[2], lightFont(), FontWeight.NORMAL, 12); rl.setFill(Color.web("#fbbf24"));
             info.getChildren().addAll(nm, rl);
-            Text pts = t(u[2], boldFont(), FontWeight.BOLD, 13); pts.setFill(textPrimaryColor());
+            Text pts = t(u[3], boldFont(), FontWeight.BOLD, 13); pts.setFill(textPrimaryColor());
             row.getChildren().addAll(av, info, pts);
             list.getChildren().add(row);
         }
@@ -1888,7 +2151,7 @@ public class DashboardView implements ViewInterface {
         return b;
     }
 
-    private HBox mainSwitcher() {
+    private HBox mainSwitcher(Consumer<String> onSelect) {
         HBox c = new HBox(); c.setAlignment(Pos.CENTER);
         HBox pill = createPill(
             0,
@@ -1897,14 +2160,16 @@ public class DashboardView implements ViewInterface {
             isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.14)",
             100
         );
-        String[] labels   = {"General","Users","Forum","Syndicat","Residence","Evenement"};
-        String[] sections = {"general","users","forum","syndicat","residence","evenement"};
-        for (int i = 0; i < labels.length; i++) {
-            final String sec = sections[i];
-            Button tab = new Button(labels[i]);
+
+        String[] labels = {"General", "Users", "Forum", "Syndicat", "Residence", "Evenement"};
+        List<Button> tabs = new ArrayList<>();
+        final String[] activeLabel = {labels[0]};
+
+        for (String label : labels) {
+            Button tab = new Button(label);
             tab.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
             tab.setPadding(new Insets(8,18,8,18));
-            boolean active = sec.equals(activeSection);
+            boolean active = label.equals(activeLabel[0]);
             String background = active ? accentGradient() : "transparent";
             String textColor = active ? "white" : (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.74)");
             tab.setStyle(
@@ -1913,9 +2178,25 @@ public class DashboardView implements ViewInterface {
                 "-fx-text-fill:" + textColor + ";" +
                 "-fx-cursor:hand;"
             );
-            tab.setOnAction(_ -> switchSection(sec));
+
+            tab.setOnAction(_ -> {
+                activeLabel[0] = label;
+                for (Button b : tabs) {
+                    boolean isActive = b == tab;
+                    b.setStyle(
+                        "-fx-background-color:" + (isActive ? accentGradient() : "transparent") + ";" +
+                        "-fx-background-radius:100px;" +
+                        "-fx-text-fill:" + (isActive ? "white" : (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.74)")) + ";" +
+                        "-fx-cursor:hand;"
+                    );
+                }
+                onSelect.accept(label);
+            });
+
+            tabs.add(tab);
             pill.getChildren().add(tab);
         }
+
         c.getChildren().add(pill);
         return c;
     }
@@ -2037,7 +2318,7 @@ public class DashboardView implements ViewInterface {
         );
     }
 
-    private VBox sectionCard() {
+    VBox sectionCard() {
         return glassCard();
     }
 
@@ -2061,7 +2342,7 @@ public class DashboardView implements ViewInterface {
         }
     }
 
-    private HBox metric(String icon, String label, String val, String color) {
+    HBox metric(String icon, String label, String val, String color) {
         HBox row = new HBox(6); row.setAlignment(Pos.CENTER_LEFT);
         Text ic = new Text(icon); ic.setFont(Font.font(13));
         Text lb = t(label, lightFont(), FontWeight.NORMAL, 13); lb.setFill(textMutedColor());
@@ -2070,10 +2351,66 @@ public class DashboardView implements ViewInterface {
         return row;
     }
 
-    private Region barR(int h, String color) {
+    Region barR(int h, String color) {
         Region r = new Region(); r.setPrefWidth(12); r.setPrefHeight(h);
         r.setStyle("-fx-background-color:"+color+";-fx-background-radius:4 4 0 0;");
         return r;
+    }
+
+    VBox buildEmptyState(String message) {
+        VBox box = sectionCard();
+        Text text = t(message, lightFont(), FontWeight.NORMAL, 13);
+        text.setFill(textMutedColor());
+        box.getChildren().add(text);
+        return box;
+    }
+
+    private int parseInt(String[] row, int index) {
+        if (row == null || index < 0 || index >= row.length) {
+            return 0;
+        }
+
+        try {
+            return Integer.parseInt(row[index]);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private int intStat(Map<String, Object> stats, String key) {
+        Object value = stats.get(key);
+        if (value instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return value == null ? 0 : Integer.parseInt(String.valueOf(value));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String[]> listStat(Map<String, Object> stats, String key) {
+        Object value = stats.get(key);
+        if (value instanceof List<?>) {
+            return (List<String[]>) value;
+        }
+        return new ArrayList<>();
+    }
+
+    private int roleCount(Map<String, Object> stats) {
+        Object value = stats.get("roles");
+        if (value instanceof Map<?, ?> roles) {
+            return roles.size();
+        }
+        return 0;
+    }
+
+    private String cell(String[] row, int index) {
+        if (row == null || index < 0 || index >= row.length || row[index] == null || row[index].isBlank()) {
+            return "-";
+        }
+        return row[index];
     }
 
     Text t(String s, String family, FontWeight w, double size) {

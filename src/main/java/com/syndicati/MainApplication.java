@@ -10,6 +10,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.scene.text.Font;
 import com.syndicati.utils.security.AccessControlService;
+import com.syndicati.controllers.log.ActivityLogController;
 import com.syndicati.views.frontend.home.AdminDestinationChoiceView;
 import com.syndicati.views.frontend.home.LandingPageView;
 import com.syndicati.views.frontend.login.LoginView;
@@ -32,6 +33,7 @@ public class MainApplication extends Application {
     private String boldFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private String lightFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private boolean windowChromeListenerInstalled = false;
+    private final ActivityLogController activityLogController = new ActivityLogController();
     
     @Override
     public void start(Stage primaryStage) {
@@ -168,6 +170,9 @@ public class MainApplication extends Application {
             return;
         }
 
+        activityLogController.logPageView("landing_page", "Landing Page", java.util.Map.of(
+            "source", "login_success"
+        ));
         showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
         System.out.println("[OK] Successfully navigated to landing page.");
     }
@@ -233,6 +238,10 @@ public class MainApplication extends Application {
         addResizeHandlers(primaryStage, scene);
         applyRoundedShape(scene);
         primaryStage.show();
+
+        activityLogController.logPageView("admin_destination_choice", "Admin Destination Choice", java.util.Map.of(
+            "source", "login_success"
+        ));
     }
 
     private void showLandingPage(
@@ -291,6 +300,11 @@ public class MainApplication extends Application {
         addResizeHandlers(primaryStage, scene);
         applyRoundedShape(scene);
         primaryStage.show();
+
+        activityLogController.logPageView(goToDashboard ? "admin_dashboard" : "landing_dashboard", "Dashboard", java.util.Map.of(
+            "source", "scene_switch",
+            "dashboard_mode", goToDashboard ? "admin" : "community"
+        ));
 
         javafx.application.Platform.runLater(() -> {
             landingPageView.getRoot().layout();
@@ -472,6 +486,10 @@ public class MainApplication extends Application {
         
         // Show stage
         primaryStage.show();
+
+        activityLogController.logPageView("login_page", "Login Page", java.util.Map.of(
+            "source", "logout"
+        ));
         
         // Avoid forcing additional size/layout passes here; media-backed backgrounds
         // are initialized asynchronously and can be disrupted by immediate re-scaling.
