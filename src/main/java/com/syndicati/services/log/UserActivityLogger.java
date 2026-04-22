@@ -4,17 +4,20 @@ import com.syndicati.models.log.AppEventLog;
 import com.syndicati.models.log.data.AppEventLogRepository;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
+import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class UserActivityLogger {
 
     private final AppEventLogRepository repository;
     private final LogBuffer logBuffer;
+    private final String runtimeSessionId;
 
     public UserActivityLogger() {
         this(new AppEventLogRepository(), new LogBuffer());
@@ -23,15 +26,36 @@ public class UserActivityLogger {
     public UserActivityLogger(AppEventLogRepository repository, LogBuffer logBuffer) {
         this.repository = repository;
         this.logBuffer = logBuffer;
+        this.runtimeSessionId = UUID.randomUUID().toString();
     }
 
     public void log(String eventType, String entityType, Integer entityId, Map<String, Object> metadata, User user) {
         try {
+            Map<String, Object> data = enrichMetadata(metadata);
             AppEventLog log = new AppEventLog();
+            log.setEventId(asString(data.get("event_id"), UUID.randomUUID().toString()));
+            log.setSessionId(asString(data.get("session_id"), runtimeSessionId));
+            log.setRequestId(asString(data.get("request_id"), UUID.randomUUID().toString()));
+            log.setTraceId(asString(data.get("trace_id"), randomHex(32)));
+            log.setSpanId(asString(data.get("span_id"), randomHex(16)));
             log.setEventType(eventType);
+            log.setCategory(asString(data.get("category"), "USER_ACTIVITY"));
+            log.setAction(asString(data.get("action"), eventType));
+            log.setOutcome(asString(data.get("outcome"), "SUCCESS"));
+            log.setMessage(asString(data.get("message"), null));
+            log.setIpAddress(asString(data.get("ip_address"), hostAddress()));
+            log.setUserAgent(asString(data.get("user_agent"), System.getProperty("http.agent")));
+            log.setDurationMs(parseInteger(data.get("duration_ms")));
+            log.setRiskScore(parseDecimal(data.get("risk_score")));
+            log.setAnomalyScore(parseDecimal(data.get("anomaly_score")));
             log.setEntityType(entityType);
             log.setEntityId(entityId);
-            log.setMetadataJson(toJson(enrichMetadata(metadata)));
+            log.setMetadataJson(toJson(data));
+            log.setEventTimestamp(LocalDateTime.now());
+            log.setLevel(asString(data.get("level"), "INFO"));
+            log.setServiceName(asString(data.get("service_name"), "SyndicatiDesktop"));
+            log.setEnvironment(asString(data.get("environment"), defaultEnvironment()));
+            log.setApplicationVersion(asString(data.get("application_version"), System.getProperty("app.version", "dev")));
 
             User resolvedUser = user != null ? user : SessionManager.getInstance().getCurrentUser();
             if (resolvedUser != null && resolvedUser.getIdUser() != null && resolvedUser.getIdUser() > 0) {
@@ -98,6 +122,19 @@ public class UserActivityLogger {
         }
     }
 
+    private String hostAddress() {
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (UnknownHostException e) {
+            return null;
+        }
+    }
+
+    private String defaultEnvironment() {
+        String env = System.getenv("APP_ENV");
+        return env == null || env.isBlank() ? "desktop" : env;
+    }
+
     private String toJson(Map<String, Object> data) {
         StringBuilder json = new StringBuilder("{");
         boolean first = true;
@@ -124,5 +161,52 @@ public class UserActivityLogger {
 
     private String escape(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private String asString(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? fallback : text;
+    }
+
+    private Integer parseInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private BigDecimal parseDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        try {
+            return new BigDecimal(String.valueOf(value));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String randomHex(int length) {
+        if (length <= 0) {
+            return "";
+        }
+        String hex = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        return hex.substring(0, Math.min(length, hex.length()));
     }
 }

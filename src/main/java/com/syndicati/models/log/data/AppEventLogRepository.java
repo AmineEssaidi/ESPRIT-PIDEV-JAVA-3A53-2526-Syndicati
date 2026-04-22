@@ -4,16 +4,21 @@ import com.syndicati.models.log.AppEventLog;
 import com.syndicati.models.user.User;
 import com.syndicati.models.user.data.UserRepository;
 import com.syndicati.services.DatabaseService;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public class AppEventLogRepository {
 
@@ -30,7 +35,15 @@ public class AppEventLogRepository {
             return -1;
         }
 
-        String sql = "INSERT INTO app_event_log (user_id, event_type, entity_type, entity_id, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?)";
+        String sql = """
+            INSERT INTO app_event_log (
+                event_id, user_id, session_id, request_id, trace_id, span_id,
+                event_type, category, action, outcome, message, ip_address, user_agent,
+                duration_ms, risk_score, anomaly_score,
+                entity_type, entity_id, metadata, created_at, event_timestamp,
+                level, service_name, environment, application_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
 
         try (Connection conn = databaseService.getConnection()) {
             if (conn == null) {
@@ -38,21 +51,63 @@ public class AppEventLogRepository {
             }
 
             try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                String eventId = log.getEventId();
+                if (eventId == null || eventId.isBlank()) {
+                    eventId = UUID.randomUUID().toString();
+                    log.setEventId(eventId);
+                }
+                ps.setString(1, eventId);
+
                 if (log.getUser() != null && log.getUser().getIdUser() != null) {
-                    ps.setInt(1, log.getUser().getIdUser());
+                    ps.setInt(2, log.getUser().getIdUser());
                 } else {
-                    ps.setNull(1, java.sql.Types.INTEGER);
+                    ps.setNull(2, java.sql.Types.INTEGER);
                 }
-                ps.setString(2, log.getEventType());
-                ps.setString(3, log.getEntityType());
+                setNullableString(ps, 3, log.getSessionId());
+                setNullableString(ps, 4, log.getRequestId());
+                setNullableString(ps, 5, log.getTraceId());
+                setNullableString(ps, 6, log.getSpanId());
+
+                ps.setString(7, log.getEventType());
+                setNullableString(ps, 8, log.getCategory());
+                setNullableString(ps, 9, log.getAction());
+                setNullableString(ps, 10, log.getOutcome());
+                setNullableString(ps, 11, log.getMessage());
+                setNullableIp(ps, 12, log.getIpAddress());
+                setNullableString(ps, 13, log.getUserAgent());
+
+                if (log.getDurationMs() != null) {
+                    ps.setInt(14, log.getDurationMs());
+                } else {
+                    ps.setNull(14, java.sql.Types.INTEGER);
+                }
+                if (log.getRiskScore() != null) {
+                    ps.setBigDecimal(15, log.getRiskScore());
+                } else {
+                    ps.setNull(15, java.sql.Types.DECIMAL);
+                }
+                if (log.getAnomalyScore() != null) {
+                    ps.setBigDecimal(16, log.getAnomalyScore());
+                } else {
+                    ps.setNull(16, java.sql.Types.DECIMAL);
+                }
+
+                ps.setString(17, log.getEntityType());
                 if (log.getEntityId() != null) {
-                    ps.setInt(4, log.getEntityId());
+                    ps.setInt(18, log.getEntityId());
                 } else {
-                    ps.setNull(4, java.sql.Types.INTEGER);
+                    ps.setNull(18, java.sql.Types.INTEGER);
                 }
-                ps.setString(5, log.getMetadataJson());
+                ps.setString(19, log.getMetadataJson());
                 LocalDateTime createdAt = log.getCreatedAt() != null ? log.getCreatedAt() : LocalDateTime.now();
-                ps.setTimestamp(6, Timestamp.valueOf(createdAt));
+                LocalDateTime eventTimestamp = log.getEventTimestamp() != null ? log.getEventTimestamp() : createdAt;
+                ps.setTimestamp(20, Timestamp.valueOf(createdAt));
+                ps.setTimestamp(21, Timestamp.valueOf(eventTimestamp));
+
+                ps.setString(22, log.getLevel() == null || log.getLevel().isBlank() ? "INFO" : log.getLevel());
+                setNullableString(ps, 23, log.getServiceName());
+                setNullableString(ps, 24, log.getEnvironment());
+                setNullableString(ps, 25, log.getApplicationVersion());
 
                 int affected = ps.executeUpdate();
                 if (affected == 0) {
@@ -64,6 +119,7 @@ public class AppEventLogRepository {
                         int id = keys.getInt(1);
                         log.setId((long) id);
                         log.setCreatedAt(createdAt);
+                        log.setEventTimestamp(eventTimestamp);
                         return id;
                     }
                 }
@@ -378,9 +434,9 @@ public class AppEventLogRepository {
 
     public List<String[]> fetchDeviceBreakdown(LocalDateTime since) {
         String sql = """
-            SELECT JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.user_agent')) AS ua
+            SELECT COALESCE(user_agent, JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.user_agent'))) AS ua
             FROM app_event_log
-            WHERE created_at >= ? AND JSON_EXTRACT(metadata, '$.user_agent') IS NOT NULL
+            WHERE created_at >= ?
             """;
 
         int desktop = 0;
@@ -445,10 +501,139 @@ public class AppEventLogRepository {
         return rows;
     }
 
+    public List<String[]> fetchOutcomeBreakdown(LocalDateTime since) {
+        String sql = """
+            SELECT COALESCE(outcome, 'UNKNOWN') AS outcome, COUNT(*) AS cnt
+            FROM app_event_log
+            WHERE created_at >= ?
+            GROUP BY COALESCE(outcome, 'UNKNOWN')
+            ORDER BY cnt DESC
+            """;
+        return fetchLabelCountRows(sql, since);
+    }
+
+    public List<String[]> fetchLevelBreakdown(LocalDateTime since) {
+        String sql = """
+            SELECT COALESCE(level, 'INFO') AS level, COUNT(*) AS cnt
+            FROM app_event_log
+            WHERE created_at >= ?
+            GROUP BY COALESCE(level, 'INFO')
+            ORDER BY cnt DESC
+            """;
+        return fetchLabelCountRows(sql, since);
+    }
+
+    public List<String[]> fetchRiskSignals(int limit) {
+        String sql = """
+            SELECT event_type,
+                   COALESCE(outcome, 'UNKNOWN') AS outcome,
+                   COALESCE(risk_score, 0) AS risk_score,
+                   COALESCE(anomaly_score, 0) AS anomaly_score,
+                   COALESCE(duration_ms, 0) AS duration_ms,
+                   COALESCE(level, 'INFO') AS level,
+                   COALESCE(service_name, '-') AS service_name,
+                   COALESCE(environment, '-') AS environment,
+                   created_at
+            FROM app_event_log
+            ORDER BY COALESCE(risk_score, 0) DESC, COALESCE(anomaly_score, 0) DESC, created_at DESC
+            LIMIT ?
+            """;
+
+        List<String[]> rows = new ArrayList<>();
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return rows;
+            }
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        rows.add(new String[]{
+                            rs.getString("event_type"),
+                            rs.getString("outcome"),
+                            rs.getString("risk_score"),
+                            rs.getString("anomaly_score"),
+                            rs.getString("duration_ms"),
+                            rs.getString("level"),
+                            rs.getString("service_name"),
+                            rs.getString("environment"),
+                            String.valueOf(rs.getTimestamp("created_at"))
+                        });
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.fetchRiskSignals error: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    private List<String[]> fetchLabelCountRows(String sql, LocalDateTime since) {
+        List<String[]> rows = new ArrayList<>();
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return rows;
+            }
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setTimestamp(1, Timestamp.valueOf(since));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        rows.add(new String[]{
+                            rs.getString(1),
+                            String.valueOf(rs.getInt(2))
+                        });
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.fetchLabelCountRows error: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    private void setNullableString(PreparedStatement ps, int index, String value) throws SQLException {
+        if (value == null || value.isBlank()) {
+            ps.setNull(index, java.sql.Types.VARCHAR);
+            return;
+        }
+        ps.setString(index, value);
+    }
+
+    private void setNullableIp(PreparedStatement ps, int index, String ipAddress) throws SQLException {
+        if (ipAddress == null || ipAddress.isBlank()) {
+            ps.setNull(index, java.sql.Types.VARBINARY);
+            return;
+        }
+        try {
+            ps.setBytes(index, InetAddress.getByName(ipAddress).getAddress());
+        } catch (UnknownHostException e) {
+            ps.setNull(index, java.sql.Types.VARBINARY);
+        }
+    }
+
     private AppEventLog mapRow(ResultSet rs) throws SQLException {
         AppEventLog log = new AppEventLog();
         log.setId(rs.getLong("id"));
+        log.setEventId(rs.getString("event_id"));
+        log.setSessionId(rs.getString("session_id"));
+        log.setRequestId(rs.getString("request_id"));
+        log.setTraceId(rs.getString("trace_id"));
+        log.setSpanId(rs.getString("span_id"));
         log.setEventType(rs.getString("event_type"));
+        log.setCategory(rs.getString("category"));
+        log.setAction(rs.getString("action"));
+        log.setOutcome(rs.getString("outcome"));
+        log.setMessage(rs.getString("message"));
+        log.setIpAddress(ipToString(rs.getBytes("ip_address")));
+        log.setUserAgent(rs.getString("user_agent"));
+
+        int duration = rs.getInt("duration_ms");
+        if (!rs.wasNull()) {
+            log.setDurationMs(duration);
+        }
+
+        log.setRiskScore(rs.getBigDecimal("risk_score"));
+        log.setAnomalyScore(rs.getBigDecimal("anomaly_score"));
         log.setEntityType(rs.getString("entity_type"));
 
         int entityId = rs.getInt("entity_id");
@@ -464,6 +649,15 @@ public class AppEventLogRepository {
             log.setCreatedAt(createdAt.toLocalDateTime());
         }
 
+        Timestamp eventTimestamp = rs.getTimestamp("event_timestamp");
+        if (eventTimestamp != null) {
+            log.setEventTimestamp(eventTimestamp.toLocalDateTime());
+        }
+        log.setLevel(rs.getString("level"));
+        log.setServiceName(rs.getString("service_name"));
+        log.setEnvironment(rs.getString("environment"));
+        log.setApplicationVersion(rs.getString("application_version"));
+
         int userId = rs.getInt("user_id");
         if (!rs.wasNull()) {
             Optional<User> user = userRepository.findById(userId);
@@ -471,5 +665,16 @@ public class AppEventLogRepository {
         }
 
         return log;
+    }
+
+    private String ipToString(byte[] raw) {
+        if (raw == null || raw.length == 0) {
+            return null;
+        }
+        try {
+            return InetAddress.getByAddress(raw).getHostAddress();
+        } catch (UnknownHostException e) {
+            return null;
+        }
     }
 }

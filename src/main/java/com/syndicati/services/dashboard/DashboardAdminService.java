@@ -150,6 +150,18 @@ public class DashboardAdminService {
         return appEventLogRepository.fetchDeviceBreakdown(java.time.LocalDateTime.now().minusDays(30));
     }
 
+    public List<String[]> outcomeBreakdown() {
+        return appEventLogRepository.fetchOutcomeBreakdown(LocalDateTime.now().minusDays(30));
+    }
+
+    public List<String[]> levelBreakdown() {
+        return appEventLogRepository.fetchLevelBreakdown(LocalDateTime.now().minusDays(30));
+    }
+
+    public List<String[]> riskSignals(int limit) {
+        return appEventLogRepository.fetchRiskSignals(limit);
+    }
+
     public Map<String, Integer> communityStats() {
         LocalDateTime since = LocalDateTime.now().minusDays(7);
         int newPosts = 0;

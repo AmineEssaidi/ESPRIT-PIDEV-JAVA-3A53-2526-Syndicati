@@ -82,10 +82,18 @@ final class DashboardActivitySection {
         for (AppEventLog log : logs) {
             String subject = log.getEntityType() == null ? "-" : log.getEntityType();
             String event = log.getEventType() == null ? "-" : log.getEventType();
+            String level = log.getLevel() == null ? "INFO" : log.getLevel();
+            String outcome = log.getOutcome() == null ? "UNKNOWN" : log.getOutcome();
             String actor = log.getUser() == null ? "Anonymous" : view.safe(log.getUser().getFirstName()) + " " + view.safe(log.getUser().getLastName());
             String metadata = shortMetadata(log.getMetadataJson());
-            String createdAt = log.getCreatedAt() == null ? "-" : log.getCreatedAt().format(DATE_FMT);
-            rows.add(new String[]{event, subject, actor.trim(), metadata, createdAt});
+            String createdAt = log.getEventTimestamp() == null
+                ? (log.getCreatedAt() == null ? "-" : log.getCreatedAt().format(DATE_FMT))
+                : log.getEventTimestamp().format(DATE_FMT);
+            String trace = blankOrDash(log.getTraceId());
+            String session = blankOrDash(log.getSessionId());
+            String risk = log.getRiskScore() == null ? "-" : log.getRiskScore().toPlainString();
+            String duration = log.getDurationMs() == null ? "-" : log.getDurationMs() + " ms";
+            rows.add(new String[]{event, level, outcome, subject, actor.trim(), trace, session, risk, duration, metadata, createdAt});
         }
 
         DashboardTableQueryEngine.QueryState state = new DashboardTableQueryEngine.QueryState(12);
@@ -99,7 +107,8 @@ final class DashboardActivitySection {
         String[][] filters = new String[][]{
             {"PAGE_VIEW", "Page View"},
             {"UI_CLICK", "UI Click"},
-            {"CRUD", "CRUD"},
+            {"FAILURE", "Failure"},
+            {"ERROR", "Error"},
             {"all", "All"}
         };
 
@@ -149,7 +158,19 @@ final class DashboardActivitySection {
         HBox.setHgrow(clicksCard, Priority.ALWAYS);
         HBox.setHgrow(devicesCard, Priority.ALWAYS);
 
-        wrap.getChildren().add(rows);
+        HBox advanced = new HBox(16);
+        VBox outcomesCard = signalCard(view, "Outcomes (30d)");
+        VBox levelsCard = signalCard(view, "Levels (30d)");
+        VBox riskCard = signalCard(view, "Risk Signals");
+        fillRankRows(view, outcomesCard, view.dashboardAdminService().outcomeBreakdown(), new String[]{"outcome", "count"});
+        fillRankRows(view, levelsCard, view.dashboardAdminService().levelBreakdown(), new String[]{"level", "count"});
+        fillRiskRows(view, riskCard, view.dashboardAdminService().riskSignals(5));
+        advanced.getChildren().addAll(outcomesCard, levelsCard, riskCard);
+        HBox.setHgrow(outcomesCard, Priority.ALWAYS);
+        HBox.setHgrow(levelsCard, Priority.ALWAYS);
+        HBox.setHgrow(riskCard, Priority.ALWAYS);
+
+        wrap.getChildren().addAll(rows, advanced);
         return wrap;
     }
 
@@ -240,8 +261,8 @@ final class DashboardActivitySection {
             if (filterKey == null || filterKey.isBlank() || "all".equalsIgnoreCase(filterKey)) {
                 return true;
             }
-            return row.length > 0 && row[0] != null && row[0].equalsIgnoreCase(filterKey);
-        }, 4);
+            return matchesTimelineFilter(row, filterKey);
+        }, 10);
 
         VBox table = view.sectionCard();
         table.setFillWidth(true);
@@ -266,12 +287,18 @@ final class DashboardActivitySection {
             line.setAlignment(Pos.CENTER_LEFT);
             line.setPadding(new Insets(10, 12, 10, 12));
             line.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:12px;");
+            VBox details = new VBox(2,
+                textCell(view, row[3] + " • " + row[4]),
+                metaCell(view, "trace=" + compactId(row[5]) + " • sess=" + compactId(row[6]) + " • risk=" + row[7] + " • " + row[8])
+            );
+            HBox.setHgrow(details, Priority.ALWAYS);
             line.getChildren().addAll(
                 pill(view, row[0], "#a78bfa"),
-                textCell(view, row[1]),
-                textCell(view, row[2]),
-                metaCell(view, row[3]),
-                timeCell(view, row[4])
+                pill(view, row[1], levelColor(row[1])),
+                pill(view, row[2], outcomeColor(row[2])),
+                details,
+                metaCell(view, row[9]),
+                timeCell(view, row[10])
             );
             rowsNodes.add(line);
         }
@@ -370,6 +397,14 @@ final class DashboardActivitySection {
         }
     }
 
+    private static void fillRiskRows(DashboardView view, VBox card, List<String[]> rows) {
+        for (String[] row : rows) {
+            String title = row[0] + " • " + row[1] + " • " + row[5];
+            String detail = "risk " + row[2] + " | anomaly " + row[3] + " | " + row[4] + " ms | " + row[6] + "/" + row[7];
+            card.getChildren().add(new VBox(2, textCell(view, title), metaCell(view, detail)));
+        }
+    }
+
     private static VBox buildSimpleCard(DashboardView view, String title, List<String[]> rows) {
         VBox card = view.sectionCard();
         Text heading = view.t(title, view.boldFont(), FontWeight.BOLD, 15);
@@ -432,6 +467,61 @@ final class DashboardActivitySection {
             return normalized.substring(0, 42) + "...";
         }
         return normalized;
+    }
+
+    private static String blankOrDash(String value) {
+        return (value == null || value.isBlank()) ? "-" : value;
+    }
+
+    private static boolean matchesTimelineFilter(String[] row, String filterKey) {
+        if (row == null || row.length < 3) {
+            return false;
+        }
+        String normalized = filterKey == null ? "" : filterKey.trim().toUpperCase();
+        if (normalized.isBlank() || "ALL".equals(normalized)) {
+            return true;
+        }
+        return normalized.equalsIgnoreCase(blankOrDash(row[0]))
+            || normalized.equalsIgnoreCase(blankOrDash(row[1]))
+            || normalized.equalsIgnoreCase(blankOrDash(row[2]));
+    }
+
+    private static String compactId(String value) {
+        if (value == null || value.isBlank() || "-".equals(value)) {
+            return "-";
+        }
+        if (value.length() <= 10) {
+            return value;
+        }
+        return value.substring(0, 6) + "..." + value.substring(value.length() - 4);
+    }
+
+    private static String levelColor(String level) {
+        String normalized = level == null ? "INFO" : level.toUpperCase();
+        if ("ERROR".equals(normalized)) {
+            return "#ef4444";
+        }
+        if ("WARN".equals(normalized) || "WARNING".equals(normalized)) {
+            return "#f59e0b";
+        }
+        if ("DEBUG".equals(normalized) || "TRACE".equals(normalized)) {
+            return "#60a5fa";
+        }
+        return "#34d399";
+    }
+
+    private static String outcomeColor(String outcome) {
+        String normalized = outcome == null ? "UNKNOWN" : outcome.toUpperCase();
+        if ("FAILURE".equals(normalized) || "FAILED".equals(normalized) || "ERROR".equals(normalized)) {
+            return "#ef4444";
+        }
+        if ("WARNING".equals(normalized) || "PARTIAL".equals(normalized)) {
+            return "#f59e0b";
+        }
+        if ("SUCCESS".equals(normalized) || "OK".equals(normalized)) {
+            return "#34d399";
+        }
+        return "#a78bfa";
     }
 
     private static String initial(String value) {
