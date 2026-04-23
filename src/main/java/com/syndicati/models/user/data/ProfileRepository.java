@@ -23,7 +23,11 @@ public class ProfileRepository {
     }
 
     public List<Profile> findAllByIdDesc() {
-        String sql = "SELECT * FROM profile ORDER BY id_profile DESC";
+        return findAllByIdDescWithLimit(50);
+    }
+
+    public List<Profile> findAllByIdDescWithLimit(int limit) {
+        String sql = "SELECT id_profile, user_id, avatar, theme, locale, timezone, description_profile, settings FROM profile ORDER BY id_profile DESC LIMIT ?";
         List<Profile> profiles = new ArrayList<>();
 
         try (Connection conn = databaseService.getConnection()) {
@@ -31,10 +35,12 @@ public class ProfileRepository {
                 return profiles;
             }
 
-            try (PreparedStatement ps = conn.prepareStatement(sql);
-                 ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    profiles.add(mapRow(rs));
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        profiles.add(mapRow(rs));
+                    }
                 }
             }
         } catch (SQLException e) {
@@ -45,7 +51,7 @@ public class ProfileRepository {
     }
 
     public Optional<Profile> findById(int idProfile) {
-        String sql = "SELECT * FROM profile WHERE id_profile = ?";
+        String sql = "SELECT id_profile, user_id, avatar, theme, locale, timezone, description_profile, settings FROM profile WHERE id_profile = ?";
 
         try (Connection conn = databaseService.getConnection()) {
             if (conn == null) {

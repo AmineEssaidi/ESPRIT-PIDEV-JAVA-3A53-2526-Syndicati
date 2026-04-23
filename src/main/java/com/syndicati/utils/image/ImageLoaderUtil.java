@@ -5,12 +5,20 @@ import javafx.scene.image.Image;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Utility class for loading images from various sources including the uploads folder.
- * Centralizes image loading logic for profile avatars and other images.
+ * Centralizes image loading logic with async loading and in-memory cache.
  */
 public class ImageLoaderUtil {
+
+    private static final Map<String, Image> imageCache = new LinkedHashMap<String, Image>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(Map.Entry eldest) {
+            return size() > 64; // Keep max 64 images in memory
+        }
+    };
 
     /**
      * Load an image from a relative or absolute path, URL, or resource.
@@ -20,38 +28,51 @@ public class ImageLoaderUtil {
      * - URLs: http://example.com/image.jpg, https://example.com/image.jpg
      * - Resources: /images/default.jpg
      *
+     * Uses in-memory cache to avoid reloading the same image multiple times.
+     *
      * @param imagePath Path to the image
-     * @param async Whether to load asynchronously
+     * @param async Whether to load asynchronously (recommended: true for UI thread safety)
      * @return Image object or null if image cannot be loaded
      */
     public static Image loadImage(String imagePath, boolean async) {
         if (imagePath == null || imagePath.isBlank()) {
             return null;
         }
+        
+        // Check cache first
+        if (imageCache.containsKey(imagePath)) {
+            return imageCache.get(imagePath);
+        }
 
         try {
             String candidate = imagePath.trim();
+            Image image = null;
 
             // Check if it's a URL
             if (isUrl(candidate)) {
-                return new Image(candidate, async);
-            }
+                image = new Image(candidate, async);
+            } else {
+                // Try loading from file system (relative or absolute path)
+                Path path = Paths.get(candidate);
+                if (!path.isAbsolute()) {
+                    path = Paths.get(System.getProperty("user.dir")).resolve(candidate);
+                }
 
-            // Try loading from file system (relative or absolute path)
-            Path path = Paths.get(candidate);
-            if (!path.isAbsolute()) {
-                path = Paths.get(System.getProperty("user.dir")).resolve(candidate);
+                if (Files.exists(path) && Files.isRegularFile(path)) {
+                    image = new Image(path.toUri().toString(), async);
+                } else {
+                    // Try loading as resource
+                    String resourcePath = candidate.startsWith("/") ? candidate : "/" + candidate;
+                    java.net.URL resource = ImageLoaderUtil.class.getResource(resourcePath);
+                    if (resource != null) {
+                        image = new Image(resource.toExternalForm(), async);
+                    }
+                }
             }
-
-            if (Files.exists(path) && Files.isRegularFile(path)) {
-                return new Image(path.toUri().toString(), async);
-            }
-
-            // Try loading as resource
-            String resourcePath = candidate.startsWith("/") ? candidate : "/" + candidate;
-            java.net.URL resource = ImageLoaderUtil.class.getResource(resourcePath);
-            if (resource != null) {
-                return new Image(resource.toExternalForm(), async);
+            
+            if (image != null && !image.isError()) {
+                imageCache.put(imagePath, image);
+                return image;
             }
 
         } catch (Exception e) {
@@ -62,10 +83,10 @@ public class ImageLoaderUtil {
     }
 
     /**
-     * Load an image synchronously (blocking).
+     * Load an image asynchronously (non-blocking, recommended for UI).
      */
     public static Image loadImage(String imagePath) {
-        return loadImage(imagePath, false);
+        return loadImage(imagePath, true);
     }
 
     /**
@@ -92,10 +113,17 @@ public class ImageLoaderUtil {
     }
 
     /**
-     * Load a profile avatar image synchronously.
+     * Load a profile avatar image asynchronously (non-blocking).
      */
     public static Image loadProfileAvatar(String imagePath) {
-        return loadProfileAvatar(imagePath, false);
+        return loadProfileAvatar(imagePath, true);
+    }
+    
+    /**
+     * Clear the image cache (call sparingly, e.g., on logout).
+     */
+    public static void clearCache() {
+        imageCache.clear();
     }
 
     /**

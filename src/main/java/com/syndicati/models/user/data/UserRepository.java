@@ -26,7 +26,11 @@ public class UserRepository {
     }
 
     public List<User> findAllByCreatedAtDesc() {
-        String sql = "SELECT * FROM user ORDER BY created_at DESC";
+        return findAllByCreatedAtDescWithLimit(100);
+    }
+
+    public List<User> findAllByCreatedAtDescWithLimit(int limit) {
+        String sql = "SELECT id_user, first_name, last_name, email_user, password_user, role_user, is_verified, is_disabled, disabled_at, disabled_reason, authCode, authCode_expires_at, two_factor_enabled, totp_secret, google_id, phone, created_at, updated_at FROM user ORDER BY created_at DESC LIMIT ?";
         List<User> users = new ArrayList<>();
 
         try (Connection conn = databaseService.getConnection()) {
@@ -34,19 +38,21 @@ public class UserRepository {
                 return users;
             }
 
-            try (PreparedStatement ps = conn.prepareStatement(sql);
-                 ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    try {
-                        users.add(mapRow(rs));
-                    } catch (SQLException rowError) {
-                        int rowId = 0;
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
                         try {
-                            rowId = rs.getInt("id_user");
-                        } catch (SQLException ignored) {
-                            // Best-effort logging only.
+                            users.add(mapRow(rs));
+                        } catch (SQLException rowError) {
+                            int rowId = 0;
+                            try {
+                                rowId = rs.getInt("id_user");
+                            } catch (SQLException ignored) {
+                                // Best-effort logging only.
+                            }
+                            System.out.println("UserRepository.findAllByCreatedAtDesc skipped row id_user=" + rowId + " due to mapping error: " + rowError.getMessage());
                         }
-                        System.out.println("UserRepository.findAllByCreatedAtDesc skipped row id_user=" + rowId + " due to mapping error: " + rowError.getMessage());
                     }
                 }
             }
@@ -58,7 +64,7 @@ public class UserRepository {
     }
 
     public Optional<User> findById(int idUser) {
-        String sql = "SELECT * FROM user WHERE id_user = ?";
+        String sql = "SELECT id_user, first_name, last_name, email_user, password_user, role_user, is_verified, is_disabled, disabled_at, disabled_reason, authCode, authCode_expires_at, two_factor_enabled, totp_secret, google_id, phone, created_at, updated_at FROM user WHERE id_user = ?";
 
         try (Connection conn = databaseService.getConnection()) {
             if (conn == null) {
