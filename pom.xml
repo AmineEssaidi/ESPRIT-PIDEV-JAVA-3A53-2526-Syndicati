@@ -161,6 +161,20 @@
             <version>5.10.0</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Email (Syrine) -->
+        <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+
+        <!-- QR Code (Syrine) -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.2</version>
+        </dependency>
     </dependencies>
 
     <build>

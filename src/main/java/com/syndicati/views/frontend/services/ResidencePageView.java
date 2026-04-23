@@ -1,17 +1,21 @@
 package com.syndicati.views.frontend.services;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.WriterException;
 import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.residence.Appartement;
 import com.syndicati.models.residence.Residence;
-import com.syndicati.services.residence.ServiceAppartement;
-import com.syndicati.services.residence.ServiceResidence;
+import com.syndicati.services.residence.*;
+import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import jakarta.mail.MessagingException;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -37,6 +41,7 @@ import javafx.scene.text.Text;
 import javafx.util.Duration;
 
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.sql.SQLDataException;
 import java.util.ArrayList;
@@ -65,6 +70,11 @@ public class ResidencePageView implements ViewInterface {
 
     ServiceResidence ServiceResidence = new ServiceResidence();
     ServiceAppartement ServiceAppartement= new ServiceAppartement();
+
+    ServiceEmailResidence ServiceEmailResidence= new ServiceEmailResidence();
+
+    ServiceQRCodeResidence qrCodeResidence;
+
     List<Residence> residences;
     {
         try {
@@ -527,8 +537,8 @@ public class ResidencePageView implements ViewInterface {
         VBox left = new VBox(10);
         HBox.setHgrow(left, Priority.ALWAYS);
         left.getChildren().addAll(
-            text("Contacter le proprietaire", 28, true, "#ffffff"),
-            text("Envoyez une demande directe. UI only preview (no network submit).", 14, false, textMuted())
+                text("Contacter le proprietaire", 28, true, "#ffffff"),
+                text("Envoyez une demande directe. UI only preview (no network submit).", 14, false, textMuted())
         );
 
         TextField name = input("Votre nom complet");
@@ -541,30 +551,65 @@ public class ResidencePageView implements ViewInterface {
         Button send = mainBtn("Envoyer le message");
         send.setMaxWidth(Double.MAX_VALUE);
 
+        send.setOnAction (e ->
+        {
+            try {
+                ServiceEmailResidence.EnvoyerSMS(name.getText(), email.getText(), msg.getText());
+            } catch (MessagingException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+
         left.getChildren().addAll(name, email, msg, send);
 
         VBox right = new VBox(10);
         right.setAlignment(Pos.TOP_CENTER);
         right.setPrefWidth(260);
+        String qrContent = ("SMSTO:+21652380209:" + "L'utilisateur " + SessionManager.getInstance().getCurrentUserName() + " est interesse a louer votre appartement a " + residences.get(selectedResidence).getNom_r()).replaceAll("[^\\x20-\\x7E]", "");
 
-        StackPane qr = new StackPane(text("QR", 34, true, tm.getTextColor()));
+        try {
+            qrCodeResidence = new ServiceQRCodeResidence(qrContent, BarcodeFormat.QR_CODE, 180, 180, BufferedImage.TYPE_INT_ARGB);
+        } catch (WriterException e) {
+            e.printStackTrace();
+        }
+
+        BufferedImage qrImage = qrCodeResidence.qrImage();
+        Image image = SwingFXUtils.toFXImage(qrImage, null);
+        ImageView imageView = new ImageView(image);
+        imageView.setFitWidth(180);
+        imageView.setFitHeight(180);
+
+        StackPane qr = new StackPane(imageView);
         qr.setPrefSize(180, 180);
         qr.setStyle(
-            "-fx-background-color: white;" +
-            "-fx-background-radius: 16px;"
+                "-fx-background-color: white;" +
+                        "-fx-background-radius: 16px;"
         );
 
+        Button smsBtn = mainBtn("Envoyer demande via SMS");
+        smsBtn.setOnAction(e -> {
+            String recipient = "+21652380209";
+            String message = ("L'utilisateur " + SessionManager.getInstance().getCurrentUserName() + " est interesse a louer votre appartement a " + residences.get(selectedResidence).getNom_r())
+                    .replaceAll("[^\\x20-\\x7E]", "");
+            try {
+                ServiceSMSResidence svc = new ServiceSMSResidence();
+                String result = svc.sendSMS(recipient, message);
+                System.out.println("SMS sent: " + result);
+            } catch (Exception ex) {
+                System.err.println("SMS error: " + ex.getMessage());
+            }
+        });
+
         right.getChildren().addAll(
-            qr,
-            text("Scannez pour envoyer un SMS", 12, false, textSoft()),
-            mainBtn("Envoyer demande via SMS")
+                qr,
+                text("Scannez pour envoyer un SMS", 12, false, textSoft()),
+                smsBtn
         );
 
         row.getChildren().addAll(left, right);
         box.getChildren().add(row);
         return box;
     }
-
     private void switchToFace(String face) {
         boolean main = "main".equals(face);
         boolean apartments = "apartments".equals(face);
