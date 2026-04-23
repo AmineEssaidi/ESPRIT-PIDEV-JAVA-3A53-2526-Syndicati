@@ -17,6 +17,9 @@ import com.syndicati.models.user.data.UserRelationshipRepository;
 import com.syndicati.models.user.data.UserRepository;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.services.user.profile.ProfileService;
+import com.syndicati.services.security.TwoFactorService;
+import com.syndicati.services.security.BiometricsService;
+import com.syndicati.services.security.FaceIDService;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
@@ -56,6 +59,12 @@ import java.util.Optional;
  */
 public class ProfileView implements ViewInterface {
 
+    private enum QuickActionsMode {
+        DEFAULT,
+        TILES,
+        DETAIL
+    }
+
     private final VBox root;
     private final ThemeManager tm;
 
@@ -65,6 +74,12 @@ public class ProfileView implements ViewInterface {
     private final Map<String, VBox> detailTabs = new LinkedHashMap<>();
     private final Map<String, Button> detailTabButtons = new LinkedHashMap<>();
     private long lastXpInteractionAt = 0L;
+
+    private StackPane quickActionsContainer;
+    private VBox quickActionsDefaultView;
+    private VBox quickActionsSwitcherView;
+    private VBox quickActionsDetailView;
+    private Button quickActionsButton;
 
     public ProfileView() {
         this.tm = ThemeManager.getInstance();
@@ -248,6 +263,8 @@ public class ProfileView implements ViewInterface {
         VBox defaultInfo = bio == null
             ? new VBox(10, name, role, email, stats)
             : new VBox(10, name, role, email, bio, stats);
+        defaultInfo.setOpacity(1);
+        defaultInfo.setTranslateX(0);
 
         HBox quickBtnWrap = new HBox();
         quickBtnWrap.setAlignment(Pos.CENTER_RIGHT);
@@ -260,15 +277,19 @@ public class ProfileView implements ViewInterface {
 
         StackPane actionsSwitcher = new StackPane();
         actionsSwitcher.setStyle("-fx-background-color: transparent;");
-        actionsSwitcher.setPrefHeight(260);
-        actionsSwitcher.setMinHeight(260);
-        actionsSwitcher.setMaxHeight(260);
+        actionsSwitcher.setMinHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+        actionsSwitcher.setPrefHeight(javafx.scene.layout.Region.USE_COMPUTED_SIZE);
+        actionsSwitcher.setMaxHeight(Double.MAX_VALUE);
 
         VBox switcherView = new VBox(12);
         switcherView.setId("actions-switcher-view");
         switcherView.setStyle("-fx-background-color: transparent;");
         switcherView.setVisible(false);
         switcherView.setManaged(false);
+        switcherView.setMaxWidth(Double.MAX_VALUE);
+        switcherView.setOpacity(1);
+        switcherView.setTranslateX(0);
+        switcherView.setMouseTransparent(true);
 
         HBox switcherTopBar = new HBox(10);
         switcherTopBar.setAlignment(Pos.CENTER_LEFT);
@@ -307,11 +328,30 @@ public class ProfileView implements ViewInterface {
         detailView.setStyle("-fx-background-color: transparent;");
         detailView.setVisible(false);
         detailView.setManaged(false);
+        detailView.setMaxWidth(Double.MAX_VALUE);
+        detailView.setOpacity(1);
+        detailView.setTranslateX(0);
+        detailView.setMouseTransparent(true);
 
         showActionsBtn.setOnAction(e -> showActionsTiles(defaultInfo, switcherView, detailView, showActionsBtn));
         switcherBackBtn.setOnAction(e -> showDefaultHeroInfo(defaultInfo, switcherView, detailView, showActionsBtn));
 
-        actionsSwitcher.getChildren().addAll(defaultInfo, switcherView, detailView);
+        quickActionsContainer = actionsSwitcher;
+        quickActionsDefaultView = defaultInfo;
+        quickActionsSwitcherView = switcherView;
+        quickActionsDetailView = detailView;
+        quickActionsButton = showActionsBtn;
+
+        actionsSwitcher.getChildren().setAll(defaultInfo);
+        defaultInfo.setVisible(true);
+        defaultInfo.setManaged(true);
+        defaultInfo.setMouseTransparent(false);
+        switcherView.setVisible(false);
+        switcherView.setManaged(false);
+        switcherView.setMouseTransparent(true);
+        detailView.setVisible(false);
+        detailView.setManaged(false);
+        detailView.setMouseTransparent(true);
 
         identity.getChildren().add(actionsSwitcher);
         HBox.setHgrow(identity, Priority.ALWAYS);
@@ -319,40 +359,37 @@ public class ProfileView implements ViewInterface {
         body.getChildren().addAll(avatarWrap, identity);
         card.getChildren().addAll(banner, body);
 
-        root.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
-            if (!switcherView.isVisible()) {
-                return;
-            }
-
-            Object target = event.getTarget();
-            if (target instanceof javafx.scene.Node targetNode && !isDescendantOf(targetNode, actionsSwitcher)) {
-                showDefaultHeroInfo(defaultInfo, switcherView, detailView, showActionsBtn);
-            }
-        });
-
         return card;
     }
     
     private void showActionsTiles(VBox defaultView, VBox switcherView, VBox detailView, Button showBtn) {
-        if (detailView.isVisible()) {
-            detailView.setVisible(false);
-            detailView.setManaged(false);
-            detailView.getChildren().clear();
-        }
         styleQuickActionsButton(showBtn, true);
-        switcherView.toFront();
+        StackPane actionsSwitcher = quickActionsContainer != null ? quickActionsContainer : (StackPane) defaultView.getParent();
+        if (actionsSwitcher == null) {
+            return;
+        }
+        actionsSwitcher.getChildren().setAll(switcherView);
         switcherView.setVisible(true);
         switcherView.setManaged(true);
-        animateHeroTransition(defaultView, switcherView);
+        switcherView.setMouseTransparent(false);
+        switcherView.setOpacity(1);
+        switcherView.setTranslateX(0);
+        switcherView.toFront();
     }
 
     private void showDefaultHeroInfo(VBox defaultView, VBox switcherView, VBox detailView, Button showBtn) {
-        VBox activeFrom = detailView.isVisible() ? detailView : switcherView;
         styleQuickActionsButton(showBtn, false);
-        defaultView.toFront();
+        StackPane actionsSwitcher = quickActionsContainer != null ? quickActionsContainer : (StackPane) switcherView.getParent();
+        if (actionsSwitcher == null) {
+            return;
+        }
+        actionsSwitcher.getChildren().setAll(defaultView);
         defaultView.setVisible(true);
         defaultView.setManaged(true);
-        animateHeroTransition(activeFrom, defaultView);
+        defaultView.setMouseTransparent(false);
+        defaultView.setOpacity(1);
+        defaultView.setTranslateX(0);
+        defaultView.toFront();
     }
 
     private void styleQuickActionsButton(Button button, boolean active) {
@@ -379,8 +416,7 @@ public class ProfileView implements ViewInterface {
             return;
         }
 
-        to.setVisible(true);
-        to.setManaged(true);
+        to.toFront();
         to.setOpacity(0);
         to.setTranslateX(18);
 
@@ -392,13 +428,6 @@ public class ProfileView implements ViewInterface {
         slideOut.setFromX(0);
         slideOut.setToX(-18);
 
-        fadeOut.setOnFinished(e -> {
-            from.setVisible(false);
-            from.setManaged(false);
-            from.setOpacity(1);
-            from.setTranslateX(0);
-        });
-
         javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(260), to);
         fadeIn.setFromValue(0);
         fadeIn.setToValue(1);
@@ -406,6 +435,16 @@ public class ProfileView implements ViewInterface {
         javafx.animation.TranslateTransition slideIn = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(260), to);
         slideIn.setFromX(18);
         slideIn.setToX(0);
+
+        fadeOut.setOnFinished(e -> {
+            from.setTranslateX(0);
+            from.setOpacity(0);
+        });
+        
+        fadeIn.setOnFinished(e -> {
+            to.setTranslateX(0);
+            to.setOpacity(1);
+        });
 
         fadeOut.play();
         slideOut.play();
@@ -1109,9 +1148,21 @@ public class ProfileView implements ViewInterface {
     }
     
     private void showActionPanel(String actionId, VBox switcherView, Button showActionsBtn) {
-        StackPane parent = (StackPane) switcherView.getParent();
-        VBox detailView = (VBox) parent.getChildren().get(2);
+        StackPane parent = quickActionsContainer != null ? quickActionsContainer : (StackPane) switcherView.getParent();
+        VBox defaultView = quickActionsDefaultView;
+        VBox detailView = quickActionsDetailView;
+        if (parent == null || defaultView == null || detailView == null) {
+            return;
+        }
+
+        parent.getChildren().setAll(detailView);
         detailView.getChildren().clear();
+        detailView.setVisible(true);
+        detailView.setManaged(true);
+        detailView.setMouseTransparent(false);
+        detailView.setOpacity(1);
+        detailView.setTranslateX(0);
+        detailView.toFront();
         
         HBox header = new HBox(12);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -1151,35 +1202,9 @@ public class ProfileView implements ViewInterface {
         }
         
         switch(actionId) {
-            case "2fa" -> {
-                User user = SessionManager.getInstance().getCurrentUser();
-                content.getChildren().add(text("Two-Factor Authentication", 13, true, textSoft()));
-                content.getChildren().add(text("Status: " + (user != null && user.isVerified() ? "Enabled" : "Disabled"), 11, false, textMuted()));
-                content.getChildren().add(text("Protect your account with two-factor authentication using SMS or authenticator apps.", 11, false, textMuted()));
-                javafx.scene.control.Button enableBtn = new javafx.scene.control.Button("Enable 2FA");
-                enableBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
-                content.getChildren().add(enableBtn);
-            }
-            case "biometrics" -> {
-                content.getChildren().add(text("Biometric Authentication", 13, true, textSoft()));
-                content.getChildren().add(text("Use your device biometrics (FaceID, TouchID, Windows Hello) to log in faster.", 11, false, textMuted()));
-                content.getChildren().add(text("Loading credentials...", 11, false, "rgba(255,255,255,0.40)"));
-                javafx.scene.control.Button setupBtn = new javafx.scene.control.Button("Register New Device");
-                setupBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
-                content.getChildren().add(setupBtn);
-            }
-            case "faceid" -> {
-                content.getChildren().add(text("Face Recognition", 13, true, textSoft()));
-                content.getChildren().add(text("Protect your account with local Face ID. This only works on this PC.", 11, false, textMuted()));
-                javafx.scene.control.TextField pinField = new javafx.scene.control.TextField();
-                pinField.setPromptText("Enter a local PIN for encryption");
-                pinField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
-                content.getChildren().add(pinField);
-                content.getChildren().add(text("This PIN encrypts your Face ID locally.", 10, false, "rgba(255,255,255,0.40)"));
-                javafx.scene.control.Button enrollBtn = new javafx.scene.control.Button("Start Enrollment");
-                enrollBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
-                content.getChildren().add(enrollBtn);
-            }
+            case "2fa" -> buildTwoFactorPanel(content);
+            case "biometrics" -> buildBiometricsPanel(content);
+            case "faceid" -> buildFaceIDPanel(content);
             case "settings" -> {
                 User user = SessionManager.getInstance().getCurrentUser();
                 Profile profile = currentProfile();
@@ -1354,12 +1379,28 @@ public class ProfileView implements ViewInterface {
         } else {
             detailView.getChildren().add(content);
         }
-        animateHeroTransition(switcherView, detailView);
+        parent.getChildren().setAll(detailView);
+        detailView.setVisible(true);
+        detailView.setManaged(true);
+        detailView.setMouseTransparent(false);
+        detailView.setOpacity(1);
+        detailView.setTranslateX(0);
+        detailView.toFront();
     }
     
     private void hideActionPanel(VBox switcherView, VBox detailView, Button showActionsBtn) {
         styleQuickActionsButton(showActionsBtn, true);
-        animateHeroTransition(detailView, switcherView);
+        StackPane parent = quickActionsContainer != null ? quickActionsContainer : (StackPane) detailView.getParent();
+        if (parent == null) {
+            return;
+        }
+        parent.getChildren().setAll(switcherView);
+        switcherView.setVisible(true);
+        switcherView.setManaged(true);
+        switcherView.setMouseTransparent(false);
+        switcherView.setOpacity(1);
+        switcherView.setTranslateX(0);
+        switcherView.toFront();
     }
     
     private String getTitleForAction(String actionId) {
@@ -1736,6 +1777,419 @@ public class ProfileView implements ViewInterface {
 
     private Text badge(String label) {
         return text(label, 10, true, "#ffffff");
+    }
+
+    private void buildTwoFactorPanel(VBox content) {
+        User user = SessionManager.getInstance().getCurrentUser();
+        TwoFactorService twoFactorService = new TwoFactorService();
+        
+        content.getChildren().add(text("Two-Factor Authentication", 13, true, textSoft()));
+        content.getChildren().add(text("Secure your account with time-based one-time passwords.", 11, false, textMuted()));
+        content.getChildren().add(text(" ", 4, false, "transparent"));
+        
+        // Check if TOTP is already configured
+        boolean totpConfigured = twoFactorService.isTotpConfigured();
+        
+        if (totpConfigured) {
+            // Show configured status
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, tm.toRgba(tm.getAccentHex(), 0.10), 0.15));
+            
+            Text statusIcon = text("✓", 18, true, tm.getAccentHex());
+            VBox statusInfo = new VBox(3,
+                text("Authenticator App Configured", 12, true, "#ffffff"),
+                text("Your account is protected with TOTP", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            Button removeBtn = new Button("Remove TOTP");
+            removeBtn.setStyle(
+                "-fx-padding: 8 12 8 12;" +
+                "-fx-background-color: rgba(255,0,0,0.15);" +
+                "-fx-text-fill: #ff6b6b; -fx-font-weight: 800;" +
+                "-fx-background-radius: 10; -fx-cursor: hand;"
+            );
+            removeBtn.setOnAction(e -> {
+                twoFactorService.disableTotpForUser();
+                showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP disabled successfully.");
+                content.getParent().getScene().getWindow().hide();
+            });
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo, removeBtn);
+            content.getChildren().add(statusBox);
+        } else {
+            // Show setup flow
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, "rgba(255,255,255,0.05)", 0.12));
+            
+            Text statusIcon = text("◯", 18, true, "rgba(255,255,255,0.50)");
+            VBox statusInfo = new VBox(3,
+                text("Authenticator App Setup", 12, true, "#ffffff"),
+                text("Set up time-based one-time passwords", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo);
+            content.getChildren().add(statusBox);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // Setup instructions
+            content.getChildren().add(text("Step 1: Generate Secret", 12, true, "rgba(255,255,255,0.88)"));
+            content.getChildren().add(text("Click the button below to generate a secret code. Save it in a secure location.", 11, false, textMuted()));
+            
+            javafx.scene.control.Button generateBtn = new javafx.scene.control.Button("Generate Secret");
+            generateBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            content.getChildren().add(generateBtn);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // QR and secret display (initially hidden)
+            VBox setupBox = new VBox(12);
+            setupBox.setPadding(new Insets(14));
+            setupBox.setStyle(shell(14, "rgba(255,255,255,0.04)", 0.11));
+            setupBox.setVisible(false);
+            setupBox.setManaged(false);
+            
+            StackPane qrPane = new StackPane();
+            qrPane.setMinSize(140, 140);
+            qrPane.setMaxSize(140, 140);
+            qrPane.setStyle("-fx-background-color: white; -fx-background-radius: 8;");
+            qrPane.getChildren().add(text("QR Code", 10, false, "black"));
+            
+            javafx.scene.control.TextField secretField = new javafx.scene.control.TextField();
+            secretField.setEditable(false);
+            secretField.setPromptText("Secret key will appear here");
+            secretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            
+            content.getChildren().add(setupBox);
+            VBox qrSection = new VBox(8);
+            qrSection.setAlignment(Pos.CENTER);
+            qrSection.getChildren().add(text("Step 2: Scan QR Code", 12, true, "rgba(255,255,255,0.88)"));
+            qrSection.getChildren().add(qrPane);
+            qrSection.getChildren().add(text("Or enter this code manually:", 11, false, textMuted()));
+            qrSection.getChildren().add(secretField);
+            setupBox.getChildren().add(qrSection);
+            
+            setupBox.getChildren().add(text(" ", 8, false, "transparent"));
+            setupBox.getChildren().add(text("Step 3: Verify Code", 12, true, "rgba(255,255,255,0.88)"));
+            setupBox.getChildren().add(text("Enter a 6-digit code from your authenticator app:", 11, false, textMuted()));
+            
+            javafx.scene.control.TextField codeField = new javafx.scene.control.TextField();
+            codeField.setPromptText("000000");
+            codeField.setMaxWidth(120);
+            codeField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10; -fx-font-size: 13px;");
+            
+            javafx.scene.control.Button verifyBtn = new javafx.scene.control.Button("Verify & Activate");
+            verifyBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            
+            HBox codeRow = new HBox(10);
+            codeRow.setAlignment(Pos.CENTER_LEFT);
+            codeRow.getChildren().addAll(codeField, verifyBtn);
+            setupBox.getChildren().add(codeRow);
+            
+            // Generate button action
+            generateBtn.setOnAction(e -> {
+                String secret = twoFactorService.generateTotpSecret();
+                String email = user != null ? user.getEmailUser() : "user@syndicati.tn";
+                String qrDataUrl = twoFactorService.generateQRCodeDataUrl(secret, email, "Syndicati");
+                
+                secretField.setText(secret);
+                // Note: In a real app, you'd display the actual QR code image from the data URL
+                qrPane.getChildren().clear();
+                qrPane.getChildren().add(text("QR Generated", 10, true, "black"));
+                
+                setupBox.setVisible(true);
+                setupBox.setManaged(true);
+                generateBtn.setDisable(true);
+            });
+            
+            // Verify button action
+            verifyBtn.setOnAction(e -> {
+                String code = codeField.getText();
+                if (code == null || code.trim().isEmpty() || code.length() != 6) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Please enter a valid 6-digit code.");
+                    return;
+                }
+                
+                String secret = secretField.getText();
+                if (secret == null || secret.isEmpty()) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Please generate a secret first.");
+                    return;
+                }
+                
+                boolean valid = twoFactorService.verifyTotpCode(secret, code);
+                if (!valid) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Invalid code. Please try again.");
+                    return;
+                }
+                
+                twoFactorService.enableTotpForUser(secret);
+                showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP activated successfully! Your account is now protected.");
+                content.getParent().getScene().getWindow().hide();
+            });
+        }
+    }
+    
+    private void buildBiometricsPanel(VBox content) {
+        User user = SessionManager.getInstance().getCurrentUser();
+        BiometricsService biometricsService = new BiometricsService();
+        
+        content.getChildren().add(text("Biometric Authentication", 13, true, textSoft()));
+        content.getChildren().add(text("Use your device's biometrics to log in faster and more securely.", 11, false, textMuted()));
+        content.getChildren().add(text(" ", 8, false, "transparent"));
+        
+        // Check Windows Hello availability
+        boolean windowsHelloAvailable = biometricsService.isWindowsHelloAvailable();
+        
+        if (!windowsHelloAvailable) {
+            HBox warningBox = new HBox(10);
+            warningBox.setAlignment(Pos.CENTER_LEFT);
+            warningBox.setPadding(new Insets(12));
+            warningBox.setStyle(shell(12, "rgba(255,150,0,0.10)", 0.18));
+            
+            Text warningIcon = text("⚠", 16, true, "#ffa600");
+            Text warningText = text("Windows Hello is not available on this device.", 11, false, "#ffffff");
+            warningBox.getChildren().addAll(warningIcon, warningText);
+            content.getChildren().add(warningBox);
+            return;
+        }
+        
+        // Registered credentials list
+        content.getChildren().add(text("Registered Devices", 12, true, "rgba(255,255,255,0.88)"));
+        
+        VBox credentialsList = new VBox(10);
+        credentialsList.setStyle("-fx-background-color: transparent;");
+        
+        List<BiometricsService.BiometricCredential> credentials = biometricsService.listCredentials();
+        if (credentials.isEmpty()) {
+            credentialsList.getChildren().add(text("No devices registered yet.", 11, false, textMuted()));
+        } else {
+            for (BiometricsService.BiometricCredential cred : credentials) {
+                HBox credRow = new HBox(10);
+                credRow.setAlignment(Pos.CENTER_LEFT);
+                credRow.setPadding(new Insets(10));
+                credRow.setStyle(shell(10, "rgba(255,255,255,0.04)", 0.10));
+                
+                VBox credInfo = new VBox(2);
+                credInfo.getChildren().addAll(
+                    text(cred.getDeviceName(), 11, true, "#ffffff"),
+                    text(cred.getDeviceType() + " | Created: " + cred.getCreatedAt(), 10, false, textMuted())
+                );
+                HBox.setHgrow(credInfo, Priority.ALWAYS);
+                
+                javafx.scene.control.Button removeBtn = new javafx.scene.control.Button("Remove");
+                removeBtn.setStyle(
+                    "-fx-padding: 6 10 6 10;" +
+                    "-fx-background-color: rgba(255,100,100,0.15);" +
+                    "-fx-text-fill: #ff6464; -fx-font-weight: 800;" +
+                    "-fx-background-radius: 8; -fx-cursor: hand;"
+                );
+                
+                BiometricsService.BiometricCredential finalCred = cred;
+                removeBtn.setOnAction(e -> {
+                    biometricsService.removeCredential(finalCred.getId());
+                    credentialsList.getChildren().remove(credRow);
+                    showAvatarAlert(Alert.AlertType.INFORMATION, "Biometrics", "Device removed successfully.");
+                });
+                
+                credRow.getChildren().addAll(credInfo, removeBtn);
+                credentialsList.getChildren().add(credRow);
+            }
+        }
+        
+        content.getChildren().add(credentialsList);
+        content.getChildren().add(text(" ", 8, false, "transparent"));
+        
+        // Register new device
+        content.getChildren().add(text("Register New Device", 12, true, "rgba(255,255,255,0.88)"));
+        
+        javafx.scene.control.TextField deviceNameField = new javafx.scene.control.TextField();
+        deviceNameField.setPromptText("e.g., My Laptop, Windows PC");
+        deviceNameField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+        content.getChildren().add(deviceNameField);
+        
+        javafx.scene.control.Button registerBtn = new javafx.scene.control.Button("Register Device");
+        registerBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+        registerBtn.setOnAction(e -> {
+            String deviceName = deviceNameField.getText();
+            if (deviceName == null || deviceName.trim().isEmpty()) {
+                showAvatarAlert(Alert.AlertType.ERROR, "Biometrics", "Please enter a device name.");
+                return;
+            }
+            
+            biometricsService.registerWindowsHello(deviceName);
+            showAvatarAlert(Alert.AlertType.INFORMATION, "Biometrics", "Device registered successfully. You can now use Windows Hello to log in.");
+            deviceNameField.clear();
+            // Refresh credentials list
+            content.getChildren().clear();
+            buildBiometricsPanel(content);
+        });
+        content.getChildren().add(registerBtn);
+    }
+    
+    private void buildFaceIDPanel(VBox content) {
+        User user = SessionManager.getInstance().getCurrentUser();
+        FaceIDService faceIDService = new FaceIDService();
+        
+        content.getChildren().add(text("Face ID Authentication", 13, true, textSoft()));
+        content.getChildren().add(text("Enroll your face for secure, local biometric authentication.", 11, false, textMuted()));
+        content.getChildren().add(text(" ", 8, false, "transparent"));
+        
+        boolean faceIDEnrolled = faceIDService.isFaceIDEnrolled();
+        
+        if (faceIDEnrolled) {
+            // Show enrolled status
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, tm.toRgba(tm.getAccentHex(), 0.10), 0.15));
+            
+            Text statusIcon = text("✓", 18, true, tm.getAccentHex());
+            VBox statusInfo = new VBox(3,
+                text("Face ID Enrolled", 12, true, "#ffffff"),
+                text("Your face is securely enrolled and encrypted locally", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            javafx.scene.control.Button removeBtn = new javafx.scene.control.Button("Remove Face ID");
+            removeBtn.setStyle(
+                "-fx-padding: 8 12 8 12;" +
+                "-fx-background-color: rgba(255,0,0,0.15);" +
+                "-fx-text-fill: #ff6b6b; -fx-font-weight: 800;" +
+                "-fx-background-radius: 10; -fx-cursor: hand;"
+            );
+            removeBtn.setOnAction(e -> {
+                faceIDService.removeFaceIDEnrollment();
+                showAvatarAlert(Alert.AlertType.INFORMATION, "Face ID", "Face ID enrollment removed.");
+                content.getParent().getScene().getWindow().hide();
+            });
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo, removeBtn);
+            content.getChildren().add(statusBox);
+        } else {
+            // Show enrollment setup
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, "rgba(255,255,255,0.05)", 0.12));
+            
+            Text statusIcon = text("◯", 18, true, "rgba(255,255,255,0.50)");
+            VBox statusInfo = new VBox(3,
+                text("Face ID Setup", 12, true, "#ffffff"),
+                text("Enroll your face for authentication", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo);
+            content.getChildren().add(statusBox);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // PIN setup
+            content.getChildren().add(text("Step 1: Set PIN", 12, true, "rgba(255,255,255,0.88)"));
+            content.getChildren().add(text("Your face encoding will be encrypted with this PIN. This PIN cannot be recovered.", 11, false, textMuted()));
+            
+            javafx.scene.control.PasswordField pinField = new javafx.scene.control.PasswordField();
+            pinField.setPromptText("4-8 digit PIN");
+            pinField.setMaxWidth(150);
+            pinField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            content.getChildren().add(pinField);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // Enrollment button
+            javafx.scene.control.Button startEnrollBtn = new javafx.scene.control.Button("Start Enrollment");
+            startEnrollBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            
+            VBox enrollmentBox = new VBox(12);
+            enrollmentBox.setPadding(new Insets(14));
+            enrollmentBox.setStyle(shell(14, "rgba(255,255,255,0.04)", 0.11));
+            enrollmentBox.setVisible(false);
+            enrollmentBox.setManaged(false);
+            
+            // Enrollment video preview area
+            StackPane videoPreview = new StackPane();
+            videoPreview.setMinSize(280, 210);
+            videoPreview.setStyle("-fx-background-color: #1a1a1a; -fx-background-radius: 12;");
+            videoPreview.getChildren().add(text("📷 Video Preview\n(Simulated)", 13, false, "rgba(255,255,255,0.50)"));
+            
+            // Progress bar
+            javafx.scene.control.ProgressBar progressBar = new javafx.scene.control.ProgressBar(0);
+            progressBar.setStyle("-fx-padding: 0;");
+            
+            // Enrollment hint
+            Text enrollmentHint = text("Position your face in the frame and look directly at the camera.", 11, false, textMuted());
+            
+            // Simulate enrollment frames
+            javafx.scene.control.Button captureFramesBtn = new javafx.scene.control.Button("Simulate Capture (20 frames)");
+            captureFramesBtn.setStyle("-fx-padding: 8 12 8 12; -fx-background-color: rgba(255,255,255,0.10); -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            
+            javafx.scene.control.Button completeEnrollBtn = new javafx.scene.control.Button("Complete Enrollment");
+            completeEnrollBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            completeEnrollBtn.setDisable(true);
+            
+            enrollmentBox.getChildren().addAll(
+                text("Step 2: Capture Face Frames", 12, true, "rgba(255,255,255,0.88)"),
+                videoPreview,
+                enrollmentHint,
+                progressBar,
+                captureFramesBtn
+            );
+            
+            content.getChildren().add(startEnrollBtn);
+            content.getChildren().add(enrollmentBox);
+            
+            // Start enrollment button action
+            startEnrollBtn.setOnAction(e -> {
+                String pin = pinField.getText();
+                if (pin == null || pin.isEmpty() || pin.length() < 4 || pin.length() > 8) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "PIN must be 4-8 digits.");
+                    return;
+                }
+                
+                faceIDService.startEnrollment();
+                enrollmentBox.setVisible(true);
+                enrollmentBox.setManaged(true);
+                startEnrollBtn.setDisable(true);
+                pinField.setDisable(true);
+            });
+            
+            // Capture frames simulation
+            captureFramesBtn.setOnAction(e -> {
+                // Simulate adding 20 frames
+                for (int i = 0; i < 20; i++) {
+                    double[] mockEmbedding = new double[128];
+                    for (int j = 0; j < 128; j++) {
+                        mockEmbedding[j] = Math.random() * 2 - 1; // Range -1 to 1
+                    }
+                    faceIDService.addFrameEmbedding(mockEmbedding);
+                }
+                
+                progressBar.setProgress(1.0);
+                enrollmentHint.setText("Face captured successfully! " + faceIDService.getEnrollmentProgress() * 100 + "% complete.");
+                captureFramesBtn.setDisable(true);
+                
+                // Add complete button
+                if (enrollmentBox.getChildren().size() < 6) {
+                    enrollmentBox.getChildren().add(completeEnrollBtn);
+                }
+                completeEnrollBtn.setDisable(false);
+            });
+            
+            // Complete enrollment action
+            completeEnrollBtn.setOnAction(e -> {
+                String pin = pinField.getText();
+                boolean success = faceIDService.completeEnrollment(pin);
+                if (!success) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "Failed to complete enrollment.");
+                    return;
+                }
+                
+                showAvatarAlert(Alert.AlertType.INFORMATION, "Face ID", "Face ID enrollment completed successfully!");
+                content.getParent().getScene().getWindow().hide();
+            });
+        }
     }
 
     private VBox cardShell() {
