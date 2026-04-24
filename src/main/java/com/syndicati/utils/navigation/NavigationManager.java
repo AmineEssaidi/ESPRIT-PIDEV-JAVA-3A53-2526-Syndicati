@@ -15,7 +15,6 @@ import com.syndicati.views.frontend.services.SyndicatPageView;
 import com.syndicati.views.frontend.services.EvenementPageView;
 import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.utils.session.SessionManager;
-import com.syndicati.controllers.log.ActivityLogController;
 import javafx.scene.control.Alert;
 
 /**
@@ -36,7 +35,6 @@ public class NavigationManager {
     private ForumPageView forumView;
     private SyndicatPageView syndicatView;
     private EvenementPageView evenementView;
-    private final ActivityLogController activityLogController = new ActivityLogController();
     
     private NavigationManager() {}
     
@@ -161,10 +159,6 @@ public class NavigationManager {
     public void navigateTo(String pageName) {
         System.out.println("Navigating to: " + pageName);
         String normalizedPage = pageName == null ? "home" : pageName.toLowerCase();
-
-        activityLogController.logPageView(normalizedPage, normalizedPage, java.util.Map.of(
-            "source", "navigation_manager"
-        ));
 
         if ("profile".equals(normalizedPage) && !AccessControlService.canAccessProfile()) {
             showAccessDenied("Please sign in to view your profile.");

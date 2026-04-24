@@ -3,7 +3,6 @@ package com.syndicati.views.frontend.login;
 import com.syndicati.controllers.user.auth.AuthController;
 import com.syndicati.controllers.user.profile.ProfileController;
 import com.syndicati.controllers.biometric.CameraController;
-import com.syndicati.controllers.log.ActivityLogController;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.models.user.User;
 import com.syndicati.services.biometric.RealCameraService;
@@ -61,7 +60,6 @@ public class LoginView implements ViewInterface {
     private RealCameraService cameraService;
     private ImageView faceIdVideoView;
     private AnimationTimer cameraUpdateTimer;
-    private final ActivityLogController activityLogController;
     
     // FaceID panel controls (for authentication)
     private PasswordField faceIdPinInput;
@@ -79,7 +77,6 @@ public class LoginView implements ViewInterface {
         this.authController = new AuthController();
         this.profileController = new ProfileController();
         this.cameraController = new CameraController();
-        this.activityLogController = new ActivityLogController();
         setupLayout();
     }
 
@@ -1576,9 +1573,6 @@ public class LoginView implements ViewInterface {
         }
 
         showInfoMessage(result.getMessage());
-        // Log signup success
-        activityLogController.logAuthAction("SIGNUP", "SUCCESS", "New user signed up: " + email, java.util.Map.of("email", email));
-        
         // Store new user in session if available
         if (result.getUser() != null) {
             SessionManager.getInstance().setCurrentUser(result.getUser());
@@ -1774,7 +1768,6 @@ public class LoginView implements ViewInterface {
         }
 
         showInfoMessage(requestResult.getMessage());
-        activityLogController.logAuthAction("PASSWORD_RESET_REQUEST", "SUCCESS", "Password reset requested for: " + recovery, java.util.Map.of("identifier", recovery));
 
         TextInputDialog codeDialog = new TextInputDialog();
         codeDialog.setTitle("Verify Code");
@@ -1977,8 +1970,6 @@ public class LoginView implements ViewInterface {
                     SessionManager.getInstance().setCurrentProfile(profile)
                 );
                 System.out.println("Login successful for user: " + result.getUser().getEmailUser());
-                
-                activityLogController.logAuthAction("LOGIN", "SUCCESS", "User logged in: " + result.getUser().getEmailUser(), java.util.Map.of());
             }
             if (onLoginSuccess != null) {
                 onLoginSuccess.run();
@@ -1988,7 +1979,6 @@ public class LoginView implements ViewInterface {
             return;
         }
 
-        activityLogController.logAuthAction("LOGIN", "FAILURE", "Failed login attempt for: " + username, java.util.Map.of("username", username));
         showErrorMessage(result.getMessage());
     }
 

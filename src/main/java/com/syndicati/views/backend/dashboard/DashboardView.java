@@ -1,8 +1,5 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.log.AnalyticsController;
-import com.syndicati.models.log.analytics.AnomalyResult;
-import com.syndicati.models.log.analytics.SuspiciousActivity;
 import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
@@ -63,18 +60,13 @@ public class DashboardView implements ViewInterface {
     Popup profilePopup;
     Popup notificationPopup;
     PauseTransition notificationHideDelay;
-    private java.time.Instant lastSectionSwitch = java.time.Instant.now();
     private final DashboardAdminService dashboardAdminService;
-    private final AnalyticsController analyticsController;
-    private final com.syndicati.controllers.log.ActivityLogController activityLogController;
     private static final DateTimeFormatter DASHBOARD_DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public DashboardView() {
         this.root = new HBox();
         this.accentRefreshListener = this::refreshAccentStyling;
         this.dashboardAdminService = new DashboardAdminService();
-        this.analyticsController = new AnalyticsController();
-        this.activityLogController = new com.syndicati.controllers.log.ActivityLogController();
         setupLayout();
         ThemeManager.getInstance().addAccentChangeListener(accentRefreshListener);
     }
@@ -112,9 +104,9 @@ public class DashboardView implements ViewInterface {
     String accentGradient() { return theme().getEffectiveAccentGradient(); }
     String accentRgba(double alpha) { return theme().toRgba(accentHex(), alpha); }
     boolean isDark() { return theme().isDarkMode(); }
-    Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
-    Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
-    Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
+    private Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
+    private Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
+    private Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
 
     String currentDisplayName() {
         User user = SessionManager.getInstance().getCurrentUser();
@@ -337,28 +329,9 @@ public class DashboardView implements ViewInterface {
     }
 
     private void switchSection(String section) {
-        // Detect rapid navigation spamming
-        java.time.Instant now = java.time.Instant.now();
-        if (java.time.Duration.between(lastSectionSwitch, now).toMillis() < 500) {
-            activityLogController.logSecurityAlert("NAVIGATION_SPAM", "MEDIUM", "User is cycling sections too rapidly", 
-                java.util.Map.of("section", section, "interval_ms", java.time.Duration.between(lastSectionSwitch, now).toMillis()));
-        }
-        lastSectionSwitch = now;
-
         activeSection = section;
         sectionButtons.forEach((k, b) -> styleSidebarItem(b, k.equals(section)));
         contentArea.getChildren().setAll(buildSection(section));
-        
-        // Log sensitive access
-        if ("users".equals(section)) {
-            activityLogController.logPageView("/admin/users", "User Management [Sensitive]");
-        } else if ("syndicat".equals(section)) {
-            activityLogController.logPageView("/admin/syndicat", "Syndicat Management");
-        } else if ("security_ai".equals(section)) {
-            activityLogController.logPageView("/admin/security-ai", "Security AI Dashboard [Critical]");
-        } else {
-            activityLogController.logPageView("/admin/" + section, section + " dashboard");
-        }
     }
 
     // MAIN AREA
@@ -397,58 +370,26 @@ public class DashboardView implements ViewInterface {
     // GENERAL section
     VBox buildGeneralSection() {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
-        VBox moduleContent = new VBox(20); moduleContent.setFillWidth(true);
-
-        HBox topStatsBar = mainSwitcher(key -> {
-            moduleContent.getChildren().setAll(
-                "Users".equals(key)     ? buildUsersStatsDashboard() :
-                "Forum".equals(key)     ? buildForumStatsDashboard() :
-                "Syndicat".equals(key)  ? buildSyndicatStatsDashboard() :
-                "Residence".equals(key) ? buildResidenceStatsDashboard() :
-                "Evenement".equals(key) ? buildEvenementStatsDashboard() :
-                buildGeneralStatsModule()
-            );
-        });
-
-        moduleContent.getChildren().add(buildGeneralStatsModule());
-        s.getChildren().addAll(topStatsBar, moduleContent);
-        return s;
-    }
-
-    private VBox buildGeneralStatsModule() {
-        VBox wrap = new VBox(20);
-        wrap.setFillWidth(true);
-
-        VBox subContent = new VBox(20);
-        subContent.setFillWidth(true);
-
-        HBox subBar = subTabBar(new String[]{"Overview", "Engagement", "System", "Activity"}, key -> {
+        VBox subContent = new VBox(20); subContent.setFillWidth(true);
+        HBox subBar = subTabBar(new String[]{"Overview", "Engagement", "System"}, key -> {
             subContent.getChildren().setAll(
                 "Engagement".equals(key) ? buildEngagementContent() :
                 "System".equals(key)     ? buildSystemContent()     :
-                "Activity".equals(key)   ? buildActivityLogContent() :
                 buildGeneralOverview()
             );
         });
-
         subContent.getChildren().add(buildGeneralOverview());
-        wrap.getChildren().addAll(subBar, subContent);
-        return wrap;
+        s.getChildren().addAll(mainSwitcher(), subBar, subContent);
+        return s;
     }
 
     private VBox buildGeneralOverview() {
         VBox v = new VBox(20); v.setFillWidth(true);
         HBox stats = new HBox(16); stats.setFillHeight(true);
-        Map<String, Integer> heartbeat = dashboardAdminService.activityHeartbeat();
         addStatCards(stats,
             new String[]{"USR","OK","ACT","PLS"},
             new String[]{"Total Residents","Active Today","Interactions Today","Community Pulse"},
-            new String[]{
-                String.valueOf(heartbeat.getOrDefault("total_users", 0)),
-                String.valueOf(heartbeat.getOrDefault("active_today", 0)),
-                String.valueOf(heartbeat.getOrDefault("interactions_today", 0)),
-                String.valueOf(heartbeat.getOrDefault("active_week", 0))
-            },
+            new String[]{"1,247","84","502","38"},
             new String[]{"#a78bfa","#34d399","#60a5fa","#fbbf24"}
         );
         HBox grid = new HBox(16); grid.setFillHeight(true);
@@ -460,795 +401,43 @@ public class DashboardView implements ViewInterface {
     }
 
     private VBox buildEngagementContent() {
-        VBox rows = new VBox(16);
-        List<String[]> pages = dashboardAdminService.topPages();
-        if (pages.isEmpty()) {
-            pages = new ArrayList<>();
-            pages.add(new String[]{"/frontend/home", "284"});
-            pages.add(new String[]{"/frontend/forum", "211"});
-            pages.add(new String[]{"/frontend/profile", "183"});
-        }
-        for (int i = 0; i < pages.size(); i++) {
-            String[] p = pages.get(i);
-            rows.getChildren().add(buildRowCard(i == 0 ? "#a78bfa" : i == 1 ? "#60a5fa" : "#34d399", p[0], p[1] + " views", String.valueOf(i + 1), 10));
+        VBox rows = new VBox(10);
+        String[][] pages = {
+            {"1","#a78bfa","/frontend/home",      "284 views"},
+            {"2","#60a5fa","/frontend/forum",     "211 views"},
+            {"3","#34d399","/frontend/profile",   "183 views"},
+            {"4","#fbbf24","/frontend/evenement", "124 views"},
+            {"5","#f87171","/admin/dashboard",    "98 views"}
+        };
+        for (String[] p : pages) {
+            rows.getChildren().add(buildRowCard(p[1], p[2], p[3], p[0], 10));
         }
         VBox card = sectionCard();
         card.getChildren().addAll(t("Top Pages - Most Visited Routes", boldFont(), FontWeight.BOLD, 18), rows);
-
-        VBox arrivals = sectionCard();
-        arrivals.getChildren().add(t("Recent Arrivals", boldFont(), FontWeight.BOLD, 18));
-        List<User> recentUsers = dashboardAdminService.recentSignups(5);
-        if (recentUsers.isEmpty()) {
-            arrivals.getChildren().add(buildRowCard("#60a5fa", "No recent signups", "-", null, 8));
-        } else {
-            for (User u : recentUsers) {
-                String fullName = (safe(u.getFirstName()) + " " + safe(u.getLastName())).trim();
-                String role = safe(u.getRoleUser());
-                String joined = u.getCreatedAt() == null ? "-" : u.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd"));
-                arrivals.getChildren().add(buildRowCard("#60a5fa", fullName + " • " + role, joined, null, 8));
-            }
-        }
-
-        return new VBox(16, card, arrivals);
+        return new VBox(card);
     }
 
     private VBox buildSystemContent() {
+        HBox stats = new HBox(16); stats.setFillHeight(true);
+        addStatCards(stats,
+            new String[]{"SRV","DB","RT","PRC"},
+            new String[]{"Server Status","DB Size","Avg Response","Active Processes"},
+            new String[]{"Online","248 MB","124 ms","7"},
+            new String[]{"#34d399","#60a5fa","#a78bfa","#fbbf24"}
+        );
         VBox logs = new VBox(8);
-        List<com.syndicati.models.log.AppEventLog> recent = dashboardAdminService.recentActivityLogs(5);
-        if (recent.isEmpty()) {
-            for (String[] ev : new String[][]{
-                {"#34d399","Mar 12 09:14","User admin logged in"},
-                {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
-                {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"}
-            }) {
-                logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
-            }
-        } else {
-            for (com.syndicati.models.log.AppEventLog ev : recent) {
-                String actor = ev.getUser() == null ? "Anonymous" : safe(ev.getUser().getFirstName()) + " " + safe(ev.getUser().getLastName());
-                String label = safe(ev.getEventType()) + " • " + safe(ev.getLevel()) + " • " + safe(ev.getOutcome()) + " • " + safe(ev.getEntityType()) + " • " + actor.trim();
-                String when = ev.getCreatedAt() == null ? "-" : ev.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd HH:mm"));
-                logs.getChildren().add(buildRowCard("#34d399", label, when, null, 8));
-            }
+        for (String[] ev : new String[][]{
+            {"#34d399","Mar 12 09:14","User admin logged in"},
+            {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
+            {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"},
+            {"#34d399","Mar 11 22:00","Cache cleared successfully"},
+            {"#fbbf24","Mar 11 20:18","New user registration: Karim S."}
+        }) {
+            logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
         }
         VBox logCard = sectionCard();
-        logCard.getChildren().addAll(t("Live Navigation Log", boldFont(), FontWeight.BOLD, 18), logs);
-
-        VBox deviceCard = sectionCard();
-        deviceCard.getChildren().add(t("System Access (Last 30 Days)", boldFont(), FontWeight.BOLD, 18));
-        List<String[]> deviceRows = dashboardAdminService.deviceBreakdown();
-        if (deviceRows.isEmpty()) {
-            deviceCard.getChildren().add(buildRowCard("#34d399", "No device data", "-", null, 8));
-        } else {
-            for (String[] row : deviceRows) {
-                deviceCard.getChildren().add(buildRowCard("#34d399", safe(row[0]), safe(row[1]) + "%", null, 8));
-            }
-        }
-
-        HBox grid = new HBox(16, logCard, deviceCard);
-        HBox.setHgrow(logCard, Priority.ALWAYS);
-        HBox.setHgrow(deviceCard, Priority.ALWAYS);
-        return new VBox(20, grid);
-    }
-
-    private VBox buildActivityLogContent() {
-        return moduleModeView(
-            "Activity Log",
-            "\u23F1",
-            new String[]{"Overview", "Timeline", "Signals", "Security AI"},
-            key -> switch (key) {
-                case "Timeline" -> activityTimelinePane();
-                case "Signals" -> activitySignalsPane();
-                case "Security AI" -> activitySecurityAiPane();
-                default -> activityOverviewPane();
-            }
-        );
-    }
-
-    private VBox activitySecurityAiPane() {
-        VBox wrap = new VBox(16);
-        wrap.setFillWidth(true);
-
-        List<AnomalyResult> anomalies = analyticsController.getRecentAnomalies(8);
-        List<SuspiciousActivity> suspiciousUsers = analyticsController.getSuspiciousUsers(8);
-        List<Map<String, Object>> featureUsage = analyticsController.getFeatureUsage(6);
-
-        int highAnomalies = 0;
-        int criticalUsers = 0;
-        double peakRisk = 0.0;
-
-        for (AnomalyResult anomaly : anomalies) {
-            if (anomaly.getAnomalyScore() >= 0.80) {
-                highAnomalies++;
-            }
-        }
-
-        for (SuspiciousActivity suspicious : suspiciousUsers) {
-            if (suspicious.getRiskScore() != null) {
-                double risk = suspicious.getRiskScore().getOverallRiskScore();
-                peakRisk = Math.max(peakRisk, risk);
-                String severity = safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
-                if ("CRITICAL".equalsIgnoreCase(severity) || "HIGH".equalsIgnoreCase(severity)) {
-                    criticalUsers++;
-                }
-            }
-        }
-
-        HBox cards = new HBox(16);
-        addStatCards(
-            cards,
-            new String[]{"ANM", "SUS", "RISK", "FEAT"},
-            new String[]{"Recent Anomalies", "High-Risk Users", "Peak Risk Score", "Tracked Features"},
-            new String[]{
-                String.valueOf(anomalies.size()),
-                String.valueOf(criticalUsers),
-                formatScore(peakRisk),
-                String.valueOf(featureUsage.size())
-            },
-            new String[]{"#ef4444", "#f59e0b", "#a78bfa", "#34d399"}
-        );
-
-        VBox anomaliesCard = sectionCard();
-        anomaliesCard.getChildren().add(t("Recent LogAI Anomalies", boldFont(), FontWeight.BOLD, 18));
-        if (anomalies.isEmpty()) {
-            anomaliesCard.getChildren().add(buildRowCard("#60a5fa", "No anomaly records yet", "-", null, 8));
-        } else {
-            for (AnomalyResult anomaly : anomalies) {
-                String userText = anomaly.getUserDisplayName() == null ? "anonymous" : anomaly.getUserDisplayName();
-                String title = safeDefault(anomaly.getEventType(), "UNKNOWN_EVENT") + " - " + userText;
-                String value = safeDefault(anomaly.getAnomalyLabel(), "ANOMALY") + " • score " + formatScore(anomaly.getAnomalyScore());
-                anomaliesCard.getChildren().add(buildRowCard(anomalyColor(anomaly.getAnomalyScore()), title, value, null, 8));
-            }
-        }
-
-        VBox suspiciousCard = sectionCard();
-        suspiciousCard.getChildren().add(t("Suspicious Users (7 days)", boldFont(), FontWeight.BOLD, 18));
-        if (suspiciousUsers.isEmpty()) {
-            suspiciousCard.getChildren().add(buildRowCard("#34d399", "No suspicious users detected", "-", null, 8));
-        } else {
-            for (SuspiciousActivity suspicious : suspiciousUsers) {
-                String title = "User #" + safe(suspicious.getUserId() == null ? null : String.valueOf(suspicious.getUserId()))
-                    + " • " + safe(suspicious.getUserEmail());
-                String severity = suspicious.getRiskScore() == null ? "SAFE" : safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
-                double riskScore = suspicious.getRiskScore() == null ? 0.0 : suspicious.getRiskScore().getOverallRiskScore();
-                String value = severity + " • risk " + formatScore(riskScore) + " • failures " + suspicious.getFailureCount();
-                suspiciousCard.getChildren().add(buildRowCard(severityColor(severity), title, value, null, 8));
-            }
-        }
-
-        VBox featureCard = sectionCard();
-        featureCard.getChildren().add(t("Feature Usage (Top)", boldFont(), FontWeight.BOLD, 18));
-        if (featureUsage.isEmpty()) {
-            featureCard.getChildren().add(buildRowCard("#60a5fa", "No feature usage data", "-", null, 8));
-        } else {
-            int index = 1;
-            for (Map<String, Object> row : featureUsage) {
-                String feature = safe(row.get("feature") == null ? null : String.valueOf(row.get("feature")));
-                String count = safe(row.get("count") == null ? null : String.valueOf(row.get("count"))) + " events";
-                featureCard.getChildren().add(buildRowCard(index <= 2 ? "#a78bfa" : "#34d399", feature, count, String.valueOf(index), 10));
-                index++;
-            }
-        }
-
-        VBox noteCard = sectionCard();
-        String noteText = "\u2022 High anomalies (>=0.80): " + highAnomalies
-            + "\n\u2022 Data source: AnalyticsController (anomalies, suspicious users, feature usage)"
-            + "\n\u2022 Recommendation: review HIGH/CRITICAL users and correlated timelines.";
-        Text note = t(noteText, lightFont(), FontWeight.NORMAL, 13);
-        note.setFill(textMutedColor());
-        noteCard.getChildren().addAll(t("AI Security Notes", boldFont(), FontWeight.BOLD, 16), note);
-
-        HBox upper = new HBox(16, anomaliesCard, suspiciousCard);
-        HBox.setHgrow(anomaliesCard, Priority.ALWAYS);
-        HBox.setHgrow(suspiciousCard, Priority.ALWAYS);
-
-        HBox lower = new HBox(16, featureCard, noteCard);
-        HBox.setHgrow(featureCard, Priority.ALWAYS);
-        HBox.setHgrow(noteCard, Priority.ALWAYS);
-
-        wrap.getChildren().addAll(cards, upper, lower);
-
-        // Honeypot: A hidden button that looks like a critical system reset
-        Button honeypot = new Button("System Reset All Logs");
-        honeypot.setOpacity(0.01); // Almost invisible to humans
-        honeypot.setPrefSize(1, 1); // Tiny but clickable by bots
-        honeypot.setOnAction(_ -> activityLogController.logHoneypotClick("security_ai_reset_bait", java.util.Map.of()));
-        wrap.getChildren().add(honeypot);
-
-        return wrap;
-    }
-
-    private String formatScore(double value) {
-        return String.format("%.2f", Math.max(0.0, Math.min(1.0, value)));
-    }
-
-    private String anomalyColor(double score) {
-        if (score >= 0.80) {
-            return "#ef4444";
-        }
-        if (score >= 0.60) {
-            return "#f59e0b";
-        }
-        if (score >= 0.40) {
-            return "#a78bfa";
-        }
-        return "#34d399";
-    }
-
-    private String severityColor(String severity) {
-        String normalized = severity == null ? "SAFE" : severity.toUpperCase();
-        if ("CRITICAL".equals(normalized)) {
-            return "#ef4444";
-        }
-        if ("HIGH".equals(normalized)) {
-            return "#f97316";
-        }
-        if ("MEDIUM".equals(normalized)) {
-            return "#f59e0b";
-        }
-        if ("LOW".equals(normalized)) {
-            return "#60a5fa";
-        }
-        return "#34d399";
-    }
-
-    private VBox activityOverviewPane() {
-        VBox wrap = new VBox(16);
-        wrap.setFillWidth(true);
-
-        Map<String, Integer> stats = dashboardAdminService.activityHeartbeat();
-        HBox cards = new HBox(16);
-        addStatCards(cards,
-            new String[]{"USR", "ACT", "CLK", "WKY"},
-            new String[]{"Active Today", "Interactions Today", "Page Views", "Weekly Activity"},
-            new String[]{
-                String.valueOf(stats.getOrDefault("active_today", 0)),
-                String.valueOf(stats.getOrDefault("interactions_today", 0)),
-                String.valueOf(stats.getOrDefault("page_views", 0)),
-                String.valueOf(stats.getOrDefault("active_week", 0))
-            },
-            new String[]{"#60a5fa", "#34d399", "#a78bfa", "#fbbf24"}
-        );
-
-        HBox grid = new HBox(16);
-        VBox chart = buildActivityChart();
-        HBox.setHgrow(chart, Priority.ALWAYS);
-        VBox topUsers = buildTopUsers();
-        topUsers.setPrefWidth(300);
-        topUsers.setMinWidth(300);
-        topUsers.setMaxWidth(300);
-        grid.getChildren().addAll(chart, topUsers);
-
-        wrap.getChildren().addAll(cards, grid);
-        return wrap;
-    }
-
-    private VBox activityTimelinePane() {
-        List<com.syndicati.models.log.AppEventLog> logs = dashboardAdminService.recentActivityLogs(200);
-        List<String[]> rows = new ArrayList<>();
-
-        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("MMM dd HH:mm");
-        for (com.syndicati.models.log.AppEventLog log : logs) {
-            String subject = safe(log.getEntityType());
-            String event = safe(log.getEventType());
-            String level = safeDefault(log.getLevel(), "INFO");
-            String outcome = safeDefault(log.getOutcome(), "UNKNOWN");
-            String actor = log.getUser() == null ? "Anonymous" : (safe(log.getUser().getFirstName()) + " " + safe(log.getUser().getLastName())).trim();
-            String metadata = shortMetadata(log.getMetadataJson());
-            String when = log.getEventTimestamp() != null
-                ? log.getEventTimestamp().format(dateFmt)
-                : (log.getCreatedAt() == null ? "-" : log.getCreatedAt().format(dateFmt));
-            String trace = blankOrDash(log.getTraceId());
-            String session = blankOrDash(log.getSessionId());
-            String risk = log.getRiskScore() == null ? "-" : log.getRiskScore().toPlainString();
-            String duration = log.getDurationMs() == null ? "-" : log.getDurationMs() + " ms";
-            rows.add(new String[]{event, level, outcome, subject, actor, trace, session, risk, duration, metadata, when});
-        }
-
-        DashboardTableQueryEngine.QueryState state = new DashboardTableQueryEngine.QueryState(12);
-        TextField searchField = activitySearchField("Search logs by event, entity, user or metadata...");
-        Button sortPill = pillAction("Order: A-Z", false);
-        HBox filterRow = new HBox(6);
-        filterRow.setAlignment(Pos.CENTER_LEFT);
-        HBox headerControls = new HBox(8, searchField, sortPill, filterRow);
-        headerControls.setAlignment(Pos.CENTER_LEFT);
-        VBox tableHost = new VBox();
-
-        String[][] filters = new String[][]{
-            {"PAGE_VIEW", "Page View"},
-            {"UI_CLICK", "UI Click"},
-            {"FAILURE", "Failure"},
-            {"ERROR", "Error"},
-            {"all", "All"}
-        };
-        for (String[] filter : filters) {
-            String key = filter[0];
-            Button button = pillAction(filter[1], false);
-            button.setOnAction(e -> {
-                state.filterKey = key.equals(state.filterKey) ? "all" : key;
-                state.page = 1;
-                renderActivityTable(rows, state, tableHost, headerControls);
-            });
-            filterRow.getChildren().add(button);
-        }
-
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
-            state.searchTerm = newVal == null ? "" : newVal;
-            state.page = 1;
-            renderActivityTable(rows, state, tableHost, headerControls);
-        });
-
-        sortPill.setOnAction(e -> {
-            state.ascending = !state.ascending;
-            renderActivityTable(rows, state, tableHost, headerControls);
-        });
-
-        renderActivityTable(rows, state, tableHost, headerControls);
-
-        VBox wrap = new VBox(14, headerControls, tableHost);
-        wrap.setFillWidth(true);
-        return wrap;
-    }
-
-    private void renderActivityTable(List<String[]> rows, DashboardTableQueryEngine.QueryState state, VBox tableHost, HBox headerControls) {
-        DashboardTableQueryEngine.QueryResult result = DashboardTableQueryEngine.apply(rows, state, (row, filterKey) -> {
-            if (filterKey == null || filterKey.isBlank() || "all".equalsIgnoreCase(filterKey)) {
-                return true;
-            }
-            return matchesTimelineFilter(row, filterKey);
-        }, 10);
-
-        VBox table = sectionCard();
-        table.setFillWidth(true);
-
-        HBox head = new HBox(10);
-        head.setAlignment(Pos.CENTER_LEFT);
-        Text title = t("Recent Activity", boldFont(), FontWeight.BOLD, 18);
-        title.setFill(textPrimaryColor());
-        Text sub = t(result.totalRows + " records", lightFont(), FontWeight.NORMAL, 13);
-        sub.setFill(textMutedColor());
-        VBox titleWrap = new VBox(2, title, sub);
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        head.getChildren().addAll(titleWrap, spacer);
-        if (headerControls != null) {
-            head.getChildren().add(headerControls);
-        }
-
-        VBox list = new VBox(8);
-        if (result.pageRows.isEmpty()) {
-            list.getChildren().add(buildEmptyState("No activity logs found"));
-        } else {
-            for (String[] row : result.pageRows) {
-                HBox line = new HBox(12);
-                line.setAlignment(Pos.CENTER_LEFT);
-                line.setPadding(new Insets(10, 12, 10, 12));
-                line.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:12px;");
-
-                VBox details = new VBox(2,
-                    activityTextCell(row[3] + " • " + row[4]),
-                    activityMetaCell("trace=" + compactId(row[5]) + " • sess=" + compactId(row[6]) + " • risk=" + row[7] + " • " + row[8])
-                );
-                HBox.setHgrow(details, Priority.ALWAYS);
-
-                line.getChildren().addAll(
-                    activityPill(row[0], "#a78bfa"),
-                    activityPill(row[1], activityLevelColor(row[1])),
-                    activityPill(row[2], activityOutcomeColor(row[2])),
-                    details,
-                    activityMetaCell(row[9]),
-                    activityTimeCell(row[10])
-                );
-                list.getChildren().add(line);
-            }
-        }
-
-        table.getChildren().addAll(head, list, activityPagerRow(state, result, rows, tableHost, headerControls));
-        tableHost.getChildren().setAll(table);
-    }
-
-    private HBox activityPagerRow(
-        DashboardTableQueryEngine.QueryState state,
-        DashboardTableQueryEngine.QueryResult result,
-        List<String[]> rows,
-        VBox tableHost,
-        HBox headerControls
-    ) {
-        HBox row = new HBox(8);
-        row.setAlignment(Pos.CENTER_LEFT);
-        row.setPadding(new Insets(8, 0, 0, 0));
-        Text pageLabel = t("Page " + result.page + " / " + result.totalPages + " | " + result.totalRows + " records", lightFont(), FontWeight.NORMAL, 12);
-        pageLabel.setFill(textMutedColor());
-        Button prev = pillAction("<", false);
-        Button next = pillAction(">", false);
-        prev.setDisable(result.page <= 1);
-        next.setDisable(result.page >= result.totalPages);
-        prev.setOnAction(e -> {
-            state.page = Math.max(1, state.page - 1);
-            renderActivityTable(rows, state, tableHost, headerControls);
-        });
-        next.setOnAction(e -> {
-            state.page = Math.min(result.totalPages, state.page + 1);
-            renderActivityTable(rows, state, tableHost, headerControls);
-        });
-        row.getChildren().addAll(prev, next, pageLabel);
-        return row;
-    }
-
-    private VBox activitySignalsPane() {
-        VBox wrap = new VBox(16);
-
-        HBox rows = new HBox(16);
-        VBox pagesCard = activitySignalCard("Top Pages");
-        VBox clicksCard = activitySignalCard("Top Clicks");
-        VBox devicesCard = activitySignalCard("Device Breakdown");
-
-        fillRankRows(pagesCard, dashboardAdminService.topPages(), true);
-        fillClickRows(clicksCard, dashboardAdminService.topClicks());
-        fillDeviceRows(devicesCard, dashboardAdminService.deviceBreakdown());
-
-        rows.getChildren().addAll(pagesCard, clicksCard, devicesCard);
-        HBox.setHgrow(pagesCard, Priority.ALWAYS);
-        HBox.setHgrow(clicksCard, Priority.ALWAYS);
-        HBox.setHgrow(devicesCard, Priority.ALWAYS);
-
-        HBox advanced = new HBox(16);
-        VBox outcomesCard = activitySignalCard("Outcomes (30d)");
-        VBox levelsCard = activitySignalCard("Levels (30d)");
-        VBox riskCard = activitySignalCard("Risk Signals");
-        fillRankRows(outcomesCard, dashboardAdminService.outcomeBreakdown(), false);
-        fillRankRows(levelsCard, dashboardAdminService.levelBreakdown(), false);
-        fillRiskRows(riskCard, dashboardAdminService.riskSignals(5));
-        advanced.getChildren().addAll(outcomesCard, levelsCard, riskCard);
-        HBox.setHgrow(outcomesCard, Priority.ALWAYS);
-        HBox.setHgrow(levelsCard, Priority.ALWAYS);
-        HBox.setHgrow(riskCard, Priority.ALWAYS);
-
-        wrap.getChildren().addAll(rows, advanced);
-        return wrap;
-    }
-
-    private VBox activitySignalCard(String title) {
-        VBox card = sectionCard();
-        card.setPrefWidth(300);
-        card.setSpacing(10);
-        Text heading = t(title, boldFont(), FontWeight.BOLD, 15);
-        heading.setFill(textPrimaryColor());
-        card.getChildren().add(heading);
-        return card;
-    }
-
-    private void fillRankRows(VBox card, List<String[]> rows, boolean labelCountHint) {
-        for (String[] row : rows) {
-            String left = row.length > 0 ? safe(row[0]) : "-";
-            String right = row.length > 1 ? safe(row[row.length - 1]) : "-";
-            HBox line = new HBox(10);
-            line.setAlignment(Pos.CENTER_LEFT);
-            line.getChildren().addAll(activityTextCell(left), new Region(), activityTextCell(labelCountHint ? right : right));
-            HBox.setHgrow(line.getChildren().get(1), Priority.ALWAYS);
-            card.getChildren().add(line);
-        }
-    }
-
-    private void fillClickRows(VBox card, List<String[]> rows) {
-        for (String[] row : rows) {
-            String text = row.length > 0 ? safe(row[0]) : "-";
-            String target = row.length > 1 ? safe(row[1]) : "-";
-            String count = row.length > 2 ? safe(row[2]) : "0";
-            VBox box = new VBox(2);
-            box.getChildren().addAll(activityTextCell(text + " • " + target), activityMetaCell(count + " clicks"));
-            card.getChildren().add(box);
-        }
-    }
-
-    private void fillDeviceRows(VBox card, List<String[]> rows) {
-        for (String[] row : rows) {
-            String label = row.length > 0 ? safe(row[0]) : "-";
-            String pct = row.length > 1 ? safe(row[1]) + "%" : "-";
-            HBox line = new HBox(10);
-            line.setAlignment(Pos.CENTER_LEFT);
-            line.getChildren().addAll(activityTextCell(label), new Region(), activityTextCell(pct));
-            HBox.setHgrow(line.getChildren().get(1), Priority.ALWAYS);
-            card.getChildren().add(line);
-        }
-    }
-
-    private void fillRiskRows(VBox card, List<String[]> rows) {
-        for (String[] row : rows) {
-            if (row.length < 9) {
-                continue;
-            }
-            String title = safe(row[0]) + " • " + safe(row[1]) + " • " + safe(row[5]);
-            String detail = "risk " + safe(row[2]) + " | anomaly " + safe(row[3]) + " | " + safe(row[4]) + " ms | " + safe(row[6]) + "/" + safe(row[7]);
-            card.getChildren().add(new VBox(2, activityTextCell(title), activityMetaCell(detail)));
-        }
-    }
-
-    private TextField activitySearchField(String prompt) {
-        TextField searchField = new TextField();
-        searchField.setPromptText(prompt);
-        searchField.setPrefWidth(320);
-        searchField.setStyle(
-            "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";" +
-            "-fx-background-radius:10px;" +
-            "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-radius:10px;" +
-            "-fx-text-fill:" + (isDark() ? "#ffffff" : "#111827") + ";"
-        );
-        return searchField;
-    }
-
-    private HBox activityTextCell(String text) {
-        Text tx = t(text == null ? "-" : text, lightFont(), FontWeight.NORMAL, 13);
-        tx.setFill(textSecondaryColor());
-        return new HBox(tx);
-    }
-
-    private HBox activityMetaCell(String text) {
-        Text tx = t(text == null ? "-" : text, lightFont(), FontWeight.NORMAL, 12);
-        tx.setFill(textMutedColor());
-        return new HBox(tx);
-    }
-
-    private HBox activityTimeCell(String text) {
-        Text tx = t(text == null ? "-" : text, lightFont(), FontWeight.NORMAL, 12);
-        tx.setFill(textMutedColor());
-        return new HBox(tx);
-    }
-
-    private HBox activityPill(String text, String color) {
-        HBox box = new HBox(t(text == null ? "-" : text, boldFont(), FontWeight.BOLD, 11));
-        box.setPadding(new Insets(4, 10, 4, 10));
-        box.setStyle("-fx-background-color:" + color + "22;-fx-background-radius:999px;");
-        return box;
-    }
-
-    private String shortMetadata(String metadata) {
-        if (metadata == null || metadata.isBlank()) {
-            return "-";
-        }
-        String normalized = metadata.replace('{', ' ').replace('}', ' ').trim();
-        return normalized.length() > 42 ? normalized.substring(0, 42) + "..." : normalized;
-    }
-
-    private String blankOrDash(String value) {
-        return (value == null || value.isBlank()) ? "-" : value;
-    }
-
-    private boolean matchesTimelineFilter(String[] row, String filterKey) {
-        if (row == null || row.length < 3) {
-            return false;
-        }
-        String normalized = filterKey == null ? "" : filterKey.trim().toUpperCase();
-        if (normalized.isBlank() || "ALL".equals(normalized)) {
-            return true;
-        }
-        return normalized.equalsIgnoreCase(blankOrDash(row[0]))
-            || normalized.equalsIgnoreCase(blankOrDash(row[1]))
-            || normalized.equalsIgnoreCase(blankOrDash(row[2]));
-    }
-
-    private String compactId(String value) {
-        if (value == null || value.isBlank() || "-".equals(value)) {
-            return "-";
-        }
-        if (value.length() <= 10) {
-            return value;
-        }
-        return value.substring(0, 6) + "..." + value.substring(value.length() - 4);
-    }
-
-    private String activityLevelColor(String level) {
-        String normalized = level == null ? "INFO" : level.toUpperCase();
-        if ("ERROR".equals(normalized)) {
-            return "#ef4444";
-        }
-        if ("WARN".equals(normalized) || "WARNING".equals(normalized)) {
-            return "#f59e0b";
-        }
-        if ("DEBUG".equals(normalized) || "TRACE".equals(normalized)) {
-            return "#60a5fa";
-        }
-        return "#34d399";
-    }
-
-    private String activityOutcomeColor(String outcome) {
-        String normalized = outcome == null ? "UNKNOWN" : outcome.toUpperCase();
-        if ("FAILURE".equals(normalized) || "FAILED".equals(normalized) || "ERROR".equals(normalized)) {
-            return "#ef4444";
-        }
-        if ("WARNING".equals(normalized) || "PARTIAL".equals(normalized)) {
-            return "#f59e0b";
-        }
-        if ("SUCCESS".equals(normalized) || "OK".equals(normalized)) {
-            return "#34d399";
-        }
-        return "#a78bfa";
-    }
-
-    private String safeDefault(String value, String fallback) {
-        String normalized = safe(value);
-        return "-".equals(normalized) ? fallback : normalized;
-    }
-
-    private VBox buildUsersStatsDashboard() {
-        Map<String, Object> stats = dashboardAdminService.getModuleStats("users");
-        VBox wrap = new VBox(16);
-        HBox cards = new HBox(16);
-        cards.setFillHeight(true);
-        addStatCards(cards,
-            new String[]{"TOT", "VER", "ACT", "ROL"},
-            new String[]{"Total Users", "Verified", "Active This Week", "Roles"},
-            new String[]{
-                String.valueOf(intStat(stats, "total")),
-                String.valueOf(intStat(stats, "verified")),
-                String.valueOf(intStat(stats, "active_this_week")),
-                String.valueOf(roleCount(stats))
-            },
-            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
-        );
-
-        VBox recent = sectionCard();
-        recent.getChildren().add(t("Recent Users", boldFont(), FontWeight.BOLD, 18));
-        List<String[]> rows = listStat(stats, "recent_users");
-        if (rows.isEmpty()) {
-            recent.getChildren().add(buildRowCard("#60a5fa", "No users", "-", null, 8));
-        } else {
-            for (String[] row : rows) {
-                String name = safe(cell(row, 0)) + " " + safe(cell(row, 1));
-                recent.getChildren().add(buildRowCard("#60a5fa", name.trim() + " • " + safe(cell(row, 2)), safe(cell(row, 3)), null, 8));
-            }
-        }
-
-        wrap.getChildren().addAll(cards, recent);
-        return wrap;
-    }
-
-    private VBox buildForumStatsDashboard() {
-        Map<String, Object> stats = dashboardAdminService.getModuleStats("forum");
-        VBox wrap = new VBox(16);
-        HBox cards = new HBox(16);
-        cards.setFillHeight(true);
-        addStatCards(cards,
-            new String[]{"PUB", "COM", "TOD", "AUT"},
-            new String[]{"Publications", "Comments", "Today", "Top Authors"},
-            new String[]{
-                String.valueOf(intStat(stats, "publications")),
-                String.valueOf(intStat(stats, "comments")),
-                String.valueOf(intStat(stats, "pubs_today")),
-                String.valueOf(listStat(stats, "top_authors").size())
-            },
-            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
-        );
-
-        VBox topAuthors = sectionCard();
-        topAuthors.getChildren().add(t("Top Authors", boldFont(), FontWeight.BOLD, 18));
-        for (String[] row : listStat(stats, "top_authors")) {
-            String name = safe(cell(row, 0)) + " " + safe(cell(row, 1));
-            topAuthors.getChildren().add(buildRowCard("#a78bfa", name.trim(), safe(cell(row, 2)) + " posts", null, 8));
-        }
-
-        VBox recent = sectionCard();
-        recent.getChildren().add(t("Recent Publications", boldFont(), FontWeight.BOLD, 18));
-        for (String[] row : listStat(stats, "recent_pubs")) {
-            String author = safe(cell(row, 3)) + " " + safe(cell(row, 4));
-            recent.getChildren().add(buildRowCard("#34d399", safe(cell(row, 0)) + " • " + author.trim(), safe(cell(row, 2)), null, 8));
-        }
-
-        wrap.getChildren().addAll(cards, topAuthors, recent);
-        return wrap;
-    }
-
-    private VBox buildSyndicatStatsDashboard() {
-        Map<String, Object> stats = dashboardAdminService.getModuleStats("syndicat");
-        VBox wrap = new VBox(16);
-        HBox cards = new HBox(16);
-        cards.setFillHeight(true);
-        addStatCards(cards,
-            new String[]{"SYN", "REC", "PND", "REP"},
-            new String[]{"Syndics", "Reclamations", "Pending", "Responses"},
-            new String[]{
-                String.valueOf(intStat(stats, "total")),
-                String.valueOf(intStat(stats, "reclamations")),
-                String.valueOf(intStat(stats, "reclamations_pending")),
-                String.valueOf(intStat(stats, "reponses"))
-            },
-            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
-        );
-
-        VBox recent = sectionCard();
-        recent.getChildren().add(t("Recent Reclamations", boldFont(), FontWeight.BOLD, 18));
-        for (String[] row : listStat(stats, "recent_reclamations")) {
-            recent.getChildren().add(buildRowCard("#34d399", safe(cell(row, 0)), safe(cell(row, 2)), null, 8));
-        }
-
-        wrap.getChildren().addAll(cards, recent);
-        return wrap;
-    }
-
-    private VBox buildResidenceStatsDashboard() {
-        Map<String, Object> stats = dashboardAdminService.getModuleStats("residence");
-        VBox wrap = new VBox(16);
-        HBox cards = new HBox(16);
-        cards.setFillHeight(true);
-        addStatCards(cards,
-            new String[]{"RES", "BUI", "APT", "REC"},
-            new String[]{"Residents", "Residences", "Appartements", "Recent"},
-            new String[]{
-                String.valueOf(intStat(stats, "total")),
-                String.valueOf(intStat(stats, "residences")),
-                String.valueOf(intStat(stats, "appartements")),
-                String.valueOf(listStat(stats, "recent_residences").size())
-            },
-            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
-        );
-
-        VBox recent = sectionCard();
-        recent.getChildren().add(t("Recent Residences", boldFont(), FontWeight.BOLD, 18));
-        for (String[] row : listStat(stats, "recent_residences")) {
-            recent.getChildren().add(buildRowCard("#60a5fa", safe(cell(row, 0)), safe(cell(row, 2)), null, 8));
-        }
-
-        wrap.getChildren().addAll(cards, recent);
-        return wrap;
-    }
-
-    private VBox buildEvenementStatsDashboard() {
-        Map<String, Object> stats = dashboardAdminService.getModuleStats("evenement");
-        VBox wrap = new VBox(16);
-        HBox cards = new HBox(16);
-        cards.setFillHeight(true);
-        addStatCards(cards,
-            new String[]{"EVT", "UPC", "PAR", "REC"},
-            new String[]{"Events", "Upcoming", "Participations", "Recent"},
-            new String[]{
-                String.valueOf(intStat(stats, "total")),
-                String.valueOf(intStat(stats, "upcoming")),
-                String.valueOf(intStat(stats, "participations")),
-                String.valueOf(listStat(stats, "recent_events").size())
-            },
-            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
-        );
-
-        VBox recent = sectionCard();
-        recent.getChildren().add(t("Recent Events", boldFont(), FontWeight.BOLD, 18));
-        for (String[] row : listStat(stats, "recent_events")) {
-            recent.getChildren().add(buildRowCard("#34d399", safe(cell(row, 0)), safe(cell(row, 3)) + " • " + safe(cell(row, 2)), null, 8));
-        }
-
-        wrap.getChildren().addAll(cards, recent);
-        return wrap;
-    }
-
-    private VBox buildSignalsContent() {
-        VBox rows = new VBox(16);
-
-        VBox topClicksCard = sectionCard();
-        topClicksCard.getChildren().add(t("Top UI Click Signals", boldFont(), FontWeight.BOLD, 18));
-        List<String[]> clicks = dashboardAdminService.topClicks();
-        if (clicks.isEmpty()) {
-            clicks = new ArrayList<>();
-            clicks.add(new String[]{"Explore Events", "button#explore", "34"});
-            clicks.add(new String[]{"Join", "button#join", "22"});
-            clicks.add(new String[]{"Profile", "nav#profile", "17"});
-        }
-        for (int i = 0; i < clicks.size(); i++) {
-            String[] row = clicks.get(i);
-            String label = safe(row[0]) + " • " + safe(row[1]);
-            String count = safe(row[2]) + " clicks";
-            topClicksCard.getChildren().add(buildRowCard(i == 0 ? "#a78bfa" : i == 1 ? "#34d399" : "#60a5fa", label, count, String.valueOf(i + 1), 10));
-        }
-
-        VBox devicesCard = sectionCard();
-        devicesCard.getChildren().add(t("Device & Browser Breakdown", boldFont(), FontWeight.BOLD, 18));
-        for (String[] row : dashboardAdminService.deviceBreakdown()) {
-            String metricLabel = safe(row[0]);
-            String pct = safe(row[1]) + "%";
-            devicesCard.getChildren().add(buildRowCard("#fbbf24", metricLabel, pct, null, 8));
-        }
-
-        rows.getChildren().addAll(topClicksCard, devicesCard);
-        return rows;
+        logCard.getChildren().addAll(t("Recent System Events", boldFont(), FontWeight.BOLD, 18), logs);
+        return new VBox(20, stats, logCard);
     }
 
     private HBox buildRowCard(String color, String title, String value, String index, int radius) {
@@ -1281,36 +470,20 @@ public class DashboardView implements ViewInterface {
     private VBox buildActivityChart() {
         VBox card = sectionCard();
         Text title = t("Activity Pulse", boldFont(), FontWeight.BOLD, 15); title.setFill(textPrimaryColor());
-        Text sub   = t("Page Views | UI Clicks | Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
+        Text sub   = t("Page Views â–   UI Clicks â–   â€” Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
         sub.setFill(textMutedColor());
-
-        Map<String, Integer> community = dashboardAdminService.communityStats();
-        int newPosts = community.getOrDefault("new_posts", 0);
-        int newEvents = community.getOrDefault("new_events", 0);
-        int totalCommunity = newPosts + newEvents;
 
         HBox cw = new HBox(8); cw.setAlignment(Pos.BOTTOM_LEFT);
         cw.setPrefHeight(140); cw.setPadding(new Insets(8,0,0,0));
-        List<String[]> trends = dashboardAdminService.interactionTrends();
-        if (trends.isEmpty()) {
-            trends = new ArrayList<>();
-            trends.add(new String[]{"MON", "65", "42"});
-            trends.add(new String[]{"TUE", "82", "55"});
-            trends.add(new String[]{"WED", "58", "38"});
-            trends.add(new String[]{"THU", "90", "70"});
-            trends.add(new String[]{"FRI", "74", "52"});
-            trends.add(new String[]{"SAT", "45", "30"});
-            trends.add(new String[]{"SUN", "60", "44"});
-        }
-
-        for (String[] trend : trends) {
+        String[] days  = {"MON","TUE","WED","THU","FRI","SAT","SUN"};
+        int[] views    = {65,82,58,90,74,45,60};
+        int[] clicks   = {42,55,38,70,52,30,44};
+        for (int i = 0; i < days.length; i++) {
             VBox col = new VBox(4); col.setAlignment(Pos.BOTTOM_CENTER);
             HBox.setHgrow(col, Priority.ALWAYS);
             HBox pair = new HBox(3); pair.setAlignment(Pos.BOTTOM_CENTER);
-            int views = parseInt(trend, 1);
-            int clicks = parseInt(trend, 2);
-            pair.getChildren().addAll(barR(Math.max(8, views * 2), "#a78bfa"), barR(Math.max(8, clicks * 2), "#34d399"));
-            Text d = t(trend[0], lightFont(), FontWeight.NORMAL, 11); d.setFill(textMutedColor());
+            pair.getChildren().addAll(barR(Math.max(8, views[i]*120/100), "#a78bfa"), barR(Math.max(8, clicks[i]*120/100), "#34d399"));
+            Text d = t(days[i], lightFont(), FontWeight.NORMAL, 11); d.setFill(textMutedColor());
             col.getChildren().addAll(pair, d);
             cw.getChildren().add(col);
         }
@@ -1318,9 +491,9 @@ public class DashboardView implements ViewInterface {
         footer.setPadding(new Insets(10,0,0,0));
         footer.setStyle("-fx-border-color:rgba(255,255,255,0.06);-fx-border-width:1 0 0 0;");
         footer.getChildren().addAll(
-            metric("P","New Posts","+" + newPosts,"#a78bfa"),
-            metric("E","New Events","+" + newEvents,"#34d399"),
-            metric("G","Community Pulse",String.valueOf(totalCommunity),"#60a5fa")
+            metric("P","New Posts","+12","#a78bfa"),
+            metric("E","New Events","+5","#34d399"),
+            metric("G","Engagement","High","#60a5fa")
         );
         card.getChildren().addAll(title, sub, cw, footer);
         return card;
@@ -1330,26 +503,22 @@ public class DashboardView implements ViewInterface {
         VBox card = sectionCard();
         Text title = t("â­  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
         VBox list = new VBox(6);
-        List<String[]> users = dashboardAdminService.topUsers();
-        if (users.isEmpty()) {
-            users = new ArrayList<>();
-            users.add(new String[]{"Ahmed", "B.", "SYNDIC", "142"});
-            users.add(new String[]{"Leila", "M.", "RESIDENT", "118"});
-            users.add(new String[]{"Karim", "S.", "ADMIN", "95"});
-        }
-        for (String[] u : users) {
+        for (String[] u : new String[][]{
+            {"Ahmed B.","SYNDIC","142"}, {"Leila M.","RESIDENT","118"},
+            {"Karim S.","ADMIN","95"},   {"Sara A.","RESIDENT","87"},
+            {"Omar Z.","SYNDIC","76"}
+        }) {
             HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
             row.setPadding(new Insets(6,8,6,8));
             row.setStyle("-fx-background-color:rgba(255,255,255,0.025);-fx-background-radius:8;");
-            Text ini = t((u[0] == null || u[0].isBlank()) ? "U" : u[0].substring(0, 1), boldFont(), FontWeight.BOLD, 14); ini.setFill(Color.web("#fbbf24"));
+            Text ini = t(u[0].substring(0,1), boldFont(), FontWeight.BOLD, 14); ini.setFill(Color.web("#fbbf24"));
             StackPane av = new StackPane(ini); av.setPrefSize(32,32);
             av.setStyle("-fx-background-color:rgba(251,191,36,0.15);-fx-background-radius:16;");
             VBox info = new VBox(1); HBox.setHgrow(info, Priority.ALWAYS);
-            String fullName = (u[0] + " " + u[1]).trim();
-            Text nm = t(fullName, lightFont(), FontWeight.NORMAL, 14); nm.setFill(textSecondaryColor());
-            Text rl = t(u[2], lightFont(), FontWeight.NORMAL, 12); rl.setFill(Color.web("#fbbf24"));
+            Text nm = t(u[0], lightFont(), FontWeight.NORMAL, 14); nm.setFill(textSecondaryColor());
+            Text rl = t(u[1], lightFont(), FontWeight.NORMAL, 12); rl.setFill(Color.web("#fbbf24"));
             info.getChildren().addAll(nm, rl);
-            Text pts = t(u[3], boldFont(), FontWeight.BOLD, 13); pts.setFill(textPrimaryColor());
+            Text pts = t(u[2], boldFont(), FontWeight.BOLD, 13); pts.setFill(textPrimaryColor());
             row.getChildren().addAll(av, info, pts);
             list.getChildren().add(row);
         }
@@ -2719,7 +1888,7 @@ public class DashboardView implements ViewInterface {
         return b;
     }
 
-    private HBox mainSwitcher(Consumer<String> onSelect) {
+    private HBox mainSwitcher() {
         HBox c = new HBox(); c.setAlignment(Pos.CENTER);
         HBox pill = createPill(
             0,
@@ -2728,16 +1897,14 @@ public class DashboardView implements ViewInterface {
             isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.14)",
             100
         );
-
-        String[] labels = {"General", "Users", "Forum", "Syndicat", "Residence", "Evenement"};
-        List<Button> tabs = new ArrayList<>();
-        final String[] activeLabel = {labels[0]};
-
-        for (String label : labels) {
-            Button tab = new Button(label);
+        String[] labels   = {"General","Users","Forum","Syndicat","Residence","Evenement"};
+        String[] sections = {"general","users","forum","syndicat","residence","evenement"};
+        for (int i = 0; i < labels.length; i++) {
+            final String sec = sections[i];
+            Button tab = new Button(labels[i]);
             tab.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
             tab.setPadding(new Insets(8,18,8,18));
-            boolean active = label.equals(activeLabel[0]);
+            boolean active = sec.equals(activeSection);
             String background = active ? accentGradient() : "transparent";
             String textColor = active ? "white" : (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.74)");
             tab.setStyle(
@@ -2746,25 +1913,9 @@ public class DashboardView implements ViewInterface {
                 "-fx-text-fill:" + textColor + ";" +
                 "-fx-cursor:hand;"
             );
-
-            tab.setOnAction(_ -> {
-                activeLabel[0] = label;
-                for (Button b : tabs) {
-                    boolean isActive = b == tab;
-                    b.setStyle(
-                        "-fx-background-color:" + (isActive ? accentGradient() : "transparent") + ";" +
-                        "-fx-background-radius:100px;" +
-                        "-fx-text-fill:" + (isActive ? "white" : (isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.74)")) + ";" +
-                        "-fx-cursor:hand;"
-                    );
-                }
-                onSelect.accept(label);
-            });
-
-            tabs.add(tab);
+            tab.setOnAction(_ -> switchSection(sec));
             pill.getChildren().add(tab);
         }
-
         c.getChildren().add(pill);
         return c;
     }
@@ -2886,7 +2037,7 @@ public class DashboardView implements ViewInterface {
         );
     }
 
-    VBox sectionCard() {
+    private VBox sectionCard() {
         return glassCard();
     }
 
@@ -2910,7 +2061,7 @@ public class DashboardView implements ViewInterface {
         }
     }
 
-    HBox metric(String icon, String label, String val, String color) {
+    private HBox metric(String icon, String label, String val, String color) {
         HBox row = new HBox(6); row.setAlignment(Pos.CENTER_LEFT);
         Text ic = new Text(icon); ic.setFont(Font.font(13));
         Text lb = t(label, lightFont(), FontWeight.NORMAL, 13); lb.setFill(textMutedColor());
@@ -2919,66 +2070,10 @@ public class DashboardView implements ViewInterface {
         return row;
     }
 
-    Region barR(int h, String color) {
+    private Region barR(int h, String color) {
         Region r = new Region(); r.setPrefWidth(12); r.setPrefHeight(h);
         r.setStyle("-fx-background-color:"+color+";-fx-background-radius:4 4 0 0;");
         return r;
-    }
-
-    VBox buildEmptyState(String message) {
-        VBox box = sectionCard();
-        Text text = t(message, lightFont(), FontWeight.NORMAL, 13);
-        text.setFill(textMutedColor());
-        box.getChildren().add(text);
-        return box;
-    }
-
-    private int parseInt(String[] row, int index) {
-        if (row == null || index < 0 || index >= row.length) {
-            return 0;
-        }
-
-        try {
-            return Integer.parseInt(row[index]);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private int intStat(Map<String, Object> stats, String key) {
-        Object value = stats.get(key);
-        if (value instanceof Number n) {
-            return n.intValue();
-        }
-        try {
-            return value == null ? 0 : Integer.parseInt(String.valueOf(value));
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String[]> listStat(Map<String, Object> stats, String key) {
-        Object value = stats.get(key);
-        if (value instanceof List<?>) {
-            return (List<String[]>) value;
-        }
-        return new ArrayList<>();
-    }
-
-    private int roleCount(Map<String, Object> stats) {
-        Object value = stats.get("roles");
-        if (value instanceof Map<?, ?> roles) {
-            return roles.size();
-        }
-        return 0;
-    }
-
-    private String cell(String[] row, int index) {
-        if (row == null || index < 0 || index >= row.length || row[index] == null || row[index].isBlank()) {
-            return "-";
-        }
-        return row[index];
     }
 
     Text t(String s, String family, FontWeight w, double size) {

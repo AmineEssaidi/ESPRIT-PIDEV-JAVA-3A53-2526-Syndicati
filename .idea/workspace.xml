@@ -4,174 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c6b87a8d-8efa-4a60-acc9-8c473dca5fba" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config/application.local.properties" beforeDir="false" afterPath="$PROJECT_DIR$/config/application.local.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/dependency-reduced-pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/dependency-reduced-pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/Launcher.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/Launcher.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/MainApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/MainApplication.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/CardGrid.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/CardGrid.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/HomeContent.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/HomeContent.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/PlayerBar.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/PlayerBar.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/SearchBar.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/SearchBar.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/Sidebar.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/home/Sidebar.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/ConnectionStatusPill.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/ConnectionStatusPill.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/DynamicFooter.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/DynamicFooter.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/DynamicHeader.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/DynamicHeader.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/ImageBackground.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/components/shared/ImageBackground.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/ConnectionController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/ConnectionController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/dashboard/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/evenement/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/forum/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/general/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/notifications/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/residence/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/syndicat/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/users/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/backend/users/UserController.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/biometric/FaceController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/biometric/FaceController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/biometric/WebAuthnController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/biometric/WebAuthnController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/about/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/auth/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/auth/AuthController.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/home/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/profile/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/evenement/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/CommentaireController.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/PubCommentReactionController.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/forum/PublicationController.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/residence/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/services/syndicat/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/controllers/frontend/settings/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/interfaces/ViewInterface.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/interfaces/ViewInterface.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/dto/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/Commentaire.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/Onboarding.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/Profile.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/PubCommentReaction.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/Publication.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/User.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/UserRelationship.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/UserStanding.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/biometric/FaceCredential.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/entities/biometric/WebAuthnCredential.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/CommentaireRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/FaceCredentialRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/OnboardingRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/ProfileRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/PubCommentReactionRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/PublicationRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/UserRelationshipRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/UserRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/repositories/UserStandingRepository.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/.gitkeep" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/AuthCodeService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/CommentaireService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/OnboardingService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/ProfileService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/PubCommentReactionService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/PublicationService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/UserRelationshipService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/UserService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/models/services/UserStandingService.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/scratch/DbInspector.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/scratch/DbInspector.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/scratch/DebugDb.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/DatabaseService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/DatabaseService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/InsightFaceService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/InsightFaceService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/MediaPipeService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/MediaPipeService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/ProfileImageService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/ProfileImageService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/biometric/RealCameraService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/biometric/RealCameraService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/mail/AsyncMailerService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/mail/AsyncMailerService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/mail/MailerService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/mail/MailerService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/mail/SyndicatiEmailComposer.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/mail/SyndicatiEmailComposer.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/CSRFTokenManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/CSRFTokenManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/FaceEncryptionService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/FaceEncryptionService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/LoginRateLimiter.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/LoginRateLimiter.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/TOTPService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/security/TOTPService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/config/EnvConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/config/EnvConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/database/ConnectionManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/database/ConnectionManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/image/ImageLoaderUtil.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/image/ImageLoaderUtil.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/navigation/NavigationManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/navigation/NavigationManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/security/AccessControlService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/security/AccessControlService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/session/SessionManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/session/SessionManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/shared/AppPreferences.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/shared/AppPreferences.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/theme/ThemeManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/utils/theme/ThemeManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/about/AboutDetailView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/about/AboutView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/backend/dashboard/DashboardView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/backend/dashboard/DashboardView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/dashboard/DashboardView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/about/AboutDetailView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/about/AboutDetailView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/about/AboutView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/about/AboutView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/home/AdminDestinationChoiceView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/home/AdminDestinationChoiceView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/home/LandingPageView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/home/LandingPageView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/home/OnboardingOverlayView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/home/OnboardingOverlayView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/login/LoginView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/login/LoginView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/profile/ProfileView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/profile/ProfileView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/EvenementPageView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/EvenementPageView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ForumPageView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ForumPageView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ResidencePageView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ResidencePageView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ServiceDetailView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ServiceDetailView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ServiceSectionView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ServiceSectionView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ServicesView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/ServicesView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/SyndicatPageView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/services/SyndicatPageView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/settings/SettingsView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/frontend/settings/SettingsView.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/home/LandingPageView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/login/LoginView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/profile/ProfileView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/EvenementPageView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/ForumPageView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/ResidencePageView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/ServiceDetailView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/ServiceSectionView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/ServicesView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/services/SyndicatPageView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/settings/SettingsView.java" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/resources/styles/app-scrollbar.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/resources/styles/app-scrollbar.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776198988593_comm_Capture d'écran 2025-10-21 143816.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776199007000_comm_Capture d'écran 2025-10-26 162918.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776199340683_comm_Capture d'écran 2025-10-21 143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776200188355_comm_Capture d'écran 2025-10-21 143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776200446568_comm_Capture d'écran 2025-10-21 143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776202102242_comm_Capture d'écran 2025-10-21 143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776203170174_comm_Capture d'écran 2025-10-21 143816.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776205783535_comm_Capture d'écran 2025-10-26 162918.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776205790938_comm_Capture d'écran 2025-10-26 162918.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776245168354_comm_Capture d'écran 2025-11-09 164200.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776283898225_comm_Capture d'écran 2025-10-21 143816.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/comment_images/1776283903328_comm_Capture d'écran 2025-10-21 143816.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776077842284_Capture d'écran 2025-10-21 143749.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776077946854_Capture d'écran 2025-11-09 164520.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776078242664_Capture d'écran 2025-11-07 165823.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776078266909_Capture d'écran 2026-04-11 165452.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776078597892_Capture d'écran 2025-11-07 165823.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776079040562_Capture d'écran 2026-02-11 115721.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776086790158_Capture d'écran 2025-10-21 143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776087149193_Capture d'écran 2025-10-26 162918.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776088054636_Capture d'écran 2025-10-26 163251.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/1776105202521_Capture d'écran 2025-11-07 165731.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776070462285_Capture_d'écran_2026-04-12_210337.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776070907082_Capture_d’écran_2026-03-30_142329.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776071256141_Capture_d'écran_2025-11-07_165823.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776071355996_Capture_d'écran_2026-04-12_232730.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776072776216_Capture_d'écran_2026-01-30_112806.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776087241384_Capture_d'écran_2025-11-09_164200.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776087335475_Capture_d'écran_2025-11-09_164520.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776087712879_Capture_d'écran_2025-10-26_162918.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776088091761_Capture_d'écran_2025-10-21_143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776104946860_Capture_d'écran_2025-10-26_162918.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776205760237_Capture_d'écran_2025-10-21_143846.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/uploads/forum_images/forum_1776245005035_Capture_d'écran_2025-10-21_143846.png" beforeDir="false" />
-    </list>
+    <list default="true" id="c6b87a8d-8efa-4a60-acc9-8c473dca5fba" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -211,40 +44,40 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Application.MainProg.executor": "Run",
-    "Application.MainProgGUI.executor": "Run",
-    "Application.Syndicati.executor": "Run",
-    "Maven.javafx:run.executor": "Run",
-    "Maven.syndicati [clean].executor": "Run",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "com.codeium.enabled": "true",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultAutoModeForALLUsers.v1": "true",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "Forum",
-    "ignore.virus.scanning.warn.message": "true",
-    "junie.onboarding.icon.badge.shown": "true",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "C:/wamp64/www/ESPRIT-PIDEV-JAVA-3A53-2526-Syndicati",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.15",
-    "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "MavenSettings",
-    "to.speed.mode.migration.done": "true",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.MainProg.executor&quot;: &quot;Run&quot;,
+    &quot;Application.MainProgGUI.executor&quot;: &quot;Run&quot;,
+    &quot;Application.Syndicati.executor&quot;: &quot;Run&quot;,
+    &quot;Maven.javafx:run.executor&quot;: &quot;Run&quot;,
+    &quot;Maven.syndicati [clean].executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;com.codeium.enabled&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultAutoModeForALLUsers.v1&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;User&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/amine/OneDrive/Desktop/ESPRIT-PIDEV-JAVA-3A53-2526-Syndicati&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;MavenSettings&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\amine\OneDrive\Desktop\Syndicati_Java\src\main\resources" />
@@ -302,7 +135,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-jdk-30f59d01ecdd-2fc7cc6b9a17-intellij.indexing.shared.core-IU-253.30387.90" />
+        <option value="bundled-jdk-30f59d01ecdd-2fc7cc6b9a17-intellij.indexing.shared.core-IU-253.31033.145" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-IU-253.31033.145" />
       </set>
     </attachedChunks>
   </component>
@@ -371,11 +205,6 @@
       <workItem from="1776082600871" duration="461000" />
       <workItem from="1776237311210" duration="9705000" />
       <workItem from="1776326855371" duration="54003000" />
-      <workItem from="1776794713653" duration="800000" />
-      <workItem from="1776841509933" duration="2807000" />
-      <workItem from="1776850457081" duration="173000" />
-      <workItem from="1776945003182" duration="5385000" />
-      <workItem from="1777018041864" duration="4406000" />
     </task>
     <servers />
   </component>

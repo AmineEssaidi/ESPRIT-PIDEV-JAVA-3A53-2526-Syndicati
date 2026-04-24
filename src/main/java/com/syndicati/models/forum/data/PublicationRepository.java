@@ -29,11 +29,7 @@ public class PublicationRepository {
     }
 
     public List<Publication> findAll() {
-        return findAllWithLimit(50);
-    }
-
-    public List<Publication> findAllWithLimit(int limit) {
-        String sql = "SELECT id, user_id, titre_pub, description_pub, categorie_pub, image_pub, date_creation_pub FROM publication ORDER BY date_creation_pub DESC LIMIT ?";
+        String sql = "SELECT * FROM publication ORDER BY date_creation_pub DESC";
         List<Publication> publications = new ArrayList<>();
 
         try (Connection conn = databaseService.getConnection()) {
@@ -41,12 +37,10 @@ public class PublicationRepository {
                 return publications;
             }
 
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, Math.max(1, limit));
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        publications.add(mapRow(rs));
-                    }
+            try (PreparedStatement ps = conn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    publications.add(mapRow(rs));
                 }
             }
         } catch (SQLException e) {
@@ -61,7 +55,7 @@ public class PublicationRepository {
             return Optional.empty();
         }
 
-        String sql = "SELECT id, user_id, titre_pub, description_pub, categorie_pub, image_pub, date_creation_pub FROM publication WHERE id = ?";
+        String sql = "SELECT * FROM publication WHERE id = ?";
 
         try (Connection conn = databaseService.getConnection()) {
             if (conn == null) {
@@ -88,15 +82,7 @@ public class PublicationRepository {
             return new ArrayList<>();
         }
 
-        return findByUserIdWithLimit(userId, 30);
-    }
-
-    public List<Publication> findByUserIdWithLimit(Integer userId, int limit) {
-        if (userId == null || userId <= 0) {
-            return new ArrayList<>();
-        }
-
-        String sql = "SELECT id, user_id, titre_pub, description_pub, categorie_pub, image_pub, date_creation_pub FROM publication WHERE user_id = ? ORDER BY date_creation_pub DESC LIMIT ?";
+        String sql = "SELECT * FROM publication WHERE user_id = ? ORDER BY date_creation_pub DESC";
         List<Publication> publications = new ArrayList<>();
 
         try (Connection conn = databaseService.getConnection()) {
@@ -106,7 +92,6 @@ public class PublicationRepository {
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setInt(1, userId);
-                ps.setInt(2, Math.max(1, limit));
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         publications.add(mapRow(rs));
