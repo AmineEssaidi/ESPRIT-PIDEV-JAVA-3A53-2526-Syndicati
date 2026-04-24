@@ -123,6 +123,8 @@ public class ForumPageView implements ViewInterface {
     private Region postDislikesBarRegion;
 
     private final VBox commentsBox = new VBox(10);
+    private final VBox commentFormContainer = new VBox(10);
+    private final Label announcementHint = new Label("Comments are disabled for this announcement.");
     private final VBox publicationReportPanel = new VBox(8);
     private final VBox publicationEmojiPanel = new VBox(8);
     private final Map<Integer, VBox> commentEditPanels = new HashMap<>();
@@ -757,12 +759,16 @@ public class ForumPageView implements ViewInterface {
 
         Button send = primaryButton("Post Comment", this::submitComment);
 
-        commentsBox.getChildren().setAll(emptyLabel("No comments yet."));
-        commentsBox.setFillWidth(true);
-        commentsBox.setMaxWidth(Double.MAX_VALUE);
-
-        wrap.getChildren().addAll(heading, commentsBox, commentInput, commentValidation, imageRow, commentImagePreviews,
+        commentFormContainer.getChildren().setAll(commentInput, commentValidation, imageRow, commentImagePreviews,
                 toggleIsland, send);
+        commentFormContainer.setFillWidth(true);
+
+        announcementHint.setTextFill(Color.web("rgba(255,255,255,0.5)"));
+        announcementHint.setStyle("-fx-font-size: 13px; -fx-font-style: italic; -fx-padding: 10 0 0 0;");
+        announcementHint.setManaged(false);
+        announcementHint.setVisible(false);
+
+        wrap.getChildren().addAll(heading, commentsBox, commentFormContainer, announcementHint);
         return wrap;
     }
 
@@ -790,15 +796,8 @@ public class ForumPageView implements ViewInterface {
         Button newPost = primaryButton("New Post", () -> openCreateFace(false));
         newPost.setMaxWidth(Double.MAX_VALUE);
 
-        Button newAnnouncement = ghostButton("Announcement", () -> openCreateFace(true));
-        newAnnouncement.setMaxWidth(Double.MAX_VALUE);
-        boolean moderator = isModerator(session.getCurrentUser());
-        newAnnouncement.setVisible(moderator);
-        newAnnouncement.setManaged(moderator);
-
-        HBox createButtons = new HBox(8, newPost, newAnnouncement);
+        HBox createButtons = new HBox(8, newPost);
         HBox.setHgrow(newPost, Priority.ALWAYS);
-        HBox.setHgrow(newAnnouncement, Priority.ALWAYS);
 
         listBox.setMaxWidth(Double.MAX_VALUE);
         listBox.setPrefWidth(330);
@@ -922,6 +921,15 @@ public class ForumPageView implements ViewInterface {
         updateOwnerActionsVisibility();
         updateActiveListItem();
         refreshPublicationReactionUI();
+        
+        boolean isAnnouncement = "Announcement".equals(publication.getCategoriePub());
+        commentFormContainer.setVisible(!isAnnouncement);
+        commentFormContainer.setManaged(!isAnnouncement);
+        commentsBox.setVisible(!isAnnouncement);
+        commentsBox.setManaged(!isAnnouncement);
+        announcementHint.setVisible(isAnnouncement);
+        announcementHint.setManaged(isAnnouncement);
+        
         renderComments(publication);
     }
 
