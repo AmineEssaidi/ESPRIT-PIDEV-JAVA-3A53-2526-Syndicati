@@ -1686,6 +1686,9 @@ public class ForumPageView implements ViewInterface {
                     return;
                 }
                 toggleCommentEmojiPanel(comment);
+                if (current != null) {
+                    renderComments(current);
+                }
             });
             emojiRow.getChildren().add(emojiLabel);
         }
@@ -1714,6 +1717,47 @@ public class ForumPageView implements ViewInterface {
         editInput.setWrapText(true);
         tuneInput(editInput);
 
+        // Visual identity toggle (Public/Anonymous)
+        HBox visibilityBox = new HBox(10);
+        visibilityBox.setAlignment(Pos.CENTER_LEFT);
+        Label visLabel = new Label("Public Identity:");
+        visLabel.setTextFill(Color.web("rgba(255,255,255,0.7)"));
+        visLabel.setStyle("-fx-font-size: 12px;");
+        
+        CheckBox visCheck = new CheckBox();
+        visCheck.setSelected(comment.isVisibility());
+        visCheck.setStyle("-fx-mark-color: #22c55e;"); // Green check
+        visibilityBox.getChildren().addAll(visLabel, visCheck);
+
+        // Image Handling
+        final String[] tempImage = {comment.getImageCommentaire()};
+        ImageView preview = new ImageView();
+        preview.setFitWidth(100);
+        preview.setFitHeight(70);
+        preview.setPreserveRatio(true);
+        preview.setStyle("-fx-background-color: rgba(0,0,0,0.2); -fx-background-radius: 5px;");
+        
+        if (tempImage[0] != null && !tempImage[0].isEmpty()) {
+            Image currentImg = resolveImage(tempImage[0], "commentaire_images");
+            if (currentImg != null) preview.setImage(currentImg);
+        }
+
+        Button imgBtn = ghostButton("Change Photo", () -> {
+            File selected = chooseImage();
+            if (selected != null) {
+                try {
+                    String relative = copyUpload(selected, "commentaire_images");
+                    tempImage[0] = relative;
+                    preview.setImage(new Image(selected.toURI().toString()));
+                } catch (Exception ex) {
+                    showInfo("Image", "Failed to load image: " + ex.getMessage());
+                }
+            }
+        });
+
+        HBox mediaRow = new HBox(12, preview, imgBtn);
+        mediaRow.setAlignment(Pos.CENTER_LEFT);
+
         Button saveBtn = primaryButton("Save", () -> {
             String newText = safe(editInput.getText());
             if (newText.isBlank()) {
@@ -1722,10 +1766,13 @@ public class ForumPageView implements ViewInterface {
             }
 
             boolean success = comments.commentaireUpdate(comment.getIdCommentaire(), newText,
-                    comment.getImageCommentaire(), comment.isVisibility());
+                    tempImage[0], visCheck.isSelected());
             if (success) {
                 comment.setDescriptionCommentaire(newText);
-                showInfo("Comment", "Updated successfully.");
+                comment.setImageCommentaire(tempImage[0]);
+                comment.setVisibility(visCheck.isSelected());
+                
+                showNotification("Comment updated successfully!", true);
                 toggleCommentEditPanel(comment);
                 if (current != null) {
                     renderComments(current);
@@ -1738,8 +1785,9 @@ public class ForumPageView implements ViewInterface {
         Button closeBtn = ghostButton("Cancel", () -> toggleCommentEditPanel(comment));
 
         HBox actions = new HBox(8, saveBtn, closeBtn);
-        actions.setMaxWidth(Double.MAX_VALUE);
-        panel.getChildren().addAll(editInput, actions);
+        actions.setPadding(new Insets(4, 0, 0, 0));
+        
+        panel.getChildren().addAll(editInput, visibilityBox, mediaRow, actions);
         return panel;
     }
 
@@ -2179,7 +2227,8 @@ public class ForumPageView implements ViewInterface {
 
         postLikeCount.setText("");
         postDislikeCount.setText("");
-        postRatioBar.setProgress(0);
+        if (postLikesBarRegion != null) postLikesBarRegion.setPrefWidth(0);
+        if (postDislikesBarRegion != null) postDislikesBarRegion.setPrefWidth(0);
         postRatioText.setText("0%");
 
         updateActiveListItem();
