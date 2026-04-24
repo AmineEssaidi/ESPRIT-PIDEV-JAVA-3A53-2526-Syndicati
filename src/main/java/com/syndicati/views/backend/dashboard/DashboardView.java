@@ -1,5 +1,8 @@
 package com.syndicati.views.backend.dashboard;
 
+import com.syndicati.controllers.log.AnalyticsController;
+import com.syndicati.models.log.analytics.AnomalyResult;
+import com.syndicati.models.log.analytics.SuspiciousActivity;
 import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
@@ -61,12 +64,14 @@ public class DashboardView implements ViewInterface {
     Popup notificationPopup;
     PauseTransition notificationHideDelay;
     private final DashboardAdminService dashboardAdminService;
+    private final AnalyticsController analyticsController;
     private static final DateTimeFormatter DASHBOARD_DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public DashboardView() {
         this.root = new HBox();
         this.accentRefreshListener = this::refreshAccentStyling;
         this.dashboardAdminService = new DashboardAdminService();
+        this.analyticsController = new AnalyticsController();
         setupLayout();
         ThemeManager.getInstance().addAccentChangeListener(accentRefreshListener);
     }
@@ -508,13 +513,153 @@ public class DashboardView implements ViewInterface {
         return moduleModeView(
             "Activity Log",
             "\u23F1",
-            new String[]{"Overview", "Timeline", "Signals"},
+            new String[]{"Overview", "Timeline", "Signals", "Security AI"},
             key -> switch (key) {
                 case "Timeline" -> activityTimelinePane();
                 case "Signals" -> activitySignalsPane();
+                case "Security AI" -> activitySecurityAiPane();
                 default -> activityOverviewPane();
             }
         );
+    }
+
+    private VBox activitySecurityAiPane() {
+        VBox wrap = new VBox(16);
+        wrap.setFillWidth(true);
+
+        List<AnomalyResult> anomalies = analyticsController.getRecentAnomalies(8);
+        List<SuspiciousActivity> suspiciousUsers = analyticsController.getSuspiciousUsers(8);
+        List<Map<String, Object>> featureUsage = analyticsController.getFeatureUsage(6);
+
+        int highAnomalies = 0;
+        int criticalUsers = 0;
+        double peakRisk = 0.0;
+
+        for (AnomalyResult anomaly : anomalies) {
+            if (anomaly.getAnomalyScore() >= 0.80) {
+                highAnomalies++;
+            }
+        }
+
+        for (SuspiciousActivity suspicious : suspiciousUsers) {
+            if (suspicious.getRiskScore() != null) {
+                double risk = suspicious.getRiskScore().getOverallRiskScore();
+                peakRisk = Math.max(peakRisk, risk);
+                String severity = safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
+                if ("CRITICAL".equalsIgnoreCase(severity) || "HIGH".equalsIgnoreCase(severity)) {
+                    criticalUsers++;
+                }
+            }
+        }
+
+        HBox cards = new HBox(16);
+        addStatCards(
+            cards,
+            new String[]{"ANM", "SUS", "RISK", "FEAT"},
+            new String[]{"Recent Anomalies", "High-Risk Users", "Peak Risk Score", "Tracked Features"},
+            new String[]{
+                String.valueOf(anomalies.size()),
+                String.valueOf(criticalUsers),
+                formatScore(peakRisk),
+                String.valueOf(featureUsage.size())
+            },
+            new String[]{"#ef4444", "#f59e0b", "#a78bfa", "#34d399"}
+        );
+
+        VBox anomaliesCard = sectionCard();
+        anomaliesCard.getChildren().add(t("Recent LogAI Anomalies", boldFont(), FontWeight.BOLD, 18));
+        if (anomalies.isEmpty()) {
+            anomaliesCard.getChildren().add(buildRowCard("#60a5fa", "No anomaly records yet", "-", null, 8));
+        } else {
+            for (AnomalyResult anomaly : anomalies) {
+                String userText = anomaly.getUserId() == null ? "anonymous" : "user " + anomaly.getUserId();
+                String title = safeDefault(anomaly.getEventType(), "UNKNOWN_EVENT") + " - " + userText;
+                String value = safeDefault(anomaly.getAnomalyLabel(), "ANOMALY") + " • score " + formatScore(anomaly.getAnomalyScore());
+                anomaliesCard.getChildren().add(buildRowCard(anomalyColor(anomaly.getAnomalyScore()), title, value, null, 8));
+            }
+        }
+
+        VBox suspiciousCard = sectionCard();
+        suspiciousCard.getChildren().add(t("Suspicious Users (7 days)", boldFont(), FontWeight.BOLD, 18));
+        if (suspiciousUsers.isEmpty()) {
+            suspiciousCard.getChildren().add(buildRowCard("#34d399", "No suspicious users detected", "-", null, 8));
+        } else {
+            for (SuspiciousActivity suspicious : suspiciousUsers) {
+                String title = "User #" + safe(suspicious.getUserId() == null ? null : String.valueOf(suspicious.getUserId()))
+                    + " • " + safe(suspicious.getUserEmail());
+                String severity = suspicious.getRiskScore() == null ? "SAFE" : safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
+                double riskScore = suspicious.getRiskScore() == null ? 0.0 : suspicious.getRiskScore().getOverallRiskScore();
+                String value = severity + " • risk " + formatScore(riskScore) + " • failures " + suspicious.getFailureCount();
+                suspiciousCard.getChildren().add(buildRowCard(severityColor(severity), title, value, null, 8));
+            }
+        }
+
+        VBox featureCard = sectionCard();
+        featureCard.getChildren().add(t("Feature Usage (Top)", boldFont(), FontWeight.BOLD, 18));
+        if (featureUsage.isEmpty()) {
+            featureCard.getChildren().add(buildRowCard("#60a5fa", "No feature usage data", "-", null, 8));
+        } else {
+            int index = 1;
+            for (Map<String, Object> row : featureUsage) {
+                String feature = safe(row.get("feature") == null ? null : String.valueOf(row.get("feature")));
+                String count = safe(row.get("count") == null ? null : String.valueOf(row.get("count"))) + " events";
+                featureCard.getChildren().add(buildRowCard(index <= 2 ? "#a78bfa" : "#34d399", feature, count, String.valueOf(index), 10));
+                index++;
+            }
+        }
+
+        VBox noteCard = sectionCard();
+        String noteText = "\u2022 High anomalies (>=0.80): " + highAnomalies
+            + "\n\u2022 Data source: AnalyticsController (anomalies, suspicious users, feature usage)"
+            + "\n\u2022 Recommendation: review HIGH/CRITICAL users and correlated timelines.";
+        Text note = t(noteText, lightFont(), FontWeight.NORMAL, 13);
+        note.setFill(textMutedColor());
+        noteCard.getChildren().addAll(t("AI Security Notes", boldFont(), FontWeight.BOLD, 16), note);
+
+        HBox upper = new HBox(16, anomaliesCard, suspiciousCard);
+        HBox.setHgrow(anomaliesCard, Priority.ALWAYS);
+        HBox.setHgrow(suspiciousCard, Priority.ALWAYS);
+
+        HBox lower = new HBox(16, featureCard, noteCard);
+        HBox.setHgrow(featureCard, Priority.ALWAYS);
+        HBox.setHgrow(noteCard, Priority.ALWAYS);
+
+        wrap.getChildren().addAll(cards, upper, lower);
+        return wrap;
+    }
+
+    private String formatScore(double value) {
+        return String.format("%.2f", Math.max(0.0, Math.min(1.0, value)));
+    }
+
+    private String anomalyColor(double score) {
+        if (score >= 0.80) {
+            return "#ef4444";
+        }
+        if (score >= 0.60) {
+            return "#f59e0b";
+        }
+        if (score >= 0.40) {
+            return "#a78bfa";
+        }
+        return "#34d399";
+    }
+
+    private String severityColor(String severity) {
+        String normalized = severity == null ? "SAFE" : severity.toUpperCase();
+        if ("CRITICAL".equals(normalized)) {
+            return "#ef4444";
+        }
+        if ("HIGH".equals(normalized)) {
+            return "#f97316";
+        }
+        if ("MEDIUM".equals(normalized)) {
+            return "#f59e0b";
+        }
+        if ("LOW".equals(normalized)) {
+            return "#60a5fa";
+        }
+        return "#34d399";
     }
 
     private VBox activityOverviewPane() {

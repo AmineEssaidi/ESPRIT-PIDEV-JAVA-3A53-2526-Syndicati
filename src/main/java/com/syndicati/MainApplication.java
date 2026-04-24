@@ -14,6 +14,7 @@ import com.syndicati.controllers.log.ActivityLogController;
 import com.syndicati.views.frontend.home.AdminDestinationChoiceView;
 import com.syndicati.views.frontend.home.LandingPageView;
 import com.syndicati.views.frontend.login.LoginView;
+import com.syndicati.services.analytics.AnomalyScoringScheduler;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
 
@@ -34,6 +35,7 @@ public class MainApplication extends Application {
     private String lightFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private boolean windowChromeListenerInstalled = false;
     private final ActivityLogController activityLogController = new ActivityLogController();
+    private final AnomalyScoringScheduler anomalyScoringScheduler = new AnomalyScoringScheduler();
     
     @Override
     public void start(Stage primaryStage) {
@@ -65,6 +67,7 @@ public class MainApplication extends Application {
         // Start database connection monitoring
         com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
         connectionManager.startMonitoring();
+        anomalyScoringScheduler.start();
         
         // Add JVM shutdown hook as backup
         Runtime.getRuntime().addShutdownHook(
@@ -74,6 +77,7 @@ public class MainApplication extends Application {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
                     connectionManager.shutdown();
+                    anomalyScoringScheduler.stop();
                     System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
                 })
         );
@@ -108,6 +112,7 @@ public class MainApplication extends Application {
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             // Then shutdown database monitoring
             connectionManager.shutdown();
+            anomalyScoringScheduler.stop();
             System.out.println("[SUCCESS] All services stopped");
             
             // Force exit JVM after a short delay to ensure cleanup

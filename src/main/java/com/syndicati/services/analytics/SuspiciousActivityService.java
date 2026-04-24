@@ -2,7 +2,6 @@ package com.syndicati.services.analytics;
 
 import com.syndicati.models.log.AppEventLog;
 import com.syndicati.models.log.data.AppEventLogRepository;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -25,7 +24,11 @@ public class SuspiciousActivityService {
     private static final int BULK_DELETE_THRESHOLD = 5;       // 5+ deletes in 5 min = bulk op
 
     public SuspiciousActivityService() {
-        this.repository = new AppEventLogRepository();
+        this(new AppEventLogRepository());
+    }
+
+    public SuspiciousActivityService(AppEventLogRepository repository) {
+        this.repository = repository;
     }
 
     /**

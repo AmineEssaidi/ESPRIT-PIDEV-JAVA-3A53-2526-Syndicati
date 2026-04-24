@@ -15,6 +15,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -178,6 +179,83 @@ public class AppEventLogRepository {
         }
 
         return logs;
+    }
+
+    public List<AppEventLog> findLatestBySession(String sessionId, int limit) {
+        String sql = "SELECT * FROM app_event_log WHERE session_id = ? ORDER BY created_at DESC LIMIT ?";
+        List<AppEventLog> logs = new ArrayList<>();
+
+        if (sessionId == null || sessionId.isBlank()) {
+            return logs;
+        }
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return logs;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, sessionId);
+                ps.setInt(2, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        logs.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.findLatestBySession error: " + e.getMessage());
+        }
+
+        return logs;
+    }
+
+    public List<AppEventLog> findUnscoredEvents(int limit) {
+        String sql = "SELECT * FROM app_event_log WHERE anomaly_score IS NULL ORDER BY created_at DESC LIMIT ?";
+        List<AppEventLog> logs = new ArrayList<>();
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return logs;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        logs.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.findUnscoredEvents error: " + e.getMessage());
+        }
+
+        return logs;
+    }
+
+    public boolean updateAnomalyData(long eventId, BigDecimal anomalyScore, String metadataJson) {
+        String sql = "UPDATE app_event_log SET anomaly_score = ?, metadata = ? WHERE id = ?";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return false;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                if (anomalyScore != null) {
+                    ps.setBigDecimal(1, anomalyScore);
+                } else {
+                    ps.setNull(1, java.sql.Types.DECIMAL);
+                }
+                ps.setString(2, metadataJson == null || metadataJson.isBlank() ? "{}" : metadataJson);
+                ps.setLong(3, eventId);
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.updateAnomalyData error: " + e.getMessage());
+            return false;
+        }
     }
 
     public List<AppEventLog> findByEntityType(String entityType, int entityId) {
@@ -565,6 +643,111 @@ public class AppEventLogRepository {
         } catch (SQLException e) {
             System.out.println("AppEventLogRepository.fetchRiskSignals error: " + e.getMessage());
         }
+        return rows;
+    }
+
+    public List<AppEventLog> findRecentAnomalies(double minAnomalyScore, int limit) {
+        String sql = "SELECT * FROM app_event_log WHERE COALESCE(anomaly_score, 0) >= ? ORDER BY created_at DESC LIMIT ?";
+        List<AppEventLog> logs = new ArrayList<>();
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return logs;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setBigDecimal(1, BigDecimal.valueOf(Math.max(0.0, minAnomalyScore)));
+                ps.setInt(2, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        logs.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.findRecentAnomalies error: " + e.getMessage());
+        }
+
+        return logs;
+    }
+
+    public List<String[]> fetchSuspiciousUsers(LocalDateTime since, int minFailures, int limit) {
+        String sql = """
+            SELECT l.user_id,
+                   MAX(u.email_user) AS email,
+                   COUNT(*) AS failure_count,
+                   MAX(l.created_at) AS last_seen
+            FROM app_event_log l
+            LEFT JOIN user u ON l.user_id = u.id_user
+            WHERE l.created_at >= ?
+              AND l.user_id IS NOT NULL
+              AND (l.event_type = 'AUTH_FAILURE' OR COALESCE(l.outcome, '') = 'FAILURE')
+            GROUP BY l.user_id
+            HAVING COUNT(*) >= ?
+            ORDER BY failure_count DESC, last_seen DESC
+            LIMIT ?
+            """;
+
+        List<String[]> rows = new ArrayList<>();
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return rows;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setTimestamp(1, Timestamp.valueOf(since));
+                ps.setInt(2, Math.max(1, minFailures));
+                ps.setInt(3, Math.max(1, limit));
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        rows.add(new String[]{
+                            String.valueOf(rs.getInt("user_id")),
+                            rs.getString("email"),
+                            String.valueOf(rs.getInt("failure_count")),
+                            String.valueOf(rs.getTimestamp("last_seen"))
+                        });
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.fetchSuspiciousUsers error: " + e.getMessage());
+        }
+
+        return rows;
+    }
+
+    public List<String[]> fetchFeatureUsage(int limit) {
+        String sql = """
+            SELECT COALESCE(action, event_type, 'UNKNOWN') AS feature_key,
+                   COUNT(*) AS usage_count
+            FROM app_event_log
+            GROUP BY COALESCE(action, event_type, 'UNKNOWN')
+            ORDER BY usage_count DESC
+            LIMIT ?
+            """;
+
+        List<String[]> rows = new ArrayList<>();
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return rows;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, Math.max(1, limit));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        rows.add(new String[]{
+                            rs.getString("feature_key"),
+                            String.valueOf(rs.getInt("usage_count"))
+                        });
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("AppEventLogRepository.fetchFeatureUsage error: " + e.getMessage());
+        }
+
         return rows;
     }
 

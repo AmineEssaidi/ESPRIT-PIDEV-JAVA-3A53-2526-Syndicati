@@ -36,7 +36,7 @@ public class RiskScoringService {
         // Normalize scores to 0-1 range
         double normalizedAnomaly = normalizeScore(anomalyScore);
         double normalizedRisk = normalizeScore(riskScore);
-        double suspiciousScore = suspiciousActivity.totalRiskScore();
+        double suspiciousScore = suspiciousActivity == null ? 0.0 : suspiciousActivity.totalRiskScore();
         double normalizedBehavior = Math.min(behaviorBaselineDeviation, 1.0);
 
         // Weighted aggregate
