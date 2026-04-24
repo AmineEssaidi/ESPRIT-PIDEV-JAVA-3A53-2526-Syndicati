@@ -26,11 +26,40 @@ public class ActivityLogController {
     }
 
     public void logUiClick(String target, String text, Map<String, Object> metadata) {
-        logger.logUiClick(target, text, metadata);
+        java.util.Map<String, Object> data = metadata == null ? new java.util.LinkedHashMap<>() : new java.util.LinkedHashMap<>(metadata);
+        
+        // Check for spamming
+        boolean isSpam = com.syndicati.services.log.SpamDetectionService.getInstance().isSpamming(target);
+        if (isSpam) {
+            data.put("spam", true);
+            data.put("level", "WARNING");
+            data.put("message", "Rapid-fire clicking detected on: " + target);
+        }
+        
+        logger.logUiClick(target, text, data);
     }
 
     public void logCrudAction(String action, String entityType, Integer entityId, Map<String, Object> metadata) {
         logger.logCrudAction(action, entityType, entityId, metadata);
+    }
+
+    public void logAuthAction(String action, String outcome, String message, Map<String, Object> metadata) {
+        logger.logAuthAction(action, outcome, message, metadata);
+    }
+
+    public void logSecurityAlert(String alertType, String severity, String message, Map<String, Object> metadata) {
+        logger.logSecurityAlert(alertType, severity, message, metadata);
+    }
+
+    public void logDataExport(String entityType, String format, int count, Map<String, Object> metadata) {
+        logger.logDataExport(entityType, format, count, metadata);
+    }
+
+    public void logHoneypotClick(String target, Map<String, Object> metadata) {
+        java.util.Map<String, Object> data = metadata == null ? new java.util.LinkedHashMap<>() : new java.util.LinkedHashMap<>(metadata);
+        data.put("honeypot", true);
+        data.put("severity", "CRITICAL");
+        logSecurityAlert("HONEYPOT_TRIGGER", "CRITICAL", "Honeypot element interacted with: " + target, data);
     }
 
     public List<AppEventLog> recentActivity(int limit) {

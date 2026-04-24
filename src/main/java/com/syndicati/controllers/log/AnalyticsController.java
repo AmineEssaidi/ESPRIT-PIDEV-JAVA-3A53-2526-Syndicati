@@ -53,10 +53,21 @@ public class AnalyticsController {
                     ? safeParseDateTime(metadata.get("detectedAt").getAsString(), log.getEventTimestamp())
                     : log.getEventTimestamp();
 
+            String userDisplayName = "anonymous";
+            if (log.getUser() != null) {
+                userDisplayName = (log.getUser().getFirstName() + " " + log.getUser().getLastName()).trim();
+                if (userDisplayName.isEmpty()) userDisplayName = log.getUser().getEmailUser();
+            } else if (metadata.has("username")) {
+                userDisplayName = metadata.get("username").getAsString();
+            } else if (metadata.has("email")) {
+                userDisplayName = metadata.get("email").getAsString();
+            }
+
             output.add(new AnomalyResult(
                     log.getId() == null ? -1L : log.getId(),
                     log.getEventType(),
                     log.getUser() == null ? null : log.getUser().getIdUser(),
+                    userDisplayName,
                     log.getAnomalyScore() == null ? 0.0 : log.getAnomalyScore().doubleValue(),
                     label,
                     reason,

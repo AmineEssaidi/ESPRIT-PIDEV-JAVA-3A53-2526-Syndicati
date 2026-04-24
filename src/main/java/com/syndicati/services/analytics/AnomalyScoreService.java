@@ -126,30 +126,64 @@ public class AnomalyScoreService {
      */
     public double computeHeuristicAnomalyScore(AppEventLog log) {
         double score = 0.0;
+        LocalDateTime now = log.getEventTimestamp() != null ? log.getEventTimestamp() : LocalDateTime.now();
 
-        // Check for unusual event combinations
+        // 1. Authentication & Security Alerts (Highest Risk)
         if ("AUTH_FAILURE".equals(log.getEventType())) {
-            score += 0.3;  // Auth failures are suspicious
+            score += 0.85;  // Brute force / Auth failures are high risk
+        }
+        if ("SECURITY_ALERT".equals(log.getEventType())) {
+            score += 0.90;  // Explicit security alerts are critical
+        }
+        
+        // 1b. Honeypot Triggers (Highest possible risk)
+        if (log.getMetadataJson() != null && log.getMetadataJson().contains("\"honeypot\":true")) {
+            return 1.0; // Immediate disqualification/red flag
         }
 
-        // Check for unusual times (future: add time-of-day heuristics)
-        // if (isUnusualTimeOfDay(log.getEventTimestamp())) {
-        //     score += 0.2;
-        // }
-
-        // Check for unusual IP patterns (future: add geo-blocking)
-        // if (isUnusualIP(log.getIpAddress())) {
-        //     score += 0.1;
-        // }
-
-        // Check for bulk operations
-        if ("DELETE".equals(log.getEventType()) && (log.getMessage() != null && log.getMessage().contains("bulk"))) {
-            score += 0.4;
+        // 2. Sensitive Entity Access (Medium-High Risk)
+        if ("USER".equals(log.getEntityType()) || "FINANCE".equals(log.getEntityType()) || "SYNDICAT".equals(log.getEntityType())) {
+            if ("DELETE".equals(log.getEventType()) || "UPDATE".equals(log.getEventType())) {
+                score += 0.45;
+            } else if ("DATA_EXPORT".equals(log.getEventType())) {
+                score += 0.60; // Exporting sensitive data is risky
+            }
         }
 
-        // Check for failure outcomes
+        // 3. Time-based Anomaly (The "Night Owl" rule)
+        // If an admin/user does sensitive work between 1 AM and 5 AM
+        int hour = now.getHour();
+        if (hour >= 1 && hour <= 5) {
+            if ("AUTH".equals(log.getCategory()) || "CRUD".equals(log.getCategory())) {
+                score += 0.35;
+            }
+        }
+
+        // 4. Interaction Spams or Rapid Clicks
+        if ("UI_CLICK".equals(log.getEventType()) && log.getMessage() != null && log.getMessage().contains("spam")) {
+            score += 0.5;
+        }
+
+        // 5. Bulk Operations
+        if ("DELETE".equals(log.getEventType()) && (log.getMessage() != null && (log.getMessage().contains("bulk") || log.getMessage().contains("all")))) {
+            score += 0.7;
+        }
+
+        // 6. Failure outcomes on sensitive actions
         if ("FAILURE".equals(log.getOutcome())) {
-            score += 0.2;
+            if ("DELETE".equals(log.getEventType()) || "UPDATE".equals(log.getEventType()) || "AUTH".equals(log.getCategory())) {
+                score += 0.4;
+            } else {
+                score += 0.2;
+            }
+        }
+
+        // 7. Metadata-based risks
+        if (log.getMetadataJson() != null) {
+            String meta = log.getMetadataJson().toLowerCase();
+            if (meta.contains("\"failure_count\"")) score += 0.3;
+            if (meta.contains("sql injection") || meta.contains("xss")) score += 0.95; // Critical threats
+            if (meta.contains("impossible_travel")) score += 0.80;
         }
 
         return Math.min(score, 1.0);  // Cap at 1.0

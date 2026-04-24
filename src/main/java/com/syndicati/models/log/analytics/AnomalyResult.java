@@ -7,15 +7,17 @@ public class AnomalyResult {
     private final long eventId;
     private final String eventType;
     private final Integer userId;
+    private final String userDisplayName;
     private final double anomalyScore;
     private final String anomalyLabel;
     private final String anomalyReason;
     private final LocalDateTime detectedAt;
 
-    public AnomalyResult(long eventId, String eventType, Integer userId, double anomalyScore, String anomalyLabel, String anomalyReason, LocalDateTime detectedAt) {
+    public AnomalyResult(long eventId, String eventType, Integer userId, String userDisplayName, double anomalyScore, String anomalyLabel, String anomalyReason, LocalDateTime detectedAt) {
         this.eventId = eventId;
         this.eventType = eventType;
         this.userId = userId;
+        this.userDisplayName = userDisplayName;
         this.anomalyScore = anomalyScore;
         this.anomalyLabel = anomalyLabel;
         this.anomalyReason = anomalyReason;
@@ -32,6 +34,10 @@ public class AnomalyResult {
 
     public Integer getUserId() {
         return userId;
+    }
+
+    public String getUserDisplayName() {
+        return userDisplayName;
     }
 
     public double getAnomalyScore() {

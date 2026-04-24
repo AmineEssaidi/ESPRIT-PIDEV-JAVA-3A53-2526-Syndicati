@@ -63,8 +63,10 @@ public class DashboardView implements ViewInterface {
     Popup profilePopup;
     Popup notificationPopup;
     PauseTransition notificationHideDelay;
+    private java.time.Instant lastSectionSwitch = java.time.Instant.now();
     private final DashboardAdminService dashboardAdminService;
     private final AnalyticsController analyticsController;
+    private final com.syndicati.controllers.log.ActivityLogController activityLogController;
     private static final DateTimeFormatter DASHBOARD_DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public DashboardView() {
@@ -72,6 +74,7 @@ public class DashboardView implements ViewInterface {
         this.accentRefreshListener = this::refreshAccentStyling;
         this.dashboardAdminService = new DashboardAdminService();
         this.analyticsController = new AnalyticsController();
+        this.activityLogController = new com.syndicati.controllers.log.ActivityLogController();
         setupLayout();
         ThemeManager.getInstance().addAccentChangeListener(accentRefreshListener);
     }
@@ -334,9 +337,28 @@ public class DashboardView implements ViewInterface {
     }
 
     private void switchSection(String section) {
+        // Detect rapid navigation spamming
+        java.time.Instant now = java.time.Instant.now();
+        if (java.time.Duration.between(lastSectionSwitch, now).toMillis() < 500) {
+            activityLogController.logSecurityAlert("NAVIGATION_SPAM", "MEDIUM", "User is cycling sections too rapidly", 
+                java.util.Map.of("section", section, "interval_ms", java.time.Duration.between(lastSectionSwitch, now).toMillis()));
+        }
+        lastSectionSwitch = now;
+
         activeSection = section;
         sectionButtons.forEach((k, b) -> styleSidebarItem(b, k.equals(section)));
         contentArea.getChildren().setAll(buildSection(section));
+        
+        // Log sensitive access
+        if ("users".equals(section)) {
+            activityLogController.logPageView("/admin/users", "User Management [Sensitive]");
+        } else if ("syndicat".equals(section)) {
+            activityLogController.logPageView("/admin/syndicat", "Syndicat Management");
+        } else if ("security_ai".equals(section)) {
+            activityLogController.logPageView("/admin/security-ai", "Security AI Dashboard [Critical]");
+        } else {
+            activityLogController.logPageView("/admin/" + section, section + " dashboard");
+        }
     }
 
     // MAIN AREA
@@ -572,7 +594,7 @@ public class DashboardView implements ViewInterface {
             anomaliesCard.getChildren().add(buildRowCard("#60a5fa", "No anomaly records yet", "-", null, 8));
         } else {
             for (AnomalyResult anomaly : anomalies) {
-                String userText = anomaly.getUserId() == null ? "anonymous" : "user " + anomaly.getUserId();
+                String userText = anomaly.getUserDisplayName() == null ? "anonymous" : anomaly.getUserDisplayName();
                 String title = safeDefault(anomaly.getEventType(), "UNKNOWN_EVENT") + " - " + userText;
                 String value = safeDefault(anomaly.getAnomalyLabel(), "ANOMALY") + " • score " + formatScore(anomaly.getAnomalyScore());
                 anomaliesCard.getChildren().add(buildRowCard(anomalyColor(anomaly.getAnomalyScore()), title, value, null, 8));
@@ -625,6 +647,14 @@ public class DashboardView implements ViewInterface {
         HBox.setHgrow(noteCard, Priority.ALWAYS);
 
         wrap.getChildren().addAll(cards, upper, lower);
+
+        // Honeypot: A hidden button that looks like a critical system reset
+        Button honeypot = new Button("System Reset All Logs");
+        honeypot.setOpacity(0.01); // Almost invisible to humans
+        honeypot.setPrefSize(1, 1); // Tiny but clickable by bots
+        honeypot.setOnAction(_ -> activityLogController.logHoneypotClick("security_ai_reset_bait", java.util.Map.of()));
+        wrap.getChildren().add(honeypot);
+
         return wrap;
     }
 

@@ -7,6 +7,8 @@ import com.syndicati.models.log.enums.EventLevel;
 import com.syndicati.models.log.enums.EventOutcome;
 import com.syndicati.models.log.enums.EventType;
 import com.syndicati.models.user.User;
+import com.syndicati.services.observability.LangfuseRuntimeService;
+import com.syndicati.services.observability.LangfuseTracer;
 import com.syndicati.utils.session.SessionManager;
 import java.math.BigDecimal;
 import java.net.InetAddress;
@@ -159,9 +161,67 @@ public class UserActivityLogger {
 
             repository.create(log);
             logBuffer.push(log);
+
+            // --- Langfuse trace/span recording ---
+            recordToLangfuse(log);
         } catch (Exception e) {
             System.out.println("[UserActivityLogger] Error: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Records a completed log event as a Langfuse trace + span so that every
+     * persisted DB row has a matching observability entry. The span is closed
+     * immediately since the event is already a discrete, completed action.
+     *
+     * IDs are taken from the event itself so Langfuse and the DB stay in sync.
+     */
+    private void recordToLangfuse(AppEventLog log) {
+        try {
+            LangfuseRuntimeService langfuse = LangfuseRuntimeService.getInstance();
+            if (!langfuse.isEnabled()) {
+                return;
+            }
+
+            LangfuseTracer tracer = langfuse.tracer();
+
+            // Use the event's own traceId so all events in the same session
+            // cluster under a single trace in the Langfuse UI.
+            String traceId = log.getTraceId();
+            LangfuseTracer.Trace trace = tracer.startTrace(
+                    traceId != null ? traceId : "session_" + runtimeSessionId);
+
+            // One span per event - represents the discrete UI/CRUD action.
+            String spanName = (log.getEventType() != null ? log.getEventType() : "EVENT")
+                    + (log.getEntityType() != null ? "." + log.getEntityType() : "");
+            LangfuseTracer.Span span = tracer.startSpan(spanName, "activity_log");
+
+            // Attach key fields as metadata.
+            span.metadata.put("event_id",   log.getEventId());
+            span.metadata.put("trace_id",   log.getTraceId());
+            span.metadata.put("span_id",    log.getSpanId());
+            span.metadata.put("session_id", log.getSessionId());
+            span.metadata.put("action",     log.getAction());
+            span.metadata.put("category",   log.getCategory());
+            span.metadata.put("level",      log.getLevel());
+            span.metadata.put("outcome",    log.getOutcome());
+            if (log.getUser() != null) {
+                span.metadata.put("user_id", log.getUser().getIdUser());
+            }
+
+            // Add a single span event summarising the activity.
+            span.addEvent("activity_recorded", Map.of(
+                    "event_type", log.getEventType() != null ? log.getEventType() : "",
+                    "outcome",    log.getOutcome()   != null ? log.getOutcome()   : "",
+                    "entity",     log.getEntityType() != null ? log.getEntityType() : ""
+            ));
+
+            tracer.endSpan(span, log.getOutcome() != null ? log.getOutcome() : "SUCCESS");
+            tracer.endTrace(trace, "SUCCESS");
+        } catch (Exception ex) {
+            // Never let Langfuse errors surface to callers.
+            System.out.println("[UserActivityLogger] Langfuse recording error: " + ex.getMessage());
         }
     }
 
@@ -183,6 +243,40 @@ public class UserActivityLogger {
         Map<String, Object> data = metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata);
         data.putIfAbsent("action", action);
         log(action == null ? "CRUD" : action.toUpperCase(), entityType, entityId, data, null);
+    }
+
+    public void logAuthAction(String action, String outcome, String message, Map<String, Object> metadata) {
+        Map<String, Object> data = metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata);
+        data.putIfAbsent("action", action);
+        data.putIfAbsent("outcome", outcome);
+        data.putIfAbsent("message", message);
+        data.putIfAbsent("category", "AUTH");
+        
+        String eventType = "AUTH_" + action.toUpperCase();
+        if ("failure".equalsIgnoreCase(outcome)) {
+            eventType = "AUTH_FAILURE";
+        }
+        
+        log(eventType, "USER", null, data, null);
+    }
+
+    public void logSecurityAlert(String alertType, String severity, String message, Map<String, Object> metadata) {
+        Map<String, Object> data = metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata);
+        data.putIfAbsent("alert_type", alertType);
+        data.putIfAbsent("severity", severity);
+        data.putIfAbsent("message", message);
+        data.putIfAbsent("category", "SECURITY");
+        data.putIfAbsent("level", severity.toUpperCase());
+        log("SECURITY_ALERT", "SYSTEM", null, data, null);
+    }
+
+    public void logDataExport(String entityType, String format, int count, Map<String, Object> metadata) {
+        Map<String, Object> data = metadata == null ? new LinkedHashMap<>() : new LinkedHashMap<>(metadata);
+        data.putIfAbsent("export_format", format);
+        data.putIfAbsent("record_count", count);
+        data.putIfAbsent("category", "DATA_PRIVACY");
+        data.putIfAbsent("action", "EXPORT");
+        log("DATA_EXPORT", entityType, null, data, null);
     }
 
     public List<AppEventLog> recentActivity(int limit) {

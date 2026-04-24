@@ -15,6 +15,7 @@ import com.syndicati.views.frontend.home.AdminDestinationChoiceView;
 import com.syndicati.views.frontend.home.LandingPageView;
 import com.syndicati.views.frontend.login.LoginView;
 import com.syndicati.services.analytics.AnomalyScoringScheduler;
+import com.syndicati.services.observability.LangfuseRuntimeService;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
 
@@ -36,6 +37,7 @@ public class MainApplication extends Application {
     private boolean windowChromeListenerInstalled = false;
     private final ActivityLogController activityLogController = new ActivityLogController();
     private final AnomalyScoringScheduler anomalyScoringScheduler = new AnomalyScoringScheduler();
+    private final LangfuseRuntimeService langfuseRuntimeService = LangfuseRuntimeService.getInstance();
     
     @Override
     public void start(Stage primaryStage) {
@@ -67,7 +69,15 @@ public class MainApplication extends Application {
         // Start database connection monitoring
         com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
         connectionManager.startMonitoring();
+        langfuseRuntimeService.start();
         anomalyScoringScheduler.start();
+
+        // Log application startup event - first record anchors the Langfuse session.
+        activityLogController.logPageView("app_startup", "Application Startup", java.util.Map.of(
+            "source",  "main_application",
+            "langfuse_enabled", String.valueOf(langfuseRuntimeService.isEnabled()),
+            "diagnostics", langfuseRuntimeService.diagnosticSummary()
+        ));
         
         // Add JVM shutdown hook as backup
         Runtime.getRuntime().addShutdownHook(
@@ -77,6 +87,7 @@ public class MainApplication extends Application {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
                     connectionManager.shutdown();
+                    langfuseRuntimeService.stop();
                     anomalyScoringScheduler.stop();
                     System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
                 })
@@ -108,10 +119,15 @@ public class MainApplication extends Application {
         // Add shutdown hook to properly close database monitoring and async email service
         primaryStage.setOnCloseRequest(event -> {
             System.out.println("[SHUTDOWN] Shutting down application...");
+            // Log shutdown before stopping services so tracer is still live.
+            activityLogController.logPageView("app_shutdown", "Application Shutdown", java.util.Map.of(
+                "source", "close_request"
+            ));
             // Shutdown email service thread pool first
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             // Then shutdown database monitoring
             connectionManager.shutdown();
+            langfuseRuntimeService.stop();
             anomalyScoringScheduler.stop();
             System.out.println("[SUCCESS] All services stopped");
             
