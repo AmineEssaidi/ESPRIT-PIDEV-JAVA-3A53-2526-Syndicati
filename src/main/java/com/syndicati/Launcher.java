@@ -7,12 +7,13 @@ package com.syndicati;
 public class Launcher {
     
     public static void main(String[] args) {
-        System.out.println("ðŸš€ Starting Syndicati Desktop...");
-        System.out.println("ðŸ“± JavaFX Application Launcher");
+        System.out.println("[START] Starting Syndicati Desktop...");
+        System.out.println("[INFO] JavaFX Application Launcher");
         
         // Launch the main JavaFX application
         MainApplication.main(args);
     }
 }
+
 
 

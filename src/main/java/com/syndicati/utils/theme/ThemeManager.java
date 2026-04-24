@@ -30,8 +30,6 @@ public class ThemeManager {
     private boolean isDarkMode = true; // Start in dark mode
     private Scene currentScene;
     private BooleanProperty isDarkModeProperty = new SimpleBooleanProperty(isDarkMode);
-
-    // Accent color â€“ loaded from persistent prefs at startup
     private String accentColor = AppPreferences.DEFAULT_ACCENT_COLOR;
     private String accentGradient = AppPreferences.DEFAULT_ACCENT_GRADIENT;
     private StringProperty accentColorProperty = new SimpleStringProperty(accentColor);
@@ -39,8 +37,6 @@ public class ThemeManager {
 
     // Listeners notified when accent or theme changes (used by SettingsView to refresh UI)
     private final List<Runnable> accentChangeListeners = new ArrayList<>();
-
-    // Animated gradient â€“ phase cycles 0â†’1 continuously when animatedAccents=true
     private final DoubleProperty gradientPhase = new SimpleDoubleProperty(0.0);
     private Timeline gradientTimeline;
     
@@ -97,7 +93,7 @@ public class ThemeManager {
         this.isDarkMode = !this.isDarkMode;
         this.isDarkModeProperty.set(this.isDarkMode);
         AppPreferences.set(AppPreferences.KEY_THEME, isDarkMode ? "dark" : "light");
-        System.out.println("ðŸ”„ ThemeManager: Theme toggled to " + (isDarkMode ? "Dark" : "Light") + " mode");
+        System.out.println("[INFO] ThemeManager: Theme toggled to " + (isDarkMode ? "Dark" : "Light") + " mode");
         applyTheme();
         notifyAccentListeners();
     }
@@ -109,8 +105,6 @@ public class ThemeManager {
         applyTheme();
         notifyAccentListeners();
     }
-
-    // â”€â”€ Accent color â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public String getAccentHex() {
         return accentColor;
     }
@@ -135,7 +129,7 @@ public class ThemeManager {
     }
 
     /**
-     * Kept for compatibility â€“ delegates to getAccentGradientPaint().
+     * Kept for compatibility - delegates to getAccentGradientPaint().
      */
     public Paint buildAccentLinearGradient(String ignoredHex) {
         return getAccentGradientPaint();
@@ -166,7 +160,7 @@ public class ThemeManager {
         }
     }
 
-    /** Returns the gradient to use for CSS borders/backgrounds â€“ animated if enabled */
+    /** Returns the gradient to use for CSS borders/backgrounds - animated if enabled */
     public String getEffectiveAccentGradient() {
         String base = animatedAccents ? getAnimatedAccentGradient() : accentGradient;
         return base;
@@ -184,8 +178,6 @@ public class ThemeManager {
         AppPreferences.set(AppPreferences.KEY_ACCENT_GRADIENT, gradient);
         notifyAccentListeners();
     }
-
-    // â”€â”€ Animated accents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public boolean isAnimatedAccents() { return animatedAccents; }
 
     public void setAnimatedAccents(boolean value) {
@@ -198,10 +190,8 @@ public class ThemeManager {
         notifyAccentListeners();
     }
 
-    /** Phase property â€“ bind a node's style to this to react to animation ticks */
+    /** Phase property - bind a node's style to this to react to animation ticks */
     public DoubleProperty gradientPhaseProperty() { return gradientPhase; }
-
-    // â”€â”€ Change listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void addAccentChangeListener(Runnable listener) {
         if (listener != null && !accentChangeListeners.contains(listener)) {
             accentChangeListeners.add(listener);
@@ -251,7 +241,7 @@ public class ThemeManager {
         // Pane root = (Pane) currentScene.getRoot();
         // root.setStyle("-fx-background-color: #0a0b0f;");
         
-        System.out.println("ðŸŒ™ Dark theme applied (transparent scene; backgrounds handled by views)");
+        System.out.println("[INFO] Dark theme applied (transparent scene; backgrounds handled by views)");
     }
     
     private void applyLightTheme() {
@@ -265,7 +255,7 @@ public class ThemeManager {
         //     "-fx-background-color: linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%);"
         // );
         
-        System.out.println("â˜€ï¸ Modern light theme applied (transparent scene; backgrounds handled by views)");
+        System.out.println("[INFO] Modern light theme applied (transparent scene; backgrounds handled by views)");
     }
     
     public String getBackgroundColor() {
@@ -407,7 +397,7 @@ public class ThemeManager {
     }
 
     public String getModernSecondaryColor() {
-        // Derived darker shade â€“ keep simple
+        // Derived darker shade - keep simple
         return isDarkMode ? deriveColor(accentColor, 0.8) : deriveColor(accentColor, 0.9);
     }
 
@@ -467,3 +457,5 @@ public class ThemeManager {
         return "rgba(255, 255, 255, 0.90)";
     }
 }
+
+

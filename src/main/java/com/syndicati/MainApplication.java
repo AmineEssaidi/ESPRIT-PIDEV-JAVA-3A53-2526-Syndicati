@@ -10,9 +10,12 @@ import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.scene.text.Font;
 import com.syndicati.utils.security.AccessControlService;
+import com.syndicati.controllers.log.ActivityLogController;
 import com.syndicati.views.frontend.home.AdminDestinationChoiceView;
 import com.syndicati.views.frontend.home.LandingPageView;
 import com.syndicati.views.frontend.login.LoginView;
+import com.syndicati.services.analytics.AnomalyScoringScheduler;
+import com.syndicati.services.observability.LangfuseRuntimeService;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
 
@@ -31,6 +34,10 @@ public class MainApplication extends Application {
     private javafx.animation.Timeline loginChecker; // Keep reference to stop it later
     private String boldFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private String lightFontFamily = "Clash Grotesk"; // default name in case load resolves differently
+    private boolean windowChromeListenerInstalled = false;
+    private final ActivityLogController activityLogController = new ActivityLogController();
+    private final AnomalyScoringScheduler anomalyScoringScheduler = new AnomalyScoringScheduler();
+    private final LangfuseRuntimeService langfuseRuntimeService = LangfuseRuntimeService.getInstance();
     
     @Override
     public void start(Stage primaryStage) {
@@ -55,10 +62,22 @@ public class MainApplication extends Application {
         // Set up theme manager
         ThemeManager themeManager = ThemeManager.getInstance();
         themeManager.setScene(scene);
+
+        installWindowChromeListener();
+        applyRoundedShape(scene);
         
         // Start database connection monitoring
         com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
         connectionManager.startMonitoring();
+        langfuseRuntimeService.start();
+        anomalyScoringScheduler.start();
+
+        // Log application startup event - first record anchors the Langfuse session.
+        activityLogController.logPageView("app_startup", "Application Startup", java.util.Map.of(
+            "source",  "main_application",
+            "langfuse_enabled", String.valueOf(langfuseRuntimeService.isEnabled()),
+            "diagnostics", langfuseRuntimeService.diagnosticSummary()
+        ));
         
         // Add JVM shutdown hook as backup
         Runtime.getRuntime().addShutdownHook(
@@ -68,6 +87,8 @@ public class MainApplication extends Application {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
                     connectionManager.shutdown();
+                    langfuseRuntimeService.stop();
+                    anomalyScoringScheduler.stop();
                     System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
                 })
         );
@@ -98,10 +119,16 @@ public class MainApplication extends Application {
         // Add shutdown hook to properly close database monitoring and async email service
         primaryStage.setOnCloseRequest(event -> {
             System.out.println("[SHUTDOWN] Shutting down application...");
+            // Log shutdown before stopping services so tracer is still live.
+            activityLogController.logPageView("app_shutdown", "Application Shutdown", java.util.Map.of(
+                "source", "close_request"
+            ));
             // Shutdown email service thread pool first
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             // Then shutdown database monitoring
             connectionManager.shutdown();
+            langfuseRuntimeService.stop();
+            anomalyScoringScheduler.stop();
             System.out.println("[SUCCESS] All services stopped");
             
             // Force exit JVM after a short delay to ensure cleanup
@@ -144,7 +171,7 @@ public class MainApplication extends Application {
         if (isLoggedIn) return; // Prevent multiple navigations
 
         isLoggedIn = true;
-        System.out.println("ðŸ”“ Login successful! Navigating to landing page...");
+        System.out.println("[INFO] Login successful. Navigating to landing page...");
 
         // Store current window size and position before switching
         double currentWidth = primaryStage.getWidth();
@@ -164,8 +191,11 @@ public class MainApplication extends Application {
             return;
         }
 
+        activityLogController.logPageView("landing_page", "Landing Page", java.util.Map.of(
+            "source", "login_success"
+        ));
         showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
-        System.out.println("âœ… Successfully navigated to landing page!");
+        System.out.println("[OK] Successfully navigated to landing page.");
     }
 
     private void showAdminDestinationChoice(
@@ -229,6 +259,10 @@ public class MainApplication extends Application {
         addResizeHandlers(primaryStage, scene);
         applyRoundedShape(scene);
         primaryStage.show();
+
+        activityLogController.logPageView("admin_destination_choice", "Admin Destination Choice", java.util.Map.of(
+            "source", "login_success"
+        ));
     }
 
     private void showLandingPage(
@@ -288,6 +322,11 @@ public class MainApplication extends Application {
         applyRoundedShape(scene);
         primaryStage.show();
 
+        activityLogController.logPageView(goToDashboard ? "admin_dashboard" : "landing_dashboard", "Dashboard", java.util.Map.of(
+            "source", "scene_switch",
+            "dashboard_mode", goToDashboard ? "admin" : "community"
+        ));
+
         javafx.application.Platform.runLater(() -> {
             landingPageView.getRoot().layout();
             primaryStage.sizeToScene();
@@ -311,13 +350,13 @@ public class MainApplication extends Application {
                 Font boldFont = Font.loadFont(boldStream, 14);
                 if (boldFont != null) {
                     boldFontFamily = boldFont.getFamily();
-                    System.out.println("ðŸ“¦ Loaded bold font: " + boldFont.getName() + " (family: " + boldFontFamily + ")");
+                    System.out.println("[INFO] Loaded bold font: " + boldFont.getName() + " (family: " + boldFontFamily + ")");
                 } else {
-                    System.out.println("âš ï¸ Failed to load ClashGrotesk-Bold.otf font â€“ using default family name.");
+                    System.out.println("[WARN] Failed to load ClashGrotesk-Bold.otf font - using default family name.");
                 }
                 boldStream.close();
             } else {
-                System.out.println("âš ï¸ ClashGrotesk-Bold.otf not found on classpath.");
+                System.out.println("[WARN] ClashGrotesk-Bold.otf not found on classpath.");
             }
             
             // Load Archivo-Regular for body text (primary)
@@ -326,13 +365,13 @@ public class MainApplication extends Application {
                 Font regularPrimaryFont = Font.loadFont(regularPrimaryStream, 14);
                 if (regularPrimaryFont != null) {
                     lightFontFamily = regularPrimaryFont.getFamily();
-                    System.out.println("ðŸ“¦ Loaded body font (regular): " + regularPrimaryFont.getName() + " (family: " + lightFontFamily + ")");
+                    System.out.println("[INFO] Loaded body font (regular): " + regularPrimaryFont.getName() + " (family: " + lightFontFamily + ")");
                 } else {
-                    System.out.println("âš ï¸ Failed to load Archivo-Regular.ttf font â€“ trying Archivo-Light.");
+                    System.out.println("[WARN] Failed to load Archivo-Regular.ttf font - trying Archivo-Light.");
                 }
                 regularPrimaryStream.close();
             } else {
-                System.out.println("âš ï¸ Archivo-Regular.ttf not found on classpath â€“ trying Archivo-Light.");
+                System.out.println("[WARN] Archivo-Regular.ttf not found on classpath - trying Archivo-Light.");
             }
 
             // Fallback: Archivo-Regular
@@ -342,13 +381,13 @@ public class MainApplication extends Application {
                     Font archivoRegular = Font.loadFont(archivoRegularStream, 14);
                     if (archivoRegular != null) {
                         lightFontFamily = archivoRegular.getFamily();
-                        System.out.println("ðŸ“¦ Loaded body font (regular): " + archivoRegular.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("[INFO] Loaded body font (regular): " + archivoRegular.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load Archivo-Regular.ttf font â€“ trying Archivo-Light.");
+                        System.out.println("[WARN] Failed to load Archivo-Regular.ttf font - trying Archivo-Light.");
                     }
                     archivoRegularStream.close();
                 } else {
-                    System.out.println("âš ï¸ Archivo-Regular.ttf not found on classpath â€“ trying Archivo-Light.");
+                    System.out.println("[WARN] Archivo-Regular.ttf not found on classpath - trying Archivo-Light.");
                 }
             }
 
@@ -359,13 +398,13 @@ public class MainApplication extends Application {
                     Font archivoLight = Font.loadFont(archivoLightStream, 14);
                     if (archivoLight != null) {
                         lightFontFamily = archivoLight.getFamily();
-                        System.out.println("ðŸ“¦ Loaded body font (light): " + archivoLight.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("[INFO] Loaded body font (light): " + archivoLight.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load Archivo-Light.ttf font â€“ trying Clash fallback.");
+                        System.out.println("[WARN] Failed to load Archivo-Light.ttf font - trying Clash fallback.");
                     }
                     archivoLightStream.close();
                 } else {
-                    System.out.println("âš ï¸ Archivo-Light.ttf not found on classpath â€“ trying Clash fallback.");
+                    System.out.println("[WARN] Archivo-Light.ttf not found on classpath - trying Clash fallback.");
                 }
             }
 
@@ -376,13 +415,13 @@ public class MainApplication extends Application {
                     Font regularFont = Font.loadFont(regularStream, 14);
                     if (regularFont != null) {
                         lightFontFamily = regularFont.getFamily();
-                        System.out.println("ðŸ“¦ Loaded regular font: " + regularFont.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("[INFO] Loaded regular font: " + regularFont.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load ClashGrotesk-Regular.ttf font â€“ trying light font.");
+                        System.out.println("[WARN] Failed to load ClashGrotesk-Regular.ttf font - trying light font.");
                     }
                     regularStream.close();
                 } else {
-                    System.out.println("âš ï¸ ClashGrotesk-Regular.ttf not found on classpath â€“ trying light font.");
+                    System.out.println("[WARN] ClashGrotesk-Regular.ttf not found on classpath - trying light font.");
                 }
             }
 
@@ -393,17 +432,17 @@ public class MainApplication extends Application {
                     Font lightFont = Font.loadFont(lightStream, 14);
                     if (lightFont != null) {
                         lightFontFamily = lightFont.getFamily();
-                        System.out.println("ðŸ“¦ Loaded light fallback font: " + lightFont.getName() + " (family: " + lightFontFamily + ")");
+                        System.out.println("[INFO] Loaded light fallback font: " + lightFont.getName() + " (family: " + lightFontFamily + ")");
                     } else {
-                        System.out.println("âš ï¸ Failed to load ClashGrotesk-Light.otf font â€“ using default family name.");
+                        System.out.println("[WARN] Failed to load ClashGrotesk-Light.otf font - using default family name.");
                     }
                     lightStream.close();
                 } else {
-                    System.out.println("âš ï¸ ClashGrotesk-Light.otf not found on classpath.");
+                    System.out.println("[WARN] ClashGrotesk-Light.otf not found on classpath.");
                 }
             }
         } catch (Exception ex) {
-            System.out.println("âš ï¸ Error loading custom fonts: " + ex.getMessage());
+            System.out.println("[WARN] Error loading custom fonts: " + ex.getMessage());
         }
     }
     
@@ -415,12 +454,8 @@ public class MainApplication extends Application {
         return lightFontFamily;
     }
     
-    public Stage getPrimaryStage() {
-        return primaryStage;
-    }
-    
     public void logout() {
-        System.out.println("ðŸ”“ Logging out - returning to login page...");
+        System.out.println("[INFO] Logging out - returning to login page...");
                 // Clear user session
         com.syndicati.utils.session.SessionManager.getInstance().clear();
                 // Store current window size and position before switching
@@ -472,6 +507,10 @@ public class MainApplication extends Application {
         
         // Show stage
         primaryStage.show();
+
+        activityLogController.logPageView("login_page", "Login Page", java.util.Map.of(
+            "source", "logout"
+        ));
         
         // Avoid forcing additional size/layout passes here; media-backed backgrounds
         // are initialized asynchronously and can be disrupted by immediate re-scaling.
@@ -482,7 +521,7 @@ public class MainApplication extends Application {
             landingPageView = null;
         }
         
-        System.out.println("âœ… Successfully returned to login page!");
+        System.out.println("[OK] Successfully returned to login page.");
     }
     
     public static MainApplication getInstance() {
@@ -505,7 +544,7 @@ public class MainApplication extends Application {
                 scene.getStylesheets().add(css);
             }
         } else {
-            System.out.println("âš ï¸ Global stylesheet not found: " + GLOBAL_SCROLLBAR_CSS);
+            System.out.println("[WARN] Global stylesheet not found: " + GLOBAL_SCROLLBAR_CSS);
         }
     }
     
@@ -516,7 +555,30 @@ public class MainApplication extends Application {
     }
     
     private void applyRoundedShape(Scene scene) {
-        // Create rounded rectangle clip for the scene root
+        updateWindowClip(scene, primaryStage != null && primaryStage.isMaximized());
+    }
+
+    private void installWindowChromeListener() {
+        if (windowChromeListenerInstalled || primaryStage == null) {
+            return;
+        }
+
+        primaryStage.maximizedProperty().addListener((observable, oldValue, maximized) -> {
+            updateWindowClip(primaryStage.getScene(), maximized);
+        });
+        windowChromeListenerInstalled = true;
+    }
+
+    private void updateWindowClip(Scene scene, boolean maximized) {
+        if (scene == null || scene.getRoot() == null) {
+            return;
+        }
+
+        if (maximized) {
+            scene.getRoot().setClip(null);
+            return;
+        }
+
         javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
         clip.setArcWidth(20);
         clip.setArcHeight(20);
@@ -664,4 +726,5 @@ public class MainApplication extends Application {
         launch(args);
     }
 }
+
 

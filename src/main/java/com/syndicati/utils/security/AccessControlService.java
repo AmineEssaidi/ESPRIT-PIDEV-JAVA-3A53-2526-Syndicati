@@ -1,6 +1,6 @@
 package com.syndicati.utils.security;
 
-import com.syndicati.models.entities.User;
+import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
 
 import java.util.Locale;

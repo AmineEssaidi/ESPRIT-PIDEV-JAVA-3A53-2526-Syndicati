@@ -4,7 +4,7 @@ import com.syndicati.MainApplication;
 import com.syndicati.components.shared.DynamicFooter;
 import com.syndicati.components.shared.DynamicHeader;
 import com.syndicati.interfaces.ViewInterface;
-import com.syndicati.models.entities.User;
+import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.geometry.Insets;

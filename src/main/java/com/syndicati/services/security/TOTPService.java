@@ -46,7 +46,7 @@ public class TOTPService {
      * Verify TOTP code
      * @param secret Base32 encoded secret
      * @param code 6-digit code from authenticator app
-     * @param leeway Time window in steps (1 = ±30 seconds)
+    * @param leeway Time window in steps (1 = +/-30 seconds)
      * @return true if code is valid
      */
     public static boolean verifyCode(String secret, String code, int leeway) {
@@ -74,7 +74,7 @@ public class TOTPService {
     }
     
     /**
-     * Verify TOTP code with default leeway (1 step = ±30 seconds)
+    * Verify TOTP code with default leeway (1 step = +/-30 seconds)
      * @param secret Base32 encoded secret
      * @param code 6-digit code from authenticator app
      * @return true if code is valid
@@ -195,3 +195,5 @@ public class TOTPService {
         return data;
     }
 }
+
+

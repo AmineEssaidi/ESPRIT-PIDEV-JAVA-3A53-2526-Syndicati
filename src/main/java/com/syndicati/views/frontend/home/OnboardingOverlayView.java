@@ -1,10 +1,10 @@
 package com.syndicati.views.frontend.home;
 
-import com.syndicati.models.entities.Onboarding;
-import com.syndicati.models.entities.Profile;
-import com.syndicati.models.entities.User;
-import com.syndicati.models.services.OnboardingService;
-import com.syndicati.models.services.ProfileService;
+import com.syndicati.models.user.Onboarding;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.User;
+import com.syndicati.controllers.user.onboarding.OnboardingController;
+import com.syndicati.controllers.user.profile.ProfileController;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.geometry.Insets;
@@ -36,8 +36,8 @@ import java.util.Optional;
 public class OnboardingOverlayView {
 
     private final User user;
-    private final OnboardingService onboardingService;
-    private final ProfileService profileService;
+    private final OnboardingController onboardingController;
+    private final ProfileController profileController;
     private final SessionManager sessionManager;
     private final Runnable onCompleted;
     private final boolean editMode;
@@ -66,8 +66,8 @@ public class OnboardingOverlayView {
         this.user = user;
         this.onCompleted = onCompleted;
         this.editMode = editMode;
-        this.onboardingService = new OnboardingService();
-        this.profileService = new ProfileService();
+        this.onboardingController = new OnboardingController();
+        this.profileController = new ProfileController();
         this.sessionManager = SessionManager.getInstance();
 
         this.root = new StackPane();
@@ -102,7 +102,7 @@ public class OnboardingOverlayView {
             return;
         }
 
-        Optional<Onboarding> loaded = onboardingService.findOrCreateByUserId(user.getIdUser());
+        Optional<Onboarding> loaded = onboardingController.findOrCreateByUserId(user.getIdUser());
         if (loaded.isEmpty()) {
             shouldShow = false;
             return;
@@ -554,7 +554,7 @@ public class OnboardingOverlayView {
         applyCurrentStepToModel();
         onboarding.setStep(Math.max(1, onboarding.getStep() - 1));
         onboarding.setUpdatedAt(LocalDateTime.now());
-        onboardingService.saveOnboarding(onboarding);
+        onboardingController.saveOnboarding(onboarding);
         renderCurrentStep();
     }
 
@@ -566,14 +566,14 @@ public class OnboardingOverlayView {
             onboarding.setCompleted(true);
             onboarding.setCompletedAt(LocalDateTime.now());
             onboarding.setUpdatedAt(LocalDateTime.now());
-            onboardingService.saveOnboarding(onboarding);
+            onboardingController.saveOnboarding(onboarding);
             completeAndClose();
             return;
         }
 
         onboarding.setStep(onboarding.getStep() + 1);
         onboarding.setUpdatedAt(LocalDateTime.now());
-        onboardingService.saveOnboarding(onboarding);
+        onboardingController.saveOnboarding(onboarding);
         renderCurrentStep();
     }
 
@@ -582,7 +582,7 @@ public class OnboardingOverlayView {
         onboarding.setCompleted(true);
         onboarding.setCompletedAt(LocalDateTime.now());
         onboarding.setUpdatedAt(LocalDateTime.now());
-        onboardingService.saveOnboarding(onboarding);
+        onboardingController.saveOnboarding(onboarding);
         completeAndClose();
     }
 
@@ -595,7 +595,7 @@ public class OnboardingOverlayView {
         onboarding.setCompleted(true);
         onboarding.setCompletedAt(LocalDateTime.now());
         onboarding.setUpdatedAt(LocalDateTime.now());
-        onboardingService.saveOnboarding(onboarding);
+        onboardingController.saveOnboarding(onboarding);
         completeAndClose();
     }
 
@@ -637,10 +637,10 @@ public class OnboardingOverlayView {
             return;
         }
 
-        profileService.findOneByUserId(user.getIdUser()).ifPresent(profile -> {
+        profileController.profileByUserId(user.getIdUser()).ifPresent(profile -> {
             profile.setLocale(onboarding.getSelectedLocale());
             profile.setTheme("light".equalsIgnoreCase(onboarding.getSelectedTheme()) ? 1 : 0);
-            profileService.updateProfile(profile);
+            profileController.profileUpdate(profile);
 
             Profile sessionProfile = sessionManager.getCurrentProfile();
             if (sessionProfile != null && sessionProfile.getIdProfile() != null
@@ -690,3 +690,4 @@ public class OnboardingOverlayView {
         return map;
     }
 }
+
