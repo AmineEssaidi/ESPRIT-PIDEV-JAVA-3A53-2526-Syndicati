@@ -47,6 +47,25 @@ public final class SyndicatiEmailComposer {
         return wrap(body, footerExtra);
     }
 
+    public static String commentNotification(String authorFirstName, String commenterName, String publicationTitle, String commentSnippet) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>New Discussion Activity</h2>" +
+            "<p>Hello " + esc(nameOrFallback(authorFirstName)) + ",</p>" +
+            "<p><strong>" + esc(commenterName) + "</strong> has just interacted with your publication.</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<p style='font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;'>On Publication</p>" +
+            "<h3 style='margin-bottom:20px;color:#ffffff;font-size:18px;letter-spacing:-0.5px;'>" + esc(publicationTitle) + "</h3>" +
+            "<div style='background:rgba(0,0,0,0.4);padding:25px;border-radius:16px;border:1px solid rgba(255,255,255,0.05);line-height:1.6;color:rgba(255,255,255,0.8);font-style:italic;'>" +
+            "&ldquo;" + esc(commentSnippet) + "&rdquo;" +
+            "</div>" +
+            "</div>" +
+            "<div class='button-container'><a href='#' class='button'>Join Discussion</a></div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Engagement Engine - Neural Notification System</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: COM-NOT-" + DateTimeFormatter.ofPattern("HHmm").format(LocalDateTime.now()) + " - Real-time Protocol</p>";
+        return wrap(body, footerExtra);
+    }
+
     public static String publicationAnnouncement(String firstName, String title, String description, String authorName) {
         String body =
             "<h2 style='color:#ff4b5c;'>New Community Announcement</h2>" +
