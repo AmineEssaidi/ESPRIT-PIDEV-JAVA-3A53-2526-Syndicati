@@ -1,6 +1,9 @@
 package com.syndicati.components.home;
 
 import com.syndicati.MainApplication;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.services.residence.ServiceAppartement;
+import com.syndicati.services.residence.ServiceResidence;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
@@ -12,6 +15,8 @@ import javafx.scene.control.Button;
 import javafx.scene.effect.BlurType;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -20,11 +25,16 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
+
+import java.io.File;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * HomeContent aligned with the real website home under templates/frontend/home.
@@ -33,6 +43,8 @@ public class HomeContent {
 
     private final VBox root;
     private final ThemeManager theme = ThemeManager.getInstance();
+
+    ServiceAppartement ServiceAppartement = new ServiceAppartement();
 
     public HomeContent() {
         root = new VBox(42);
@@ -154,24 +166,26 @@ public class HomeContent {
         box.getChildren().addAll(row, sub);
         return box;
     }
-
     private GridPane buildResidencesSection() {
         GridPane grid = new GridPane();
         grid.setHgap(22);
         grid.setVgap(22);
         grid.setMaxWidth(Double.MAX_VALUE);
 
-        String[][] items = {
-            {"Residence Azure", "Les Berges du Lac", "NOUVEAU"},
-            {"Palm Heights", "La Marsa", "NOUVEAU"},
-            {"Jardin Central", "Mutuelleville", "NOUVEAU"}
-        };
+        List<Residence> top3 = List.of();
+        try {
+            top3 = new ServiceResidence().Recuperer().stream()
+                    .sorted(Comparator.comparingInt(Residence::getN_appartements).reversed())
+                    .limit(3)
+                    .toList();
+        } catch (Exception ignored) {}
 
-        for (int i = 0; i < items.length; i++) {
-            VBox card = buildResidenceCard(items[i][0], items[i][1], items[i][2]);
+        for (int i = 0; i < top3.size(); i++) {
+            Residence r = top3.get(i);
+            VBox card = buildResidenceCard(r, "POPULAR");
             GridPane.setFillWidth(card, true);
             card.setMaxWidth(Double.MAX_VALUE);
-            grid.add(card, i % 3, i / 3);
+            grid.add(card, i, 0);
         }
 
         for (int i = 0; i < 3; i++) {
@@ -185,54 +199,65 @@ public class HomeContent {
         return grid;
     }
 
-    private VBox buildResidenceCard(String title, String location, String badge) {
+    private VBox buildResidenceCard(Residence r, String badge) {
         VBox card = new VBox(14);
         card.setMaxWidth(Double.MAX_VALUE);
         card.setPadding(new Insets(12));
         card.setStyle(
-            "-fx-background-color: " + cardSurface() + ";" +
-            "-fx-background-radius: 24px;" +
-            "-fx-border-color: " + cardBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 24px;"
+                "-fx-background-color: " + cardSurface() + ";" +
+                        "-fx-background-radius: 24px;" +
+                        "-fx-border-color: " + cardBorder() + ";" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-border-radius: 24px;"
         );
 
         StackPane imageWrap = new StackPane();
         imageWrap.setMinHeight(210);
         imageWrap.setMaxWidth(Double.MAX_VALUE);
         imageWrap.setStyle(
-            "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.10) + ";" +
-            "-fx-background-radius: 20px;"
+                "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.10) + ";" +
+                        "-fx-background-radius: 20px;"
         );
-        // Decorative diagonal highlight â€” sized as a Region so it never overflows its column
-        Region light = new Region();
-        light.setMaxWidth(Double.MAX_VALUE);
-        light.setMaxHeight(100);
-        light.setStyle(
-            "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.18) + ";" +
-            "-fx-background-radius: 12px;"
-        );
-        light.setRotate(-10);
-        Text icon = new Text("RES");
-        icon.setFont(Font.font(48));
+
+        String imageName = r.getImage_r();
+        if (imageName != null && !imageName.isEmpty()) {
+            File imageFile = new File(System.getProperty("user.dir") + "/uploads/residence_images/" + imageName);
+            if (imageFile.exists()) {
+                ImageView imageView = new ImageView(new Image(imageFile.toURI().toString()));
+                imageView.setFitWidth(400);
+                imageView.setFitHeight(210);
+                imageView.setPreserveRatio(false);
+                imageView.setSmooth(true);
+                Rectangle clip = new Rectangle(400, 210);
+                clip.setArcWidth(20);
+                clip.setArcHeight(20);
+                imageView.setClip(clip);
+                imageWrap.getChildren().add(imageView);
+            }
+        } else {
+            Region light = new Region();
+            light.setMaxWidth(Double.MAX_VALUE);
+            light.setMaxHeight(100);
+            light.setStyle("-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.18) + "; -fx-background-radius: 12px;");
+            light.setRotate(-10);
+            imageWrap.getChildren().addAll(light, new Text("RES"));
+        }
+
         StackPane badgeWrap = new StackPane();
         badgeWrap.setPadding(new Insets(8, 12, 8, 12));
-        badgeWrap.setStyle(
-            "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.9) + ";" +
-            "-fx-background-radius: 999px;"
-        );
+        badgeWrap.setStyle("-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.9) + "; -fx-background-radius: 999px;");
         Text badgeText = new Text(badge);
         badgeText.setFont(Font.font(boldFont(), FontWeight.BOLD, 10));
         badgeText.setFill(Color.WHITE);
         badgeWrap.getChildren().add(badgeText);
         StackPane.setAlignment(badgeWrap, Pos.TOP_LEFT);
         StackPane.setMargin(badgeWrap, new Insets(14, 0, 0, 14));
-        imageWrap.getChildren().addAll(light, icon, badgeWrap);
 
-        Text titleText = new Text(title);
+        Text titleText = new Text(r.getNom_r());
         titleText.setFont(Font.font(boldFont(), FontWeight.BOLD, 22));
         titleText.setFill(Color.web(theme.getTextColor()));
-        Text locText = new Text("Location: " + location);
+
+        Text locText = new Text("Location: " + r.getAdresse());
         locText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13));
         locText.setFill(Color.web(theme.getSecondaryTextColor()));
 
@@ -245,10 +270,7 @@ public class HomeContent {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         StackPane go = new StackPane(new Text("->"));
         go.setPrefSize(34, 34);
-        go.setStyle(
-            "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.12) + ";" +
-            "-fx-background-radius: 17px;"
-        );
+        go.setStyle("-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.12) + "; -fx-background-radius: 17px;");
         footer.getChildren().addAll(type, spacer, go);
 
         card.getChildren().addAll(imageWrap, titleText, locText, footer);
@@ -273,7 +295,7 @@ public class HomeContent {
 
         String[][] stats = {
             {"12", "BLOCS"},
-            {"248", "APPARTEMENTS"},
+            {String.valueOf(ServiceAppartement.NombreAppartements()), "APPARTEMENTS"},
             {"731", "RESIDENTS"},
             {"18", "EVENTS"}
         };

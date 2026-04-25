@@ -199,5 +199,18 @@ public class ServiceResidence implements IServiceSyndicati<Residence> {
         return Residence;
     }
 
+    public int NombreResidences()
+    {
+        String req = "SELECT count(*) FROM Residence";
+        try {
+            Statement stat = connection.createStatement();
+            ResultSet rs = stat.executeQuery(req);
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return -1;
+    }
+
 }
 

@@ -2,6 +2,7 @@ package com.syndicati.controllers.residence;
 
 import com.syndicati.models.residence.Appartement;
 import com.syndicati.models.residence.Residence;
+import com.syndicati.services.ServiceAlert;
 import com.syndicati.services.residence.ServiceAppartement;
 import com.syndicati.services.residence.ServiceResidence;
 import com.syndicati.views.backend.dashboard.AppartementShow;
@@ -135,11 +136,10 @@ public class AjouterAppartementController {
 
         try {
             serviceAppartement.Ajouter(appartement);
-
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("Appartement Ajouté");
-            alert.setHeaderText("Appartement ajouté avec succès!");
-            alert.show();
+            if (!ServiceAlert.showConfirmation(
+                    "Appartement Ajouté",
+                    "Appartement ajouté avec succès!", ""
+            )) return;
             new AppartementShow(stage, previousScene, appartement).show();
 
         } catch (SQLException e) {

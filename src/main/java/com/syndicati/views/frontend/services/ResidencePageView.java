@@ -6,6 +6,8 @@ import com.syndicati.MainApplication;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.residence.Appartement;
 import com.syndicati.models.residence.Residence;
+import com.syndicati.models.residence.Revue;
+import com.syndicati.services.ServiceAlert;
 import com.syndicati.services.residence.*;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
@@ -20,6 +22,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
@@ -43,8 +46,10 @@ import javafx.util.Duration;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.sql.SQLDataException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -227,29 +232,27 @@ public class ResidencePageView implements ViewInterface {
 
         residenceFace.getChildren().addAll(sectionLabel, cards);
     }
-
     private VBox residenceCard(Residence r, int index) {
         VBox card = new VBox();
         card.setStyle(
-            "-fx-background-color: " + surfaceCard() + ";" +
-            "-fx-background-radius: 32px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 32px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.24), 18, 0.12, 0, 6);"
+                "-fx-background-color: " + surfaceCard() + ";" +
+                        "-fx-background-radius: 32px;" +
+                        "-fx-border-color: " + borderSoft() + ";" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-border-radius: 32px;" +
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.24), 18, 0.12, 0, 6);"
         );
 
         StackPane media = new StackPane();
         media.setMinHeight(280);
         media.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.22) + ";" +
-            "-fx-background-radius: 32px 32px 0 0;"
+                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.22) + ";" +
+                        "-fx-background-radius: 32px 32px 0 0;"
         );
 
         String imageName = r.getImage_r();
         if (imageName != null && !imageName.isEmpty()) {
-            String imagePath = System.getProperty("user.dir") + "/uploads/residence_images/" + imageName;
-            File imageFile = new File(imagePath);
+            File imageFile = new File(System.getProperty("user.dir") + "/uploads/residence_images/" + imageName);
             if (imageFile.exists()) {
                 ImageView imageView = new ImageView(new Image(imageFile.toURI().toString()));
                 imageView.setFitWidth(400);
@@ -266,11 +269,10 @@ public class ResidencePageView implements ViewInterface {
 
         VBox body = new VBox(14);
         body.setPadding(new Insets(26, 22, 22, 22));
-
         body.getChildren().addAll(
-            miniType("Residence"),
-            text(r.getNom_r(), 30, true, "#ffffff"),
-            iconLine("Location", r.getAdresse())
+                miniType("Residence"),
+                text(r.getNom_r(), 30, true, "#ffffff"),
+                iconLine("Location", r.getAdresse())
         );
 
         HBox stats = new HBox(12,
@@ -281,17 +283,27 @@ public class ResidencePageView implements ViewInterface {
         stats.setPadding(new Insets(16, 0, 0, 0));
         stats.setStyle("-fx-border-color: " + borderSoft() + " transparent transparent transparent; -fx-border-width: 1px 0 0 0;");
 
-        HBox actions = new HBox(10);
         Button seeApts = mainBtn("Check Details");
         seeApts.setOnAction(e -> openApartments(index));
-        Button export = mainBtn("Export PDF");
-        export.setDisable(true);
-        export.setOpacity(0.7);
+
+        Button exporterExcel = mainBtn("Export Excel");
+        exporterExcel.setOnAction(e -> {
+            try {
+                ServiceExcelResidence.AppartementsParResidence(
+                        ServiceAppartement.AppartementsParResidence(r),
+                        r.getNom_r()
+                );
+                ServiceAlert.showConfirmation("Export réussi", "Fichier Excel exporté", "Export réussi.");
+            } catch (Exception ex) {
+                ServiceAlert.showConfirmation("Erreur", "Export échoué.", ex.getMessage());
+            }
+        });
+
+        HBox actions = new HBox(10, seeApts, exporterExcel);
         HBox.setHgrow(seeApts, Priority.ALWAYS);
-        HBox.setHgrow(export, Priority.ALWAYS);
+        HBox.setHgrow(exporterExcel, Priority.ALWAYS);
         seeApts.setMaxWidth(Double.MAX_VALUE);
-        export.setMaxWidth(Double.MAX_VALUE);
-        actions.getChildren().addAll(seeApts, export);
+        exporterExcel.setMaxWidth(Double.MAX_VALUE);
 
         Region bar = new Region();
         bar.setPrefHeight(4);
@@ -300,8 +312,8 @@ public class ResidencePageView implements ViewInterface {
 
         body.getChildren().addAll(stats, actions);
         card.getChildren().addAll(media, body, bar);
-
         addCardHover(card, bar);
+
         return card;
     }
 
@@ -491,8 +503,86 @@ public class ResidencePageView implements ViewInterface {
         }
 
         VBox contact = buildContactSection();
+        detailsFace.getChildren().addAll(header, top, buildReviewSection(apt), buildRecommendations(apt), contact);
+    }
+    private VBox buildRecommendations(Appartement apt) {
+        List<Appartement> all;
+        try { all = new ServiceAppartement().Recuperer(); }
+        catch (Exception e) { all = List.of(); }
 
-        detailsFace.getChildren().addAll(header, top, recommendations, recGrid, contact);
+        List<Appartement> similar = new ServiceRecommendationResidence()
+                .AppartementsSimilaires(apt, all, 5);
+
+        FlowPane recGrid = new FlowPane();
+        recGrid.setHgap(12);
+        recGrid.setVgap(12);
+        similar.forEach(a -> recGrid.getChildren().add(recommendationCard(a)));
+
+        return new VBox(12, text("Appartements Similaires", 28, true, "#ffffff"), recGrid);
+    }
+
+
+    private VBox buildReviewSection(Appartement apt) {
+        ServiceRevue serviceRevue = new ServiceRevue();
+        int currentUserId = SessionManager.getInstance().getCurrentUser().getIdUser();
+        int aptId = apt.getId_app();
+
+        Revue existingRevue = null;
+        try {
+            existingRevue = serviceRevue.RevuesParAppartement(aptId).stream()
+                    .filter(r -> r.getId_utilisateur() == currentUserId)
+                    .findFirst().orElse(null);
+        } catch (Exception ignored) {}
+
+        final Revue[] userRevue = {existingRevue};
+        final int[] selectedScore = {existingRevue != null ? existingRevue.getScore() : 0};
+
+        HBox stars = new HBox(6);
+        stars.setAlignment(Pos.CENTER_LEFT);
+        Label[] starLabels = new Label[10];
+
+        Runnable refreshStars = () -> {
+            for (int i = 0; i < 10; i++)
+                starLabels[i].setStyle("-fx-font-size: 24px; -fx-cursor: hand; -fx-text-fill: " +
+                        (i < selectedScore[0] ? "#f5a623" : "#555577") + ";");
+        };
+
+        for (int i = 0; i < 10; i++) {
+            final int score = i + 1;
+            Label star = new Label("★");
+            starLabels[i] = star;
+            star.setOnMouseEntered(e -> {
+                for (int j = 0; j < 10; j++)
+                    starLabels[j].setStyle("-fx-font-size: 24px; -fx-cursor: hand; -fx-text-fill: " +
+                            (j < score ? "#f5a623" : "#555577") + ";");
+            });
+            star.setOnMouseExited(e -> refreshStars.run());
+            star.setOnMouseClicked(e -> {
+                selectedScore[0] = score;
+                refreshStars.run();
+                try {
+                    if (userRevue[0] == null) {
+                        serviceRevue.Ajouter(new Revue(currentUserId, aptId, score));
+                        userRevue[0] = serviceRevue.RevuesParAppartement(aptId).stream()
+                                .filter(r -> r.getId_utilisateur() == currentUserId)
+                                .findFirst().orElse(null);
+                    } else {
+                        userRevue[0].setScore(score);
+                        serviceRevue.Modifier(userRevue[0]);
+                    }
+                    ServiceAlert.showConfirmation("Avis envoyé", "Merci pour votre avis!", "Score: " + score + "/10");
+                } catch (Exception ex) {
+                    ServiceAlert.showConfirmation("Erreur", "Impossible d'envoyer l'avis.", ex.getMessage());
+                }
+            });
+            stars.getChildren().add(star);
+        }
+        refreshStars.run();
+
+        VBox section = new VBox(8, text("Votre Avis", 20, true, "#ffffff"), stars);
+        section.setPadding(new Insets(16));
+        section.setStyle(shell(16, "rgba(255,255,255,0.03)", 1.2));
+        return section;
     }
 
     private VBox recommendationCard(Appartement apt) {
@@ -545,6 +635,8 @@ public class ResidencePageView implements ViewInterface {
         TextField email = input("Votre email");
         TextArea msg = new TextArea();
         msg.setPromptText("Votre message (optionnel)");
+        msg.setStyle("-fx-text-fill: black;");
+
         msg.setPrefRowCount(3);
         msg.setStyle(name.getStyle());
 
@@ -554,9 +646,18 @@ public class ResidencePageView implements ViewInterface {
         send.setOnAction (e ->
         {
             try {
-                ServiceEmailResidence.EnvoyerSMS(name.getText(), email.getText(), msg.getText());
-            } catch (MessagingException ex) {
-                throw new RuntimeException(ex);
+                ServiceEmailResidence.EnvoyerEmail(name.getText(), email.getText(), msg.getText());
+                ServiceAlert.showConfirmation(
+                        "Email envoyé",
+                        "Votre message a été envoyé avec succès!",
+                        "Nous vous contacterons bientôt."
+                );
+            } catch (Exception ex) {
+                ServiceAlert.showConfirmation(
+                        "Erreur",
+                        "L'envoi de l'email a échoué.",
+                        ex.getMessage()
+                );
             }
         });
 
@@ -565,44 +666,60 @@ public class ResidencePageView implements ViewInterface {
         VBox right = new VBox(10);
         right.setAlignment(Pos.TOP_CENTER);
         right.setPrefWidth(260);
-        String qrContent = ("SMSTO:+21652380209:" + "L'utilisateur " + SessionManager.getInstance().getCurrentUserName() + " est interesse a louer votre appartement a " + residences.get(selectedResidence).getNom_r()).replaceAll("[^\\x20-\\x7E]", "");
 
-        try {
-            qrCodeResidence = new ServiceQRCodeResidence(qrContent, BarcodeFormat.QR_CODE, 180, 180, BufferedImage.TYPE_INT_ARGB);
-        } catch (WriterException e) {
-            e.printStackTrace();
-        }
+        String userName = SessionManager.getInstance().getCurrentUserName();
+        String apptName = residences.get(selectedResidence).getNom_r();
+        String waMessage = ("L'utilisateur " + userName + " est interesse a louer votre appartement a " + apptName).replaceAll("[^\\x20-\\x7E]", "");
 
-        BufferedImage qrImage = qrCodeResidence.qrImage();
-        Image image = SwingFXUtils.toFXImage(qrImage, null);
-        ImageView imageView = new ImageView(image);
+        TextField phoneField = new TextField();
+        phoneField.setPromptText("Numéro de téléphone");
+        phoneField.setStyle("-fx-text-fill: black;");
+
+        ImageView imageView = new ImageView();
         imageView.setFitWidth(180);
         imageView.setFitHeight(180);
 
+        Runnable refreshQR = () -> {
+            String phone = "+216" + phoneField.getText().trim();
+            String qrContent = "https://wa.me/" + phone.replace("+", "") + "?text=" + waMessage.replace(" ", "%20");
+            try {
+                qrCodeResidence = new ServiceQRCodeResidence(qrContent, BarcodeFormat.QR_CODE, 180, 180, BufferedImage.TYPE_INT_ARGB);
+                imageView.setImage(SwingFXUtils.toFXImage(qrCodeResidence.qrImage(), null));
+            } catch (WriterException e) {
+                e.printStackTrace();
+            }
+        };
+
+        refreshQR.run();
+        phoneField.textProperty().addListener((obs, old, val) -> refreshQR.run());
+
         StackPane qr = new StackPane(imageView);
         qr.setPrefSize(180, 180);
-        qr.setStyle(
-                "-fx-background-color: white;" +
-                        "-fx-background-radius: 16px;"
-        );
+        qr.setStyle("-fx-background-color: white; -fx-background-radius: 16px;");
 
         Button smsBtn = mainBtn("Envoyer demande via SMS");
         smsBtn.setOnAction(e -> {
-            String recipient = "+21652380209";
-            String message = ("L'utilisateur " + SessionManager.getInstance().getCurrentUserName() + " est interesse a louer votre appartement a " + residences.get(selectedResidence).getNom_r())
-                    .replaceAll("[^\\x20-\\x7E]", "");
+            String recipient = "+216" + phoneField.getText().trim();
             try {
-                ServiceSMSResidence svc = new ServiceSMSResidence();
-                String result = svc.sendSMS(recipient, message);
-                System.out.println("SMS sent: " + result);
+                new ServiceSMSResidence().sendSMS(recipient, waMessage);
+                ServiceAlert.showConfirmation(
+                        "SMS envoyé",
+                        "Votre message a été envoyé avec succès!",
+                        "Le propriétaire vous contactera bientôt."
+                );
             } catch (Exception ex) {
-                System.err.println("SMS error: " + ex.getMessage());
+                ServiceAlert.showConfirmation(
+                        "Erreur",
+                        "L'envoi du SMS a échoué.",
+                        ex.getMessage()
+                );
             }
         });
 
         right.getChildren().addAll(
+                phoneField,
                 qr,
-                text("Scannez pour envoyer un SMS", 12, false, textSoft()),
+                text("Scannez pour envoyer un message WhatsApp", 12, false, textSoft()),
                 smsBtn
         );
 

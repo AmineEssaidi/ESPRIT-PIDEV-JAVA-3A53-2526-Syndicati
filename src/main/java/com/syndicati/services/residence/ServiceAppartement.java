@@ -236,5 +236,43 @@ public class ServiceAppartement implements IServiceSyndicati<Appartement> {
         return -1;
     }
 
+    public int NombreAppartements()
+    {
+        String req = "SELECT count(*) FROM Appartement";
+        try {
+            Statement stat = connection.createStatement();
+            ResultSet rs = stat.executeQuery(req);
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return -1;
+    }
+
+    public int PourcentageAppartementsALouer()
+    {
+        String req = "SELECT ROUND(COUNT(CASE WHEN disponible = 1 THEN 1 END) * 100.0 / COUNT(*), 1) AS percentage FROM Appartement";
+        try {
+            Statement stat = connection.createStatement();
+            ResultSet rs = stat.executeQuery(req);
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return -1;
+    }
+
+    public int UtilisateurAvecPlusAppartements()
+    {
+        String req = "SELECT id_user FROM Appartement GROUP BY id_user ORDER BY COUNT(*) DESC LIMIT 1;";
+        try {
+            Statement stat = connection.createStatement();
+            ResultSet rs = stat.executeQuery(req);
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+        return -1;
+    }
 
 }

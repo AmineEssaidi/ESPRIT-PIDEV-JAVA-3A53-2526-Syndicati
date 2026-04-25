@@ -2,6 +2,7 @@ package com.syndicati.controllers.residence;
 
 import com.syndicati.models.residence.Appartement;
 import com.syndicati.models.residence.Residence;
+import com.syndicati.services.ServiceAlert;
 import com.syndicati.services.residence.ServiceAppartement;
 import com.syndicati.services.residence.ServiceMaintenance;
 import com.syndicati.services.residence.ServiceResidence;
@@ -30,13 +31,11 @@ public class DetailResidenceController {
         this.residenceNom = residenceNom;
     }
     public void supprimerResidenceAction() {
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        confirm.setTitle("Supprimer Résidence");
-        confirm.setHeaderText("Êtes-vous sûr de vouloir supprimer cette résidence?");
-        confirm.setContentText("Cette action est irréversible.");
-
-        Optional<ButtonType> result = confirm.showAndWait();
-        if (result.isEmpty() || result.get() != ButtonType.OK) return;
+        if (!ServiceAlert.showConfirmation(
+                "Supprimer Résidence",
+                "Êtes-vous sûr de vouloir supprimer cette résidence?",
+                "Cette action est irréversible."
+        )) return;
 
         if (residenceNom == null) {
             showError("Résidence introuvable.");

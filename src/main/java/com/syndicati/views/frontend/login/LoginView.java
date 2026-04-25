@@ -1,6 +1,7 @@
 package com.syndicati.views.frontend.login;
 
 import com.syndicati.controllers.users.auth.AuthController;
+import com.syndicati.services.DatabaseService;
 import com.syndicati.services.user.UserService;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.services.user.ProfileService;
@@ -27,6 +28,10 @@ import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.components.shared.ImageBackground;
 import com.syndicati.components.shared.ConnectionStatusPill;
+
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Optional;
 
 /**
@@ -90,18 +95,36 @@ public class LoginView implements ViewInterface {
     }
 
     private void tryAutoLogin() {
-        if (loginSuccessFired || usernameField == null || passwordField == null) {
-            return;
-        }
-        if ("admin".equals(usernameField.getText()) && "admin".equals(passwordField.getText())) {
-            loginSuccessFired = true;
-            if (onLoginSuccess != null) {
-                onLoginSuccess.run();
-            } else {
-                navigateToLandingPage();
+        if (loginSuccessFired || usernameField == null || passwordField == null) return;
+
+        try {
+            PreparedStatement ps = DatabaseService.getInstance().getConnection()
+                    .prepareStatement("SELECT * FROM USER WHERE email_user = ? AND password_user = ?");
+            ps.setString(1, usernameField.getText());
+            ps.setString(2, passwordField.getText());
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                User user = new User();
+                user.setIdUser(rs.getInt("id_user"));
+                user.setFirstName(rs.getString("first_name"));
+                user.setLastName(rs.getString("last_name"));
+                user.setEmailUser(rs.getString("email_user"));
+                user.setPasswordUser(rs.getString("password_user"));
+                user.setRoleUser(rs.getString("role_user"));
+                user.setVerified(rs.getBoolean("is_verified"));
+
+                loginSuccessFired = true;
+                SessionManager.getInstance().setCurrentUser(user);
+                if (onLoginSuccess != null) onLoginSuccess.run();
+                else navigateToLandingPage();
             }
+        } catch (SQLException e) {
+            System.err.println("Login error: " + e.getMessage());
         }
     }
+
+
     
     private void setupLayout() {
         // Image background

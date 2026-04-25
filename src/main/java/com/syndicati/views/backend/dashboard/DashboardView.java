@@ -4,6 +4,7 @@ import com.syndicati.controllers.users.UserController;
 import com.syndicati.models.residence.Appartement;
 import com.syndicati.models.residence.Maintenance;
 import com.syndicati.models.residence.Residence;
+import com.syndicati.models.user.data.UserRepository;
 import com.syndicati.services.residence.ServiceAppartement;
 import com.syndicati.services.residence.ServiceMaintenance;
 import com.syndicati.services.residence.ServiceResidence;
@@ -36,6 +37,7 @@ import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
 
+import java.security.Provider;
 import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -77,6 +79,8 @@ public class DashboardView implements ViewInterface {
     ServiceResidence ServiceResidence = new ServiceResidence();
     ServiceAppartement ServiceAppartement = new ServiceAppartement();
     ServiceMaintenance ServiceMaintenance = new ServiceMaintenance();
+
+    UserRepository UserRepository = new UserRepository();
 
     List<Residence> ListeResidences;
     List<Appartement> ListeAppartements;
@@ -943,11 +947,12 @@ public class DashboardView implements ViewInterface {
     private VBox buildGeneralSection() {
         VBox s = new VBox(20); s.setFillWidth(true); s.setPadding(new Insets(24));
         VBox subContent = new VBox(20); subContent.setFillWidth(true);
-        HBox subBar = subTabBar(new String[]{"Overview","Engagement","System"}, "Overview", key -> {
+        HBox subBar = subTabBar(new String[]{"Overview","Engagement","System", "Residence"}, "Overview", key -> {
             subContent.getChildren().setAll(
-                "Engagement".equals(key) ? buildEngagementContent() :
-                "System".equals(key)     ? buildSystemContent()     :
-                buildGeneralOverview()
+            "Engagement".equals(key) ? buildEngagementContent() :
+                    "System".equals(key)     ? buildSystemContent()     :
+                            "Residence".equals(key)  ? buildResidenceContent()  :
+                                    buildGeneralOverview()
             );
         });
         subContent.getChildren().add(buildGeneralOverview());
@@ -1021,6 +1026,41 @@ public class DashboardView implements ViewInterface {
             {"OK","Mar 12 07:30","DB backup completed (248 MB)"},
             {"OK","Mar 11 22:00","Cache cleared successfully"},
             {"WARN","Mar 11 20:18","New user registration: Karim S."}
+        }) {
+            HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
+            row.setPadding(new Insets(7,10,7,10));
+            row.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:8;");
+            Text dot = new Text(ev[0]); Text ts = t(ev[1], lightFont(), FontWeight.NORMAL, 13); ts.setFill(textMutedColor());
+            Text msg = t(ev[2], lightFont(), FontWeight.NORMAL, 14); msg.setFill(textSecondaryColor());
+            row.getChildren().addAll(dot, ts, msg);
+            logs.getChildren().add(row);
+        }
+        logCard.getChildren().addAll(lt, logs);
+        v.getChildren().addAll(stats, logCard);
+        return v;
+    }
+
+    private VBox buildResidenceContent() {
+        VBox v = new VBox(20); v.setFillWidth(true);
+        HBox stats = new HBox(16); stats.setFillHeight(true);
+
+        // à inclure dans l'integration: UserRepository.findById(ServiceAppartement.UtilisateurAvecPlusAppartements()).get().getFirstName()
+        addStatCards(stats,
+                new String[]{"RES","APT","USR","PRC"},
+                new String[]{"Nombre de résidences","Nombre d'appartements","L'utilisateur avec le plus grand nombre d'appartements","% d'appartements à louer"},
+                new String[]{String.valueOf(ServiceResidence.NombreResidences()),String.valueOf(ServiceAppartement.NombreAppartements())
+                        ,"Omar" , String.valueOf(ServiceAppartement.PourcentageAppartementsALouer())},
+                new String[]{"#34d399","#60a5fa","#a78bfa","#fbbf24"}
+        );
+        VBox logCard = glassCard();
+        Text lt = t("Recent System Events", boldFont(), FontWeight.BOLD, 18); lt.setFill(textPrimaryColor());
+        VBox logs = new VBox(8);
+        for (String[] ev : new String[][]{
+                {"OK","Mar 12 09:14","User admin@syndicati.tn logged in"},
+                {"WARN","Mar 12 08:52","Scheduled email batch: 58 sent"},
+                {"OK","Mar 12 07:30","DB backup completed (248 MB)"},
+                {"OK","Mar 11 22:00","Cache cleared successfully"},
+                {"WARN","Mar 11 20:18","New user registration: Karim S."}
         }) {
             HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
             row.setPadding(new Insets(7,10,7,10));

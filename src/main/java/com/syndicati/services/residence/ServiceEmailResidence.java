@@ -1,37 +1,26 @@
 package com.syndicati.services.residence;
 
-import jakarta.mail.*;
-import jakarta.mail.internet.*;
-
-import java.io.UnsupportedEncodingException;
-import java.util.Properties;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 public class ServiceEmailResidence {
     private static final String FROM = "syndicatires@gmail.com";
     private static final String PASSWORD = "llda acor qpcs rfmg";
 
-    public void EnvoyerSMS(String nom, String email, String message) throws MessagingException {
-        Properties props = new Properties();
-        props.put("mail.smtp.host", "smtp.gmail.com");
-        props.put("mail.smtp.port", "587");
-        props.put("mail.smtp.auth", "true");
-        props.put("mail.smtp.starttls.enable", "true");
+    public void EnvoyerEmail(String nom, String email, String message) {
+        JavaMailSenderImpl sender = new JavaMailSenderImpl();
+        sender.setHost("smtp.gmail.com");
+        sender.setPort(587);
+        sender.setUsername(FROM);
+        sender.setPassword(PASSWORD);
+        sender.getJavaMailProperties().put("mail.smtp.auth", "true");
+        sender.getJavaMailProperties().put("mail.smtp.starttls.enable", "true");
 
-        Session session = Session.getInstance(props, new Authenticator() {
-            protected PasswordAuthentication getPasswordAuthentication() {
-                return new PasswordAuthentication(FROM, PASSWORD);
-            }
-        });
-
-        Message mail = new MimeMessage(session);
-        try {
-            mail.setFrom(new InternetAddress(FROM, nom));
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException(e);
-        }
-        mail.setRecipient(Message.RecipientType.TO, new InternetAddress(email));
-        mail.setSubject(nom + " est intéressé à votre appartmeent!");
-        mail.setText(nom + "Vous a envoyé un message! \n" + message);
-        Transport.send(mail);
+        SimpleMailMessage mail = new SimpleMailMessage();
+        mail.setFrom(FROM);
+        mail.setTo(email);
+        mail.setSubject(nom + " est intéressé à votre appartement!");
+        mail.setText(nom + " vous a envoyé un message!\n" + message);
+        sender.send(mail);
     }
 }
