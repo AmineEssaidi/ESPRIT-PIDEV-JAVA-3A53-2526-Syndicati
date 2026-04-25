@@ -47,6 +47,25 @@ public final class SyndicatiEmailComposer {
         return wrap(body, footerExtra);
     }
 
+    public static String publicationAnnouncement(String firstName, String title, String description, String authorName) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>New Community Announcement</h2>" +
+            "<p>Hello " + esc(nameOrFallback(firstName)) + ",</p>" +
+            "<p>A new important announcement has been published in the Syndicati Community forum that requires your attention.</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<h3 style='margin-bottom:15px;color:#ffffff;font-size:22px;letter-spacing:-0.5px;'>" + esc(title) + "</h3>" +
+            "<p style='font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:20px;text-transform:uppercase;letter-spacing:1px;'>Published by " + esc(authorName) + "</p>" +
+            "<div style='background:rgba(0,0,0,0.4);padding:25px;border-radius:16px;border:1px solid rgba(255,255,255,0.05);line-height:1.6;color:rgba(255,255,255,0.8);'>" +
+            esc(description).replace("\n", "<br>") +
+            "</div>" +
+            "</div>" +
+            "<div class='button-container'><a href='#' class='button'>View Announcement</a></div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Forum Services - Public Information Bureau</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: ANN-PUB-" + DateTimeFormatter.ofPattern("yyyyMMdd-HHmm").format(LocalDateTime.now()) + " - Global Broadcast</p>";
+        return wrap(body, footerExtra);
+    }
+
     public static String passwordReset(String firstName, String newPassword) {
         String body =
             "<h2 style='color:#ff4b5c;'>Account Restored</h2>" +
