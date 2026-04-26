@@ -1,47 +1,36 @@
 package com.syndicati.views.frontend.profile;
 
 import com.syndicati.MainApplication;
+import com.syndicati.controllers.user.profile.ProfileController;
+import com.syndicati.controllers.user.relationship.UserRelationshipController;
+import com.syndicati.controllers.user.standing.UserStandingController;
 import com.syndicati.interfaces.ViewInterface;
-import com.syndicati.models.entities.Profile;
-import com.syndicati.models.entities.Onboarding;
-import com.syndicati.models.entities.User;
-import com.syndicati.models.entities.UserRelationship;
-import com.syndicati.models.entities.UserStanding;
-import com.syndicati.models.services.ProfileService;
-import com.syndicati.models.services.OnboardingService;
-import com.syndicati.models.services.UserRelationshipService;
-import com.syndicati.models.services.UserService;
-import com.syndicati.models.services.UserStandingService;
-import com.syndicati.services.ProfileImageService;
-import com.syndicati.services.biometric.RealCameraService;
-import com.syndicati.controllers.biometric.FaceController;
+import com.syndicati.controllers.user.profile.ProfileAvatarController;
+import com.syndicati.controllers.user.user.UserController;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.User;
+import com.syndicati.models.user.UserRelationship;
+import com.syndicati.models.user.UserStanding;
+import com.syndicati.models.user.data.ProfileRepository;
+import com.syndicati.models.user.data.UserStandingRepository;
+import com.syndicati.models.user.data.UserRelationshipRepository;
+import com.syndicati.models.user.data.UserRepository;
+import com.syndicati.utils.navigation.NavigationManager;
+import com.syndicati.services.user.profile.ProfileService;
+import com.syndicati.services.security.TwoFactorService;
+import com.syndicati.services.security.BiometricsService;
+import com.syndicati.services.security.FaceIDService;
+import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
-import com.syndicati.utils.image.ImageLoaderUtil;
-import com.syndicati.views.frontend.home.OnboardingOverlayView;
-import javafx.application.Platform;
-import javafx.animation.FadeTransition;
-import javafx.animation.KeyFrame;
-import javafx.animation.ScaleTransition;
-import javafx.animation.Timeline;
-import javafx.animation.TranslateTransition;
-import javafx.geometry.Bounds;
+import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.TextField;
-import javafx.scene.control.ProgressBar;
-import javafx.scene.control.Separator;
-import javafx.scene.Scene;
-import javafx.scene.Node;
 import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -51,29 +40,18 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.ImagePattern;
 import javafx.scene.shape.Circle;
-import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
-import javafx.stage.Modality;
-import javafx.stage.Screen;
-import javafx.stage.Stage;
-import javafx.stage.StageStyle;
-import javafx.util.Duration;
+import org.mindrot.jbcrypt.BCrypt;
 
 import java.io.File;
 import java.nio.file.Files;
-
-import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
-
-import org.json.JSONObject;
 
 /**
  * Profile page replica based on templates/frontend/profile/profile.html.twig.
@@ -81,65 +59,35 @@ import org.json.JSONObject;
  */
 public class ProfileView implements ViewInterface {
 
-    private static final DateTimeFormatter PROFILE_DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private enum QuickActionsMode {
+        DEFAULT,
+        TILES,
+        DETAIL
+    }
 
     private final VBox root;
     private final ThemeManager tm;
-    private final SessionManager sessionManager;
-    private final UserService userService;
-    private final OnboardingService onboardingService;
-    private final ProfileService profileService;
-    private final UserStandingService standingService;
-    private final UserRelationshipService relationshipService;
-    private final FaceController faceController;
-
-    private User currentUser;
-    private Profile currentProfile;
-    private UserStanding currentStanding;
-    private List<User> currentCircleFriends = new ArrayList<>();
-    private List<UserRelationship> currentPendingRelationships = new ArrayList<>();
-    private GridPane currentCircleFriendsGrid;
-    private VBox currentCirclePendingPane;
-    private VBox currentCircleSearchResultsBox;
-    private TextField currentCircleSearchField;
-    private Text currentCircleFriendCountText;
-    private Text currentCirclePendingCountText;
 
     private final Map<String, VBox> mainPages = new LinkedHashMap<>();
     private final Map<String, Button> mainNavButtons = new LinkedHashMap<>();
-    private String currentMainPageName = "overview";
 
     private final Map<String, VBox> detailTabs = new LinkedHashMap<>();
     private final Map<String, Button> detailTabButtons = new LinkedHashMap<>();
-    private String currentDetailTabName = "account";
+    private long lastXpInteractionAt = 0L;
 
-    // Biometric enrollment panel state
-    private VBox faceIDEnrollmentPanel;
-    private VBox webauthnEnrollmentPanel;
-    private StackPane enrollmentSwitcher; // Displays current enrollment view
-    private StackPane heroContent; // Reference to hero content for enrollment switching
-    private VBox defaultInfoPanel; // Track the default hero info for restoration
-
-    // Camera service for Face ID enrollment
-    private RealCameraService cameraService;
-    private javafx.animation.AnimationTimer cameraUpdateTimer;
+    private StackPane quickActionsContainer;
+    private VBox quickActionsDefaultView;
+    private VBox quickActionsSwitcherView;
+    private VBox quickActionsDetailView;
+    private Button quickActionsButton;
 
     public ProfileView() {
         this.tm = ThemeManager.getInstance();
-        this.sessionManager = SessionManager.getInstance();
-        this.userService = new UserService();
-        this.onboardingService = new OnboardingService();
-        this.profileService = new ProfileService();
-        this.standingService = new UserStandingService();
-        this.relationshipService = new UserRelationshipService();
-        this.faceController = new FaceController();
         this.root = new VBox();
         build();
     }
 
     private void build() {
-        hydrateSessionData();
-
         VBox content = new VBox(26);
         content.setAlignment(Pos.TOP_CENTER);
         content.setPadding(new Insets(24, 0, 42, 0));
@@ -171,11 +119,12 @@ public class ProfileView implements ViewInterface {
         nav.setPadding(new Insets(8));
         nav.setMaxWidth(560);
         nav.setStyle(
-                "-fx-background-color: " + surfaceSoft() + ";" +
-                        "-fx-border-color: " + borderSoft() + ";" +
-                        "-fx-border-width: 1px;" +
-                        "-fx-background-radius: 999px;" +
-                        "-fx-border-radius: 999px;");
+            "-fx-background-color: " + surfaceSoft() + ";" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-radius: 999px;"
+        );
 
         Button overview = createMainNavButton("Overview", "overview");
         Button activity = createMainNavButton("Activity & Details", "activity");
@@ -194,7 +143,6 @@ public class ProfileView implements ViewInterface {
     }
 
     private void setMainPage(String key) {
-        currentMainPageName = key;
         mainPages.forEach((name, pane) -> {
             boolean active = name.equals(key);
             pane.setVisible(active);
@@ -206,15 +154,17 @@ public class ProfileView implements ViewInterface {
     private void styleMainNavButton(Button btn, boolean active) {
         if (active) {
             btn.setStyle(
-                    "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                            "-fx-text-fill: white; -fx-font-weight: 800;" +
-                            "-fx-background-radius: 999px; -fx-padding: 12 24 12 24;");
+                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+                "-fx-text-fill: white; -fx-font-weight: 800;" +
+                "-fx-background-radius: 999px; -fx-padding: 12 24 12 24;"
+            );
         } else {
             btn.setStyle(
-                    "-fx-background-color: transparent;" +
-                            "-fx-text-fill: " + textMuted() + ";" +
-                            "-fx-font-weight: 800;" +
-                            "-fx-background-radius: 999px; -fx-padding: 12 24 12 24;");
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: " + textMuted() + ";" +
+                "-fx-font-weight: 800;" +
+                "-fx-background-radius: 999px; -fx-padding: 12 24 12 24;"
+            );
         }
     }
 
@@ -241,1549 +191,335 @@ public class ProfileView implements ViewInterface {
     }
 
     private VBox createHeroCard() {
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        Profile currentProfile = SessionManager.getInstance().getCurrentProfile();
+        if (currentProfile == null && currentUser != null && currentUser.getIdUser() != null) {
+            currentProfile = new ProfileController().findOneByUserId(currentUser.getIdUser()).orElse(null);
+            if (currentProfile != null) {
+                SessionManager.getInstance().setCurrentProfile(currentProfile);
+            }
+        }
+        
         VBox card = new VBox(0);
         card.setMaxWidth(1800);
-        card.setMaxHeight(Double.MAX_VALUE);
         card.prefWidthProperty().bind(root.widthProperty().multiply(0.95));
         card.setStyle(shell(34, surfaceCard(), 0.16));
 
         StackPane banner = new StackPane();
         banner.setMinHeight(180);
         banner.setStyle(
-                "-fx-background-color: linear-gradient(to right, rgba(43,43,58,0.95), rgba(20,20,28,0.9));" +
-                        "-fx-background-radius: 34px 34px 0 0;");
+            "-fx-background-color: linear-gradient(to right, rgba(43,43,58,0.95), rgba(20,20,28,0.9));" +
+            "-fx-background-radius: 34px 34px 0 0;"
+        );
         banner.getChildren().add(text("PROFILE", 40, true, "rgba(255,255,255,0.20)"));
 
         HBox body = new HBox(26);
         body.setPadding(new Insets(24));
         body.setAlignment(Pos.TOP_LEFT);
-        body.setMaxHeight(Double.MAX_VALUE);
-        body.setMaxWidth(Double.MAX_VALUE);
 
         StackPane avatarWrap = new StackPane();
+        avatarWrap.setCursor(javafx.scene.Cursor.HAND);
         Circle avatar = new Circle(56);
+        avatar.setFill(Color.web(tm.getAccentHex()));
         avatar.setStroke(Color.web(tm.toRgba(tm.getAccentHex(), 0.35)));
         avatar.setStrokeWidth(2);
-        Text avatarText = text(displayInitial(), 38, true, "#ffffff");
 
-        // Load profile avatar image if available
-        Profile currentProfile = sessionManager.getCurrentProfile();
-        boolean hasImage = false;
-        if (currentProfile != null && currentProfile.getAvatar() != null && !currentProfile.getAvatar().isBlank()) {
-            Image img = ImageLoaderUtil.loadProfileAvatar(currentProfile.getAvatar(), false);
-            if (img != null && !img.isError()) {
-                avatar.setFill(new ImagePattern(img));
-                hasImage = true;
-                avatarText.setVisible(false);
-                avatarText.setMouseTransparent(true);
-            } else {
-                avatar.setFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.22)));
-            }
-        } else {
-            avatar.setFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.22)));
-        }
-
-        // Make avatar clickable for image upload
-        avatar.setCursor(javafx.scene.Cursor.HAND);
-        avatar.setPickOnBounds(true);
-        avatar.setOnMouseClicked(e -> handleAvatarClick(avatar, avatarText));
-
+        String userInitial = currentInitial(currentUser);
+        Text avatarText = text(userInitial, 38, true, "#ffffff");
+        boolean hasAvatar = applyAvatarFill(avatar);
+        avatarText.setVisible(!hasAvatar);
+        avatarText.setManaged(!hasAvatar);
         avatarWrap.getChildren().addAll(avatar, avatarText);
+        avatarWrap.setOnMouseClicked(e -> handleProfileAvatarUpload(currentUser, avatar, avatarText));
 
         VBox identity = new VBox(10);
         identity.setAlignment(Pos.TOP_LEFT);
-
-        // Container for default info and quick actions menu (with animation switching)
-        // Use StackPane to layer sections - only one visible at a time
-        StackPane heroContent = new StackPane();
-        heroContent.setStyle("-fx-alignment: top-left;");
-        heroContent.setMaxHeight(Double.MAX_VALUE);
-        heroContent.setMaxWidth(Double.MAX_VALUE);
-
-        // Default hero info (name, role, email, stats, quick actions button)
-        VBox defaultInfo = new VBox(10);
-        defaultInfo.setAlignment(Pos.TOP_LEFT);
-        defaultInfo.setMaxWidth(Double.MAX_VALUE);
-        defaultInfo.setMaxHeight(Double.MAX_VALUE);
-        Text name = text(displayName(), 34, true, "#ffffff");
-        Text role = text(displayRole(), 16, false, textSoft());
-        Text email = text(displayEmail(), 14, false, textMuted());
+        String displayName = currentUser != null ? currentUser.getFirstName() + " " + currentUser.getLastName() : "Syndicati Member";
+        String displayRole = currentUser != null ? currentUser.getRoleUser() : "Resident";
+        String displayEmail = currentUser != null ? currentUser.getEmailUser() : "contact@syndicati.tn";
+        String displayBio = currentProfile != null && currentProfile.getDescriptionProfile() != null
+            ? currentProfile.getDescriptionProfile().trim()
+            : "";
+        String createdDate = currentUser != null && currentUser.getCreatedAt() != null 
+            ? currentUser.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+            : "12/03/2026";
+        String verifiedStatus = currentUser != null && currentUser.isVerified() ? "Verified" : "Pending";
+        
+        Text name = text(displayName, 34, true, "#ffffff");
+        Text role = text(displayRole, 16, false, textSoft());
+        Text email = text(displayEmail, 14, false, textMuted());
+        Text bio = null;
+        if (!displayBio.isBlank()) {
+            bio = text(displayBio, 13, false, "rgba(255,255,255,0.72)");
+            bio.setWrappingWidth(520);
+            bio.setLineSpacing(3);
+        }
 
         HBox stats = new HBox(12,
-                statPill("Account created", displayCreatedAt()),
-                statPill("Status", displayVerified()));
+            statPill("Account created", createdDate),
+            statPill("Status", verifiedStatus)
+        );
 
-        HBox quickTop = new HBox();
-        quickTop.setAlignment(Pos.CENTER_RIGHT);
-        Button quickBtn = new Button("Quick Actions");
-        quickBtn.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + "; -fx-text-fill: "
-                + tm.getAccentHex() + "; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35)
-                + "; -fx-border-width: 1px; -fx-background-radius: 999px; -fx-border-radius: 999px; -fx-padding: 9 16 9 16; -fx-font-weight: 700;");
-        quickTop.getChildren().add(quickBtn);
+        VBox defaultInfo = bio == null
+            ? new VBox(10, name, role, email, stats)
+            : new VBox(10, name, role, email, bio, stats);
+        defaultInfo.setOpacity(1);
+        defaultInfo.setTranslateX(0);
 
-        defaultInfo.getChildren().addAll(name, role, email, stats, quickTop);
+        HBox quickBtnWrap = new HBox();
+        quickBtnWrap.setAlignment(Pos.CENTER_RIGHT);
+        quickBtnWrap.setPadding(new Insets(4, 0, 0, 0));
 
-        // Store reference to default info for enrollment panel hiding
-        this.defaultInfoPanel = defaultInfo;
+        Button showActionsBtn = new Button("▦  QUICK ACTIONS  ›");
+        styleQuickActionsButton(showActionsBtn, false);
+        quickBtnWrap.getChildren().add(showActionsBtn);
+        defaultInfo.getChildren().add(quickBtnWrap);
 
-        // Quick actions menu (tiles + back button)
-        VBox quickActionMenu = new VBox(12);
-        quickActionMenu.setAlignment(Pos.TOP_LEFT);
-        quickActionMenu.setMaxWidth(Double.MAX_VALUE);
-        quickActionMenu.setMaxHeight(Double.MAX_VALUE);
-        quickActionMenu.setVisible(false);
-        quickActionMenu.setManaged(false);
-        quickActionMenu.setOpacity(0);
+        StackPane actionsSwitcher = new StackPane();
+        actionsSwitcher.setStyle("-fx-background-color: transparent;");
+        actionsSwitcher.setMinHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+        actionsSwitcher.setPrefHeight(javafx.scene.layout.Region.USE_COMPUTED_SIZE);
+        actionsSwitcher.setMaxHeight(Double.MAX_VALUE);
 
-        HBox menuHeader = new HBox(10);
-        menuHeader.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
-        backBtn.setFont(Font.font(18));
-        backBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: " + textMuted()
-                + "; -fx-font-weight: 700; -fx-padding: 0;");
-        backBtn.setPrefSize(30, 30);
-        Text menuTitle = text("Quick Actions", 16, true, "#ffffff");
-        menuHeader.getChildren().addAll(backBtn, menuTitle);
+        VBox switcherView = new VBox(12);
+        switcherView.setId("actions-switcher-view");
+        switcherView.setStyle("-fx-background-color: transparent;");
+        switcherView.setVisible(false);
+        switcherView.setManaged(false);
+        switcherView.setMaxWidth(Double.MAX_VALUE);
+        switcherView.setOpacity(1);
+        switcherView.setTranslateX(0);
+        switcherView.setMouseTransparent(true);
 
-        GridPane actionTiles = new GridPane();
-        actionTiles.setHgap(10);
-        actionTiles.setVgap(10);
-        actionTiles.setMaxWidth(Double.MAX_VALUE);
+        HBox switcherTopBar = new HBox(10);
+        switcherTopBar.setAlignment(Pos.CENTER_LEFT);
 
-        // Column constraints - make columns expand equally
+        Button switcherBackBtn = new Button("←");
+        switcherBackBtn.setStyle(
+            "-fx-min-width: 30px; -fx-min-height: 30px;" +
+            "-fx-max-width: 30px; -fx-max-height: 30px;" +
+            "-fx-background-color: rgba(255,255,255,0.06);" +
+            "-fx-border-color: rgba(255,255,255,0.15);" +
+            "-fx-border-width: 1px; -fx-border-radius: 999px; -fx-background-radius: 999px;" +
+            "-fx-text-fill: rgba(255,255,255,0.75); -fx-font-weight: 700; -fx-cursor: hand;"
+        );
+        Text switcherTitle = text("QUICK ACTIONS", 12, true, "rgba(255,255,255,0.55)");
+        switcherTopBar.getChildren().addAll(switcherBackBtn, switcherTitle);
+
+        GridPane actions = new GridPane();
+        actions.setId("quick-actions-grid");
+        actions.setHgap(10);
+        actions.setVgap(10);
         ColumnConstraints c = new ColumnConstraints();
         c.setPercentWidth(33.33);
         c.setFillWidth(true);
-        actionTiles.getColumnConstraints().addAll(c, c, c);
+        actions.getColumnConstraints().addAll(c, c, c);
+        actions.add(createActionTile("🎥 Host Spotlight", "host", switcherView, showActionsBtn), 0, 0);
+        actions.add(createActionTile("🔑 Join by Code", "join", switcherView, showActionsBtn), 1, 0);
+        actions.add(createActionTile("🔐 2FA", "2fa", switcherView, showActionsBtn), 2, 0);
+        actions.add(createActionTile("👆 Biometrics", "biometrics", switcherView, showActionsBtn), 0, 1);
+        actions.add(createActionTile("👤 Face ID", "faceid", switcherView, showActionsBtn), 1, 1);
+        actions.add(createActionTile("⚙️ Settings", "settings", switcherView, showActionsBtn), 2, 1);
 
-        // Row constraints - make rows expand equally
-        RowConstraints r = new RowConstraints();
-        r.setPercentHeight(50);
-        r.setFillHeight(true);
-        actionTiles.getRowConstraints().addAll(r, r);
+        switcherView.getChildren().addAll(switcherTopBar, actions);
 
-        // Action tiles with proper icons (no emojis - text labels instead)
-        actionTiles.add(createActionTile("Host Spotlight", "▶"), 0, 0);
-        actionTiles.add(createActionTile("Join by Code", "#"), 1, 0);
-        actionTiles.add(createActionTile("2FA", "◆"), 2, 0);
-        actionTiles.add(createActionTile("Biometrics", "◉"), 0, 1);
-        actionTiles.add(createActionTile("Face ID", "◐"), 1, 1);
-        actionTiles.add(createActionTile("Settings", "⚙"), 2, 1);
+        VBox detailView = new VBox(12);
+        detailView.setId("actions-detail-view");
+        detailView.setStyle("-fx-background-color: transparent;");
+        detailView.setVisible(false);
+        detailView.setManaged(false);
+        detailView.setMaxWidth(Double.MAX_VALUE);
+        detailView.setOpacity(1);
+        detailView.setTranslateX(0);
+        detailView.setMouseTransparent(true);
 
-        quickActionMenu.getChildren().addAll(menuHeader, actionTiles);
-        VBox.setVgrow(actionTiles, Priority.ALWAYS);
+        showActionsBtn.setOnAction(e -> showActionsTiles(defaultInfo, switcherView, detailView, showActionsBtn));
+        switcherBackBtn.setOnAction(e -> showDefaultHeroInfo(defaultInfo, switcherView, detailView, showActionsBtn));
 
-        // Create panels with back buttons and handlers
-        VBox hostPanel = createQuickActionPanel("Host Spotlight",
-                "Start a video spotlight session and invite residents to join.", "Start Spotlight");
-        VBox joinPanel = createQuickActionPanel("Join by Code",
-                "Enter a room code to join an existing spotlight session.", "Join Session");
-        VBox twoFAPanel = createTwoFAPanel();
-        VBox biometricsPanel = createQuickActionPanel("Biometrics", "Use your device's biometrics to log in faster.",
-                "Register Device");
-        VBox faceIDPanel = createQuickActionPanel("Face ID", "Protect your account with local Face ID (PC only).",
-                "Start Enrollment");
-        VBox settingsPanel = createSettingsPanel();
+        quickActionsContainer = actionsSwitcher;
+        quickActionsDefaultView = defaultInfo;
+        quickActionsSwitcherView = switcherView;
+        quickActionsDetailView = detailView;
+        quickActionsButton = showActionsBtn;
 
-        // Set panels to expand to fill the hero space
-        for (VBox panel : new VBox[] { hostPanel, joinPanel, twoFAPanel, biometricsPanel, faceIDPanel,
-                settingsPanel }) {
-            panel.setMaxWidth(Double.MAX_VALUE);
-            panel.setMaxHeight(Double.MAX_VALUE);
-            panel.setVisible(false);
-            panel.setManaged(false);
-            panel.setOpacity(0);
-        }
+        actionsSwitcher.getChildren().setAll(defaultInfo);
+        defaultInfo.setVisible(true);
+        defaultInfo.setManaged(true);
+        defaultInfo.setMouseTransparent(false);
+        switcherView.setVisible(false);
+        switcherView.setManaged(false);
+        switcherView.setMouseTransparent(true);
+        detailView.setVisible(false);
+        detailView.setManaged(false);
+        detailView.setMouseTransparent(true);
 
-        // Wire back buttons to show quick menu
-        wireBackButton(hostPanel, quickActionMenu, defaultInfo);
-        wireBackButton(joinPanel, quickActionMenu, defaultInfo);
-        wireBackButton(twoFAPanel, quickActionMenu, defaultInfo);
-        wireBackButton(biometricsPanel, quickActionMenu, defaultInfo);
-        wireBackButton(faceIDPanel, quickActionMenu, defaultInfo);
-        wireBackButton(settingsPanel, quickActionMenu, defaultInfo);
-
-        // Add tiles to a list for easy iteration
-        java.util.List<VBox> tileList = new java.util.ArrayList<>();
-        for (javafx.scene.Node node : actionTiles.getChildren()) {
-            if (node instanceof VBox) {
-                tileList.add((VBox) node);
-            }
-        }
-
-        // Tile mapping to panels
-        java.util.Map<Integer, VBox> tilePanelMap = new java.util.HashMap<>();
-        tilePanelMap.put(0, hostPanel); // Host Spotlight
-        tilePanelMap.put(1, joinPanel); // Join by Code
-        tilePanelMap.put(2, twoFAPanel); // 2FA
-        tilePanelMap.put(3, biometricsPanel); // Biometrics
-        tilePanelMap.put(4, faceIDPanel); // Face ID
-        tilePanelMap.put(5, settingsPanel); // Settings
-
-        // Set tile click handlers
-        int tileIndex = 0;
-        VBox[] allPanels = { hostPanel, joinPanel, twoFAPanel, biometricsPanel, faceIDPanel, settingsPanel };
-        for (VBox tile : tileList) {
-            final int index = tileIndex;
-            tile.setOnMouseClicked(e -> {
-                // Hide quick menu and show selected panel with animation
-                quickActionMenu.setVisible(false);
-                quickActionMenu.setManaged(false);
-
-                // Hide all panels except the selected one
-                for (int i = 0; i < allPanels.length; i++) {
-                    allPanels[i].setVisible(false);
-                    allPanels[i].setOpacity(0);
-                }
-
-                // Show selected panel with fade animation
-                VBox selectedPanel = allPanels[index];
-                selectedPanel.setVisible(true);
-                selectedPanel.setManaged(true);
-
-                FadeTransition fade = new FadeTransition(Duration.millis(200), selectedPanel);
-                fade.setFromValue(0);
-                fade.setToValue(1.0);
-                fade.play();
-            });
-            tileIndex++;
-        }
-
-        // Add all to hero content (StackPane layers them - only one visible at a time)
-        heroContent.getChildren().addAll(defaultInfo, quickActionMenu, hostPanel, joinPanel, twoFAPanel,
-                biometricsPanel, faceIDPanel, settingsPanel);
-
-        // Create enrollment switcher layer (for Face ID and WebAuthn)
-        enrollmentSwitcher = new StackPane();
-        enrollmentSwitcher.setStyle("-fx-alignment: top-left;");
-        enrollmentSwitcher.setMaxHeight(Double.MAX_VALUE);
-        enrollmentSwitcher.setMaxWidth(Double.MAX_VALUE);
-        enrollmentSwitcher.setVisible(false);
-        enrollmentSwitcher.setManaged(false);
-        enrollmentSwitcher.setOpacity(0);
-        heroContent.getChildren().add(enrollmentSwitcher);
-
-        // Store reference to heroContent for use in show/hide methods
-        this.heroContent = heroContent;
-
-        // Quick actions button toggle
-        quickBtn.setOnAction(e -> {
-            if (quickActionMenu.isVisible()) {
-                // Hide menu, show default info
-                FadeTransition fade = new FadeTransition(Duration.millis(200), quickActionMenu);
-                fade.setFromValue(1);
-                fade.setToValue(0);
-
-                fade.setOnFinished(ev -> {
-                    quickActionMenu.setVisible(false);
-                    quickActionMenu.setManaged(false);
-                    defaultInfo.setVisible(true);
-                    defaultInfo.setOpacity(1.0);
-                });
-                fade.play();
-            } else {
-                // Show menu, hide default info
-                defaultInfo.setVisible(false);
-                quickActionMenu.setVisible(true);
-                quickActionMenu.setManaged(true);
-                quickActionMenu.setOpacity(0);
-
-                FadeTransition fade = new FadeTransition(Duration.millis(200), quickActionMenu);
-                fade.setFromValue(0);
-                fade.setToValue(1);
-                fade.play();
-            }
-        });
-
-        backBtn.setOnAction(e -> {
-            if (quickActionMenu.isVisible()) {
-                // Hide menu, show default info
-                FadeTransition fade = new FadeTransition(Duration.millis(200), quickActionMenu);
-                fade.setFromValue(1);
-                fade.setToValue(0);
-
-                fade.setOnFinished(ev -> {
-                    quickActionMenu.setVisible(false);
-                    quickActionMenu.setManaged(false);
-                    defaultInfo.setVisible(true);
-                    defaultInfo.setOpacity(1.0);
-                });
-                fade.play();
-            }
-        });
-
-        identity.getChildren().addAll(heroContent);
+        identity.getChildren().add(actionsSwitcher);
         HBox.setHgrow(identity, Priority.ALWAYS);
-        identity.setMaxHeight(Double.MAX_VALUE);
 
         body.getChildren().addAll(avatarWrap, identity);
-        VBox.setVgrow(body, Priority.ALWAYS);
         card.getChildren().addAll(banner, body);
+
         return card;
     }
-
-    /**
-     * Wire back button to show quick menu again
-     */
-    private void wireBackButton(VBox panel, VBox quickMenu, VBox defaultInfo) {
-        // Find the back button in the panel
-        if (panel.getChildren().size() > 0) {
-            javafx.scene.Node topBar = panel.getChildren().get(0);
-            if (topBar instanceof HBox) {
-                HBox bar = (HBox) topBar;
-                if (bar.getChildren().size() > 0) {
-                    javafx.scene.Node firstChild = bar.getChildren().get(0);
-                    if (firstChild instanceof Button) {
-                        Button backBtn = (Button) firstChild;
-                        backBtn.setOnAction(e -> {
-                            // Hide panel, show quick menu with animation
-                            panel.setVisible(false);
-                            panel.setManaged(false);
-                            panel.setOpacity(0);
-
-                            quickMenu.setVisible(true);
-                            quickMenu.setManaged(true);
-                            quickMenu.setOpacity(0);
-
-                            FadeTransition fade = new FadeTransition(Duration.millis(200), quickMenu);
-                            fade.setFromValue(0);
-                            fade.setToValue(1);
-                            fade.play();
-                        });
-                    }
-                }
-            }
+    
+    private void showActionsTiles(VBox defaultView, VBox switcherView, VBox detailView, Button showBtn) {
+        styleQuickActionsButton(showBtn, true);
+        StackPane actionsSwitcher = quickActionsContainer != null ? quickActionsContainer : (StackPane) defaultView.getParent();
+        if (actionsSwitcher == null) {
+            return;
         }
+        actionsSwitcher.getChildren().setAll(switcherView);
+        switcherView.setVisible(true);
+        switcherView.setManaged(true);
+        switcherView.setMouseTransparent(false);
+        switcherView.setOpacity(1);
+        switcherView.setTranslateX(0);
+        switcherView.toFront();
     }
 
-    /**
-     * Create action tile with proper styling (no emojis)
-     */
-    private VBox createActionTile(String label, String symbol) {
-        VBox tile = new VBox(8);
-        tile.setAlignment(Pos.CENTER);
-        tile.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04);" +
-                        "-fx-border-color: rgba(255,255,255,0.08);" +
-                        "-fx-border-width: 1px;" +
-                        "-fx-background-radius: 16px;" +
-                        "-fx-padding: 12 8 12 8;" +
-                        "-fx-cursor: hand;");
-        tile.setMaxWidth(Double.MAX_VALUE);
-        tile.setMaxHeight(Double.MAX_VALUE);
-        tile.setMinHeight(100);
-
-        Text iconText = text(symbol, 28, false, tm.getAccentHex());
-        Text labelText = text(label, 11, true, "rgba(255,255,255,0.6)");
-        labelText.setWrappingWidth(80);
-        labelText.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
-
-        tile.getChildren().addAll(iconText, labelText);
-
-        // Hover animation
-        tile.setOnMouseEntered(e -> {
-            tile.setStyle(
-                    "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
-                            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.3) + ";" +
-                            "-fx-border-width: 1px;" +
-                            "-fx-background-radius: 16px;" +
-                            "-fx-padding: 12 8 12 8;" +
-                            "-fx-cursor: hand;");
-            ScaleTransition scale = new ScaleTransition(Duration.millis(150), tile);
-            scale.setByX(0.05);
-            scale.setByY(0.05);
-            scale.play();
-        });
-
-        tile.setOnMouseExited(e -> {
-            tile.setStyle(
-                    "-fx-background-color: rgba(255,255,255,0.04);" +
-                            "-fx-border-color: rgba(255,255,255,0.08);" +
-                            "-fx-border-width: 1px;" +
-                            "-fx-background-radius: 16px;" +
-                            "-fx-padding: 12 8 12 8;" +
-                            "-fx-cursor: hand;");
-            ScaleTransition scale = new ScaleTransition(Duration.millis(150), tile);
-            scale.setByX(-0.05);
-            scale.setByY(-0.05);
-            scale.play();
-        });
-
-        return tile;
+    private void showDefaultHeroInfo(VBox defaultView, VBox switcherView, VBox detailView, Button showBtn) {
+        styleQuickActionsButton(showBtn, false);
+        StackPane actionsSwitcher = quickActionsContainer != null ? quickActionsContainer : (StackPane) switcherView.getParent();
+        if (actionsSwitcher == null) {
+            return;
+        }
+        actionsSwitcher.getChildren().setAll(defaultView);
+        defaultView.setVisible(true);
+        defaultView.setManaged(true);
+        defaultView.setMouseTransparent(false);
+        defaultView.setOpacity(1);
+        defaultView.setTranslateX(0);
+        defaultView.toFront();
     }
 
-    /**
-     * Create generic quick action panel (UI only, no functionality)
-     */
-    private VBox createQuickActionPanel(String title, String description, String buttonLabel) {
-        VBox panel = new VBox(12);
-        panel.setPadding(new Insets(16));
-        panel.setStyle("-fx-background-color: rgba(0,0,0,0.3);");
-
-        HBox topBar = new HBox(10);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
-        backBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
-        backBtn.setPrefSize(30, 30);
-        backBtn.setOnMouseEntered(e -> backBtn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: #ffffff; -fx-font-size: 14; -fx-padding: 0;"));
-        backBtn.setOnMouseExited(e -> backBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;"));
-
-        Text titleText = text(title, 14, true, "#ffffff");
-        topBar.getChildren().addAll(backBtn, titleText);
-
-        Text descText = text(description, 12, false, "rgba(255,255,255,0.6)");
-        descText.setWrappingWidth(300);
-
-        Button actionBtn = new Button(buttonLabel);
-        actionBtn.setStyle(
+    private void styleQuickActionsButton(Button button, boolean active) {
+        if (active) {
+            button.setStyle(
                 "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-padding: 10 20 10 20;" +
-                        "-fx-background-radius: 12;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 12;" +
-                        "-fx-cursor: hand;");
-        actionBtn.setOnMouseEntered(e -> actionBtn.setScaleX(1.05));
-        actionBtn.setOnMouseExited(e -> actionBtn.setScaleX(1.0));
-
-        // Wire action handlers based on button title
-        actionBtn.setOnAction(e -> handleQuickActionButton(title));
-
-        panel.getChildren().addAll(topBar, descText, actionBtn);
-        return panel;
-    }
-
-    /**
-     * Handle quick action button clicks based on panel title
-     */
-    private void handleQuickActionButton(String panelTitle) {
-        switch (panelTitle) {
-            case "Biometrics":
-                showWebAuthnEnrollmentFlow();
-                break;
-
-            case "Face ID":
-                showFaceIDEnrollmentPanel();
-                break;
-
-            case "Host Spotlight":
-                Alert hostAlert = new Alert(AlertType.INFORMATION);
-                hostAlert.setTitle("Host Spotlight");
-                hostAlert.setHeaderText("Start a Spotlight Session");
-                hostAlert.setContentText(
-                        "Spotlight session management is coming soon!\n\nYou'll be able to:\n• Start video sessions\n• Invite residents to join\n• Control session settings");
-                hostAlert.showAndWait();
-                break;
-
-            case "Join by Code":
-                Alert joinAlert = new Alert(AlertType.INFORMATION);
-                joinAlert.setTitle("Join Session");
-                joinAlert.setHeaderText("Join by Code");
-                joinAlert.setContentText(
-                        "Please enter the session code provided by the host.\n\nJoin functionality is coming soon!");
-                joinAlert.showAndWait();
-                break;
-
-            default:
-                break;
+                "-fx-text-fill: #ffffff; -fx-border-color: transparent; -fx-border-width: 1px;" +
+                "-fx-background-radius: 999px; -fx-border-radius: 999px;" +
+                "-fx-padding: 9 16 9 16; -fx-font-weight: 800; -fx-font-size: 11px;"
+            );
+        } else {
+            button.setStyle(
+                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
+                "-fx-text-fill: " + tm.getAccentHex() + ";" +
+                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + "; -fx-border-width: 1px;" +
+                "-fx-background-radius: 999px; -fx-border-radius: 999px;" +
+                "-fx-padding: 9 16 9 16; -fx-font-weight: 800; -fx-font-size: 11px;"
+            );
         }
     }
 
-    /**
-     * Show FaceID enrollment as a proper panel (not a popup)
-     */
-    private void showFaceIDEnrollmentPanel() {
-        if (faceIDEnrollmentPanel == null) {
-            faceIDEnrollmentPanel = createFaceIDEnrollmentPanel();
-        }
-
-        // Show enrollment panel and hide other views with fade animation
-        if (enrollmentSwitcher != null && heroContent != null) {
-            enrollmentSwitcher.getChildren().clear();
-            enrollmentSwitcher.getChildren().add(faceIDEnrollmentPanel);
-
-            // Hide all other panels in heroContent
-            for (javafx.scene.Node node : heroContent.getChildren()) {
-                if (node != enrollmentSwitcher) {
-                    node.setVisible(false);
-                    node.setManaged(false);
-                    node.setOpacity(0);
-                }
-            }
-
-            // Show enrollment panel with fade animation
-            enrollmentSwitcher.setVisible(true);
-            enrollmentSwitcher.setManaged(true);
-
-            FadeTransition fade = new FadeTransition(Duration.millis(200), enrollmentSwitcher);
-            fade.setFromValue(0);
-            fade.setToValue(1.0);
-            fade.play();
-        }
-    }
-
-    /**
-     * Show WebAuthn enrollment as a proper panel (not a popup)
-     */
-    private void showWebAuthnEnrollmentFlow() {
-        if (webauthnEnrollmentPanel == null) {
-            webauthnEnrollmentPanel = createWebAuthnEnrollmentPanel();
-        }
-
-        if (enrollmentSwitcher != null && heroContent != null) {
-            enrollmentSwitcher.getChildren().clear();
-            enrollmentSwitcher.getChildren().add(webauthnEnrollmentPanel);
-
-            // Hide all other panels in heroContent
-            for (javafx.scene.Node node : heroContent.getChildren()) {
-                if (node != enrollmentSwitcher) {
-                    node.setVisible(false);
-                    node.setManaged(false);
-                    node.setOpacity(0);
-                }
-            }
-
-            // Show enrollment panel with fade animation
-            enrollmentSwitcher.setVisible(true);
-            enrollmentSwitcher.setManaged(true);
-
-            FadeTransition fade = new FadeTransition(Duration.millis(200), enrollmentSwitcher);
-            fade.setFromValue(0);
-            fade.setToValue(1.0);
-            fade.play();
-        }
-    }
-
-    /**
-     * Create FaceID enrollment panel with improved UI/UX
-     */
-    private VBox createFaceIDEnrollmentPanel() {
-        VBox mainPanel = new VBox(20);
-        mainPanel.setPadding(new Insets(20));
-        mainPanel.setStyle(
-                "-fx-background-color: " + surfaceDefault() + ";" +
-                        "-fx-border-color: " + borderDefault() + ";" +
-                        "-fx-border-width: 1;" +
-                        "-fx-border-radius: 12;");
-
-        // ============ HEADER ============
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER_LEFT);
-        header.setPadding(new Insets(0, 0, 16, 0));
-        header.setStyle("-fx-border-color: " + borderSoft() + "; -fx-border-width: 0 0 1 0;");
-
-        Text title = text("Face ID Enrollment", 18, true, textDefault());
-        Text subtitle = text("Register your face for biometric authentication", 11, false, textMuted());
-
-        VBox titleBox = new VBox(4);
-        titleBox.getChildren().addAll(title, subtitle);
-        HBox.setHgrow(titleBox, Priority.ALWAYS);
-
-        Button closeBtn = new Button("✕");
-        closeBtn.setStyle(
-                "-fx-background-color: transparent;" +
-                        "-fx-text-fill: " + textMuted() + ";" +
-                        "-fx-font-size: 18;" +
-                        "-fx-padding: 0;" +
-                        "-fx-min-width: 32;" +
-                        "-fx-min-height: 32;" +
-                        "-fx-cursor: hand;");
-        closeBtn.setOnMouseEntered(e -> closeBtn.setStyle(
-                "-fx-background-color: " + surfaceSoft() + ";" +
-                        "-fx-text-fill: " + textDefault() + ";" +
-                        "-fx-font-size: 18;" +
-                        "-fx-padding: 0;" +
-                        "-fx-min-width: 32;" +
-                        "-fx-min-height: 32;" +
-                        "-fx-cursor: hand;" +
-                        "-fx-border-radius: 6;"));
-        closeBtn.setOnMouseExited(e -> closeBtn.setStyle(
-                "-fx-background-color: transparent;" +
-                        "-fx-text-fill: " + textMuted() + ";" +
-                        "-fx-font-size: 18;" +
-                        "-fx-padding: 0;" +
-                        "-fx-min-width: 32;" +
-                        "-fx-min-height: 32;" +
-                        "-fx-cursor: hand;"));
-        closeBtn.setOnAction(e -> hideEnrollmentPanel());
-
-        header.getChildren().addAll(titleBox, closeBtn);
-
-        // ============ MAIN CONTENT (HORIZONTAL LAYOUT - CAMERA LEFT, CONTROLS RIGHT)
-        // ============
-        HBox contentRow = new HBox(20);
-        contentRow.setAlignment(Pos.TOP_CENTER);
-
-        // -------- LEFT: CAMERA SECTION --------
-        VBox videoSection = new VBox(12);
-        videoSection.setAlignment(Pos.TOP_LEFT);
-        videoSection.setPrefWidth(450);
-        videoSection.setMinWidth(450);
-
-        // Video wrapper
-        StackPane videoWrapper = new StackPane();
-        videoWrapper.setStyle(
-                "-fx-background-color: #000000;" +
-                        "-fx-border-color: " + tm.getAccentHex() + ";" +
-                        "-fx-border-width: 2;" +
-                        "-fx-border-radius: 10;");
-        videoWrapper.setPrefSize(450, 320);
-
-        javafx.scene.image.ImageView faceIdCameraView = new javafx.scene.image.ImageView();
-        faceIdCameraView.setFitWidth(450);
-        faceIdCameraView.setFitHeight(320);
-        faceIdCameraView.setPreserveRatio(false);
-
-        // Scanner frame overlay
-        Pane overlay = new Pane();
-        overlay.setPrefSize(450, 320);
-        javafx.scene.shape.Rectangle scannerFrame = new javafx.scene.shape.Rectangle(30, 30, 450 - 60, 320 - 60);
-        scannerFrame.setStroke(Color.web(tm.getAccentHex() + "4d"));
-        scannerFrame.getStrokeDashArray().addAll(5.0, 3.0);
-        scannerFrame.setStrokeWidth(2);
-        scannerFrame.setFill(Color.TRANSPARENT);
-        overlay.getChildren().add(scannerFrame);
-
-        videoWrapper.getChildren().addAll(faceIdCameraView, overlay);
-
-        // Status and progress
-        HBox progressSection = new HBox(8);
-        progressSection.setAlignment(Pos.CENTER_LEFT);
-        progressSection.setPadding(new Insets(10));
-        progressSection.setStyle(
-                "-fx-background-color: " + surfaceSoft() + ";" +
-                        "-fx-border-radius: 8;");
-
-        VBox progressBox = new VBox(6);
-        HBox.setHgrow(progressBox, Priority.ALWAYS);
-
-        Text progressText = text("Position your face in the frame", 10, false, textMuted());
-        ProgressBar progressBar = new ProgressBar(0);
-        progressBar.setPrefHeight(6);
-        progressBar.setStyle("-fx-accent: " + tm.getAccentHex() + ";");
-
-        progressBox.getChildren().addAll(progressText, progressBar);
-        progressSection.getChildren().add(progressBox);
-
-        videoSection.getChildren().addAll(videoWrapper, progressSection);
-
-        // -------- RIGHT: CONTROLS SECTION --------
-        VBox controlsSection = new VBox(12);
-        controlsSection.setAlignment(Pos.TOP_LEFT);
-        controlsSection.setPrefWidth(350);
-        controlsSection.setMinWidth(350);
-        controlsSection.setPadding(new Insets(0));
-
-        // ---- Status Indicator ----
-        VBox statusBox = new VBox(6);
-        statusBox.setPadding(new Insets(10));
-        statusBox.setStyle(
-                "-fx-background-color: " + tm.getAccentHex() + "22;" +
-                        "-fx-border-color: " + tm.getAccentHex() + ";" +
-                        "-fx-border-width: 1;" +
-                        "-fx-border-radius: 8;");
-
-        Text statusLabel = text("Enrollment Status", 10, true, tm.getAccentHex());
-        HBox statusContent = new HBox(8);
-        statusContent.setAlignment(Pos.CENTER_LEFT);
-
-        final String deviceSelected = faceController.resolveCurrentDeviceId();
-        boolean hasEnrollment = currentUser != null &&
-                faceController.hasActiveFaceEnrollment(currentUser.getIdUser(), deviceSelected);
-        boolean hasAnyEnrollment = currentUser != null &&
-                faceController.hasAnyActiveFaceEnrollment(currentUser.getIdUser());
-
-        Text statusIcon = text(
-                (hasEnrollment || hasAnyEnrollment) ? "✓" : "○",
-                14,
-                true,
-                (hasEnrollment || hasAnyEnrollment) ? tm.getAccentHex() : textMuted());
-        Text statusText = text(
-                hasEnrollment ? "Already enrolled"
-                        : (hasAnyEnrollment ? "Enrolled on another device" : "Not enrolled yet"),
-                9,
-                false,
-                (hasEnrollment || hasAnyEnrollment) ? tm.getAccentHex() : textMuted());
-
-        statusContent.getChildren().addAll(statusIcon, statusText);
-        statusBox.getChildren().addAll(statusLabel, statusContent);
-
-        // ---- Device (Auto detected) ----
-        VBox deviceSection = new VBox(4);
-        Text deviceLabel = text("Device ID (Auto)", 10, true, textDefault());
-        Text deviceValue = text(deviceSelected, 9, false, textMuted());
-        deviceValue.setWrappingWidth(320);
-        deviceValue.setStyle(
-                "-fx-padding: 8 10 8 10;" +
-                        "-fx-border-radius: 6;" +
-                        "-fx-font-size: 10;" +
-                        "-fx-background-color: " + surfaceDefault() + ";" +
-                        "-fx-border-color: " + borderDefault() + ";" +
-                        "-fx-border-width: 1;" +
-                        "-fx-max-width: infinity;");
-
-        deviceSection.getChildren().addAll(deviceLabel, deviceValue);
-
-        // ---- PIN Input ----
-        VBox pinSection = new VBox(4);
-        Text pinLabel = text("Security PIN", 10, true, textDefault());
-        TextField pinInput = new TextField();
-        pinInput.setPromptText("••••");
-        pinInput.setStyle(
-                "-fx-padding: 8 10 8 10;" +
-                        "-fx-border-radius: 6;" +
-                        "-fx-font-size: 10;" +
-                        "-fx-background-color: " + surfaceDefault() + ";" +
-                        "-fx-border-color: " + borderDefault() + ";" +
-                        "-fx-border-width: 1;" +
-                        "-fx-text-fill: " + textDefault() + ";" +
-                        "-fx-prompt-text-fill: " + textMuted() + ";" +
-                        "-fx-max-width: infinity;");
-
-        pinSection.getChildren().addAll(pinLabel, pinInput);
-
-        // ---- Action Button ----
-        Button enrollBtn = new Button((hasEnrollment || hasAnyEnrollment) ? "Update" : "Start");
-        enrollBtn.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-padding: 10 16 10 16;" +
-                        "-fx-background-radius: 6;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 11;" +
-                        "-fx-cursor: hand;" +
-                        "-fx-border-color: " + tm.getAccentHex() + "80;" +
-                        "-fx-border-width: 1;" +
-                        "-fx-max-width: infinity;");
-        enrollBtn.setOnMouseEntered(e -> enrollBtn.setScaleX(1.02));
-        enrollBtn.setOnMouseExited(e -> enrollBtn.setScaleX(1.0));
-        enrollBtn.setOnAction(e -> {
-            String pin = pinInput.getText();
-            handleFaceIDEnrollmentStart(pin, deviceSelected, progressBar, progressText, faceIdCameraView, enrollBtn,
-                    pinInput, statusContent);
-        });
-
-        controlsSection.getChildren().addAll(statusBox, deviceSection, pinSection, enrollBtn);
-        VBox.setVgrow(controlsSection, Priority.ALWAYS);
-
-        // Ensure first render matches DB state
-        refreshFaceEnrollmentUi(statusContent, enrollBtn, deviceSelected);
-
-        // ============ ASSEMBLE LAYOUT (HORIZONTAL) ============
-        contentRow.getChildren().addAll(videoSection, controlsSection);
-        mainPanel.getChildren().addAll(header, contentRow);
-
-        return mainPanel;
-    }
-
-    /**
-     * Create WebAuthn enrollment panel
-     */
-    private VBox createWebAuthnEnrollmentPanel() {
-        VBox panel = new VBox(12);
-        panel.setPadding(new Insets(24));
-        panel.setStyle(
-                "-fx-background-color: rgba(13, 17, 23, 0.8); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1;");
-
-        // Header
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER_LEFT);
-        Text title = text("Register Passkey", 16, true, "#ffffff");
-        Button closeBtn = new Button("✕");
-        closeBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.6); -fx-font-size: 16; -fx-padding: 0; -fx-min-width: 32; -fx-min-height: 32;");
-        closeBtn.setOnMouseEntered(e -> closeBtn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: #ffffff; -fx-font-size: 16; -fx-padding: 0; -fx-min-width: 32; -fx-min-height: 32;"));
-        closeBtn.setOnMouseExited(e -> closeBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.6); -fx-font-size: 16; -fx-padding: 0; -fx-min-width: 32; -fx-min-height: 32;"));
-        closeBtn.setOnAction(e -> hideEnrollmentPanel());
-        HBox.setHgrow(header, Priority.ALWAYS);
-        header.getChildren().addAll(title, closeBtn);
-
-        // Content
-        VBox content = new VBox(12);
-        content.setPadding(new Insets(12));
-
-        Text subtitle = text("Setup Passwordless Authentication", 12, true, "rgba(255,255,255,0.9)");
-
-        Text description = text(
-                "Passkey registration uses FIDO2/WebAuthn standard for secure passwordless authentication. " +
-                        "Supports:\n• Windows Hello (biometric/PIN)\n• Security keys (USB, NFC, Bluetooth)\n• Platform authenticators",
-                10, false, "rgba(255,255,255,0.6)");
-        description.setWrappingWidth(400);
-
-        // Steps
-        VBox stepsBox = new VBox(8);
-        stepsBox.setPadding(new Insets(12));
-        stepsBox.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-border-radius: 8;");
-
-        Text step1 = text("1. Click 'Register Passkey' button", 10, true, "rgba(255,255,255,0.8)");
-        Text step1Desc = text("Your device will prompt for authentication", 9, false, "rgba(255,255,255,0.5)");
-
-        Text step2 = text("2. Follow device prompts", 10, true, "rgba(255,255,255,0.8)");
-        Text step2Desc = text("Use biometric, PIN, or security key", 9, false, "rgba(255,255,255,0.5)");
-
-        Text step3 = text("3. Verify registration", 10, true, "rgba(255,255,255,0.8)");
-        Text step3Desc = text("Passkey saved for future logins", 9, false, "rgba(255,255,255,0.5)");
-
-        stepsBox.getChildren().addAll(step1, step1Desc, step2, step2Desc, step3, step3Desc);
-
-        // Register button
-        Button registerBtn = new Button("Register Passkey");
-        registerBtn.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-padding: 10 20 10 20;" +
-                        "-fx-background-radius: 8;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 12;" +
-                        "-fx-cursor: hand;" +
-                        "-fx-min-width: 200;");
-        registerBtn.setOnMouseEntered(e -> registerBtn.setScaleX(1.02));
-        registerBtn.setOnMouseExited(e -> registerBtn.setScaleX(1.0));
-        registerBtn.setOnAction(e -> handleWebAuthnRegistration());
-
-        content.getChildren().addAll(subtitle, description, stepsBox, registerBtn);
-
-        panel.getChildren().addAll(header, content);
-        return panel;
-    }
-
-    /**
-     * Hide enrollment panel
-     */
-    private void hideEnrollmentPanel() {
-        if (enrollmentSwitcher != null && heroContent != null && defaultInfoPanel != null) {
-            // Restore defaultInfo panel
-            defaultInfoPanel.setVisible(true);
-            defaultInfoPanel.setManaged(true);
-
-            FadeTransition fadeIn = new FadeTransition(Duration.millis(200), defaultInfoPanel);
-            fadeIn.setFromValue(0);
-            fadeIn.setToValue(1.0);
-            fadeIn.play();
-
-            // Hide enrollment with fade
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(200), enrollmentSwitcher);
-            fadeOut.setFromValue(1.0);
-            fadeOut.setToValue(0);
-            fadeOut.setOnFinished(ev -> {
-                enrollmentSwitcher.setVisible(false);
-                enrollmentSwitcher.setManaged(false);
-            });
-            fadeOut.play();
-        }
-    }
-
-    /**
-     * Show success notification for enrollment and return to previous view
-     */
-    /**
-     * Show enrollment success and update UI with new enrollment status from
-     * database
-     */
-    private void showEnrollmentSuccess(String deviceName, Button enrollBtn, HBox statusContent) {
-        Stage modal = new Stage(StageStyle.TRANSPARENT);
-        if (root.getScene() != null && root.getScene().getWindow() != null) {
-            modal.initOwner(root.getScene().getWindow());
-        }
-        modal.initModality(Modality.APPLICATION_MODAL);
-
-        VBox card = new VBox(12);
-        card.setPadding(new Insets(18));
-        card.setPrefWidth(440);
-        card.setStyle(
-                "-fx-background-color: " + surfaceCard() + ";" +
-                        "-fx-background-radius: 14;" +
-                        "-fx-border-color: " + tm.getAccentHex() + "55;" +
-                        "-fx-border-width: 1;" +
-                        "-fx-border-radius: 14;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.58), 30, 0.24, 0, 10);");
-
-        Text title = text("Face ID Enrollment Complete", 16, true, textDefault());
-        Text subtitle = text("Your face has been successfully enrolled for", 11, false, textMuted());
-        Text device = text(deviceName, 12, true, textDefault());
-        device.setWrappingWidth(404);
-
-        VBox messageBlock = new VBox(5, subtitle, device);
-        messageBlock.setPadding(new Insets(2, 0, 2, 0));
-
-        HBox actions = new HBox();
-        actions.setAlignment(Pos.CENTER_RIGHT);
-        Button okButton = new Button("OK");
-        okButton.setDefaultButton(true);
-        okButton.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-font-weight: 800;" +
-                        "-fx-padding: 8 24 8 24;" +
-                        "-fx-background-radius: 8;" +
-                        "-fx-cursor: hand;");
-        okButton.setOnAction(e -> modal.close());
-        actions.getChildren().add(okButton);
-
-        card.getChildren().addAll(title, messageBlock, actions);
-
-        StackPane overlay = new StackPane(card);
-        overlay.setStyle("-fx-background-color: transparent;");
-        StackPane.setAlignment(card, Pos.CENTER);
-        StackPane.setMargin(card, new Insets(10));
-
-        Scene scene = new Scene(overlay);
-        scene.setFill(Color.TRANSPARENT);
-        modal.setScene(scene);
-        modal.showAndWait();
-
-        // Refresh enrollment status from database
-        if (currentUser != null && statusContent != null) {
-            boolean isEnrolled = faceController.hasActiveFaceEnrollment(currentUser.getIdUser(), deviceName);
-
-            // Update status box
-            statusContent.getChildren().clear();
-            Text statusIcon = text(isEnrolled ? "✓" : "○", 14, true, isEnrolled ? tm.getAccentHex() : textMuted());
-            Text statusText = text(isEnrolled ? "Already enrolled" : "Not enrolled yet", 9, false,
-                    isEnrolled ? tm.getAccentHex() : textMuted());
-            statusContent.getChildren().addAll(statusIcon, statusText);
-
-            // Update button text and state
-            if (enrollBtn != null) {
-                enrollBtn.setText(isEnrolled ? "Update" : "Start");
-                enrollBtn.setDisable(false);
-            }
-
-            refreshFaceEnrollmentUi(statusContent, enrollBtn, deviceName);
-        }
-
-        // Return to main profile view
-        hideEnrollmentPanel();
-    }
-
-    private void handleFaceIDEnrollmentStart(String pin, String device, ProgressBar progressBar, Text progressText,
-            javafx.scene.image.ImageView faceIdCameraView, Button enrollBtn, TextField pinInput, HBox statusContent) {
-        if (pin.isEmpty() || pin.length() < 4 || pin.length() > 6) {
-            Alert alert = new Alert(AlertType.WARNING);
-            alert.setTitle("Invalid PIN");
-            alert.setHeaderText("PIN Validation Error");
-            alert.setContentText("PIN must be 4-6 digits.");
-            alert.showAndWait();
+    private void animateHeroTransition(VBox from, VBox to) {
+        if (from == to) {
             return;
         }
 
-        // Disable button during capture
-        enrollBtn.setDisable(true);
-        enrollBtn.setText("Enrolling...");
+        to.toFront();
+        to.setOpacity(0);
+        to.setTranslateX(18);
 
-        // Capture references to status elements for callback
-        // Get the status content box from the controls section
-        // We'll need to pass this through the enrollment flow
-        // For now, we need to store these or pass through callback
+        javafx.animation.FadeTransition fadeOut = new javafx.animation.FadeTransition(javafx.util.Duration.millis(220), from);
+        fadeOut.setFromValue(from.getOpacity());
+        fadeOut.setToValue(0);
 
-        // Start enrollment with camera and wait for completion
-        // We need to find and capture the statusContent and deviceCombo references
-        // Since they're created locally in createFaceIDEnrollmentPanel, we need a
-        // different approach
-        // Store the device name to look up the elements after enrollment
-        realFaceIDCapture(progressBar, progressText, pin, device, faceIdCameraView, enrollBtn, () -> {
-            // Show success message and update enrollment status
-            javafx.application.Platform.runLater(() -> {
-                pinInput.clear();
-                showEnrollmentSuccess(device, enrollBtn, statusContent);
-                hideEnrollmentPanel();
-            });
+        javafx.animation.TranslateTransition slideOut = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(220), from);
+        slideOut.setFromX(0);
+        slideOut.setToX(-18);
+
+        javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(260), to);
+        fadeIn.setFromValue(0);
+        fadeIn.setToValue(1);
+
+        javafx.animation.TranslateTransition slideIn = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(260), to);
+        slideIn.setFromX(18);
+        slideIn.setToX(0);
+
+        fadeOut.setOnFinished(e -> {
+            from.setTranslateX(0);
+            from.setOpacity(0);
         });
-    }
-
-    /**
-     * Refresh enrollment status indicators for the selected device.
-     */
-    private void refreshFaceEnrollmentUi(HBox statusContent, Button enrollBtn, String selectedDevice) {
-        if (statusContent == null || enrollBtn == null || selectedDevice == null || currentUser == null) {
-            return;
-        }
-
-        boolean enrolledForSelected = faceController.hasActiveFaceEnrollment(currentUser.getIdUser(), selectedDevice);
-        boolean enrolledOnAny = faceController.hasAnyActiveFaceEnrollment(currentUser.getIdUser());
-
-        statusContent.getChildren().clear();
-        Text icon = text(
-                (enrolledForSelected || enrolledOnAny) ? "✓" : "○",
-                14,
-                true,
-                (enrolledForSelected || enrolledOnAny) ? tm.getAccentHex() : textMuted());
-        String label = enrolledForSelected ? "Already enrolled"
-                : (enrolledOnAny ? "Enrolled on another device" : "Not enrolled yet");
-        Text txt = text(
-                label,
-                9,
-                false,
-                (enrolledForSelected || enrolledOnAny) ? tm.getAccentHex() : textMuted());
-        statusContent.getChildren().addAll(icon, txt);
-
-        enrollBtn.setText((enrolledForSelected || enrolledOnAny) ? "Update" : "Start");
-    }
-
-    /**
-     * Simulate face capture progress (for demo purposes)
-     */
-    private void simulateFaceIDCapture(ProgressBar progressBar, Text progressText, String pin, String device,
-            Runnable onComplete) {
-        Thread.ofVirtual().name("ProfileView-FaceCapture-Sim").start(() -> {
-            for (int i = 0; i <= 20; i++) {
-                final int frame = i;
-                javafx.application.Platform.runLater(() -> {
-                    double progress = frame / 20.0;
-                    progressBar.setProgress(progress);
-                    progressText.setText(String
-                            .format("Face Detection: %d/20 frames\nBlink & move your head for liveness check", frame));
-                });
-                try {
-                    Thread.sleep(250); // Simulate 250ms per frame (5 second total)
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-            // Call completion callback after all frames are captured
-            if (onComplete != null) {
-                onComplete.run();
-            }
+        
+        fadeIn.setOnFinished(e -> {
+            to.setTranslateX(0);
+            to.setOpacity(1);
         });
+
+        fadeOut.play();
+        slideOut.play();
+        fadeIn.play();
+        slideIn.play();
     }
 
-    /**
-     * Capture face frames using real camera with face detection
-     */
-    private void realFaceIDCapture(ProgressBar progressBar, Text progressText, String pin, String device,
-            javafx.scene.image.ImageView faceIdCameraView, Button verifyBtn, Runnable onComplete) {
-        Thread.ofVirtual().name("ProfileView-FaceCapture-Real").start(() -> {
-            try {
-                // Initialize camera service if not already done
-                if (cameraService == null) {
-                    cameraService = new RealCameraService();
-                }
-
-                // Initialize camera
-                System.out.println("ProfileView: Initializing camera...");
-                if (!cameraService.initializeCamera(0)) {
-                    javafx.application.Platform.runLater(() -> {
-                        Alert alert = new Alert(AlertType.ERROR);
-                        alert.setTitle("Camera Error");
-                        alert.setHeaderText("Failed to Initialize Camera");
-                        alert.setContentText(
-                                "Could not access the camera. Please check:\n1. Camera is connected and powered on\n2. No other application is using the camera\n3. Camera permissions are granted\n4. Try unplugging and reconnecting the camera\n\nCheck console logs for more details.");
-                        alert.showAndWait();
-                        verifyBtn.setDisable(false);
-                        verifyBtn.setText("Start Enrollment");
-                    });
-                    return;
-                }
-
-                cameraService.startCapture();
-                Thread.sleep(1500); // Allow camera to warm up (1.5 seconds)
-
-                // Verify that frames are actually being captured
-                javafx.scene.image.Image testFrame = cameraService.getCurrentFrameWithDetection();
-                if (testFrame == null) {
-                    System.err.println("ProfileView: No frames captured after warm-up");
-                    javafx.application.Platform.runLater(() -> {
-                        Alert alert = new Alert(AlertType.ERROR);
-                        alert.setTitle("Camera Not Responding");
-                        alert.setHeaderText("Camera Not Capturing Frames");
-                        alert.setContentText(
-                                "The camera initialized but isn't sending frames.\n\nPlease try:\n1. Closing this app and other camera apps\n2. Unplugging the camera and plugging it back in\n3. Restarting your computer\n4. Checking Device Manager for camera driver issues");
-                        alert.showAndWait();
-                        verifyBtn.setDisable(false);
-                        verifyBtn.setText("Start Enrollment");
-                        cameraService.stopCapture();
-                        cameraService.release();
-                    });
-                    return;
-                }
-                System.out.println("ProfileView: Frames are being captured successfully");
-
-                // Start animation timer to display camera preview
-                javafx.application.Platform.runLater(() -> {
-                    if (cameraUpdateTimer != null) {
-                        cameraUpdateTimer.stop();
-                    }
-                    cameraUpdateTimer = new javafx.animation.AnimationTimer() {
-                        @Override
-                        public void handle(long now) {
-                            javafx.scene.image.Image frame = cameraService.getCurrentFrameWithDetection();
-                            if (frame != null && faceIdCameraView != null) {
-                                faceIdCameraView.setImage(frame);
-                            }
-                        }
-                    };
-                    cameraUpdateTimer.start();
-                    System.out.println("ProfileView: Animation timer started");
-                });
-
-                javafx.application.Platform.runLater(() -> {
-                    progressText.setText("Position your face in the frame...");
-                });
-
-                // Collect frames for enrollment with timestamps for diversity
-                final int[] framesCapturedArray = { 0 };
-                final int targetFrames = 20;
-                long startTime = System.currentTimeMillis();
-                long timeout = 30000; // 30 second timeout for enrollment
-                java.util.List<RealCameraService.FaceFrameData> capturedFrames = new java.util.ArrayList<>();
-
-                while (framesCapturedArray[0] < targetFrames && (System.currentTimeMillis() - startTime) < timeout) {
-                    // Check frame quality
-                    RealCameraService.FaceQuality quality = cameraService.assessFrameQuality();
-
-                    final int currentFrameCount = framesCapturedArray[0];
-                    javafx.application.Platform.runLater(() -> {
-                        progressText.setText(quality.message + " (" + currentFrameCount + "/" + targetFrames + ")");
-                        progressBar.setProgress(currentFrameCount / (double) targetFrames);
-                    });
-
-                    if (quality.isGood) {
-                        // Capture frame
-                        RealCameraService.FaceFrameData frameData = cameraService.captureFrame();
-                        if (frameData != null) {
-                            capturedFrames.add(frameData); // Store frame for later embedding extraction
-                            framesCapturedArray[0]++;
-                            final int updatedFrameCount = framesCapturedArray[0];
-                            System.out.println("ProfileView: Frame captured " + updatedFrameCount + "/" + targetFrames);
-                            javafx.application.Platform.runLater(() -> {
-                                progressText.setText("Face captured: " + updatedFrameCount + "/" + targetFrames);
-                                progressBar.setProgress(updatedFrameCount / (double) targetFrames);
-                            });
-                        }
-                    }
-
-                    Thread.sleep(200);
-                }
-
-                if (framesCapturedArray[0] < targetFrames) {
-                    javafx.application.Platform.runLater(() -> {
-                        if (cameraUpdateTimer != null) {
-                            cameraUpdateTimer.stop();
-                        }
-                        Alert alert = new Alert(AlertType.WARNING);
-                        alert.setTitle("Enrollment Failed");
-                        alert.setHeaderText("Insufficient Face Data");
-                        alert.setContentText(
-                                "Could not capture enough valid face frames in 30 seconds.\n\nMake sure:\n1. Your face is clearly visible and well-lit\n2. The camera can see your whole face\n3. You move your head slightly for liveness detection\n4. Your face takes up at least 1/3 of the frame width");
-                        alert.showAndWait();
-                        verifyBtn.setDisable(false);
-                        verifyBtn.setText("Start Enrollment");
-                        cameraService.stopCapture();
-                        cameraService.release();
-                    });
-                    return;
-                }
-
-                cameraService.stopCapture();
-                cameraService.release();
-
-                // Stop camera preview
-                javafx.application.Platform.runLater(() -> {
-                    if (cameraUpdateTimer != null) {
-                        cameraUpdateTimer.stop();
-                    }
-                    progressText.setText("Processing face data...");
-                    progressBar.setProgress(0.95);
-                });
-
-                // Generate embedding from captured frames and save enrollment to database
-                System.out.println("ProfileView: Generating embedding from " + capturedFrames.size() + " frames");
-                double[] embedding = generateFaceEmbedding(capturedFrames);
-
-                // Save enrollment to database
-                if (currentUser != null && embedding != null) {
-                    System.out.println("ProfileView: Saving enrollment for user " + currentUser.getIdUser()
-                            + " on device " + device);
-                    Map<String, Object> enrollResult = faceController.enrollFace(embedding, pin, device);
-
-                    if (enrollResult.containsKey("error")) {
-                        System.err.println("ProfileView: Enrollment failed: " + enrollResult.get("error"));
-                    } else {
-                        System.out.println("ProfileView: Enrollment saved successfully for device " + device);
-                    }
-                }
-
-                // Stop camera preview
-                javafx.application.Platform.runLater(() -> {
-                    progressText.setText("Face enrollment successful!");
-                    progressBar.setProgress(1.0);
-                });
-
-                System.out.println("ProfileView: Enrollment complete, calling callback");
-
-                // Call completion callback after all frames are captured and saved
-                if (onComplete != null) {
-                    onComplete.run();
-                }
-            } catch (Exception e) {
-                System.err.println("ProfileView Camera Error: " + e.getMessage());
-                e.printStackTrace();
-
-                javafx.application.Platform.runLater(() -> {
-                    if (cameraUpdateTimer != null) {
-                        cameraUpdateTimer.stop();
-                    }
-                    Alert alert = new Alert(AlertType.ERROR);
-                    alert.setTitle("Camera Error");
-                    alert.setHeaderText("Failed to Initialize Camera");
-                    alert.setContentText("Error: " + e.getMessage()
-                            + "\n\nPlease check:\n1. Camera is connected\n2. No other app is using it\n3. Check console for full error details");
-                    alert.showAndWait();
-                    verifyBtn.setDisable(false);
-                    verifyBtn.setText("Start Enrollment");
-                    if (cameraService != null) {
-                        try {
-                            cameraService.stopCapture();
-                            cameraService.release();
-                        } catch (Exception ex) {
-                            ex.printStackTrace();
-                        }
-                    }
-                });
+    private boolean isDescendantOf(javafx.scene.Node node, javafx.scene.Node ancestor) {
+        javafx.scene.Node current = node;
+        while (current != null) {
+            if (current == ancestor) {
+                return true;
             }
-        });
-    }
-
-    /**
-     * Generate a face embedding from captured frames
-     * Uses deterministic pattern based on frame data for now
-     * Can be improved with actual InsightFace embeddings later
-     */
-    private double[] generateFaceEmbedding(java.util.List<RealCameraService.FaceFrameData> frames) {
-        if (frames == null || frames.isEmpty()) {
-            // Return default embedding if no frames
-            double[] embedding = new double[384];
-            java.util.Arrays.fill(embedding, 0.1);
-            return embedding;
+            current = current.getParent();
         }
-
-        // Create a 384-dimensional embedding (ArcFace standard size)
-        // For now, generate deterministic pattern that allows enrollment to work
-        // TODO: Replace with actual InsightFace embeddings when service is available
-        double[] embedding = new double[384];
-
-        try {
-            // Use frame index pattern for deterministic but unique embeddings
-            for (int i = 0; i < 384; i++) {
-                // Create pattern: varies by frame count and index position
-                double baseValue = 0.0;
-
-                // Use frame features for embedding component
-                if (i < frames.size()) {
-                    // Use hash of frame data for that index
-                    RealCameraService.FaceFrameData frame = frames.get(i);
-                    if (frame != null && frame.frameImage != null) {
-                        // Create hash from frame data
-                        long hash = System.identityHashCode(frame.frameImage) ^ i;
-                        baseValue = (double) ((hash & 0xFF) % 256) / 128.0 - 1.0; // Range [-1, 1]
-                    }
-                }
-
-                // Add pseudo-random but reproducible component
-                long seed = (long) (frames.size() * 17 + i * 31);
-                java.util.Random rand = new java.util.Random(seed);
-                baseValue = baseValue * 0.7 + (rand.nextDouble() * 0.3 - 0.15);
-
-                // Normalize to roughly [-1, 1] range
-                embedding[i] = Math.max(-1.0, Math.min(1.0, baseValue));
-            }
-
-            // Normalize embedding to unit length (typical for face embeddings)
-            double norm = 0.0;
-            for (double val : embedding) {
-                norm += val * val;
-            }
-            norm = Math.sqrt(norm);
-            if (norm > 0) {
-                for (int i = 0; i < embedding.length; i++) {
-                    embedding[i] /= norm;
-                }
-            }
-
-            System.out.println("ProfileView: Generated embedding with " + frames.size() + " frames, norm=" + norm);
-            return embedding;
-
-        } catch (Exception e) {
-            System.err.println("ProfileView: Error generating embedding: " + e.getMessage());
-            e.printStackTrace();
-
-            // Return default embedding on error
-            double[] defaultEmbedding = new double[384];
-            java.util.Arrays.fill(defaultEmbedding, 0.1);
-            return defaultEmbedding;
-        }
+        return false;
     }
-
-    /**
-     * Handle WebAuthn registration
-     */
-    private void handleWebAuthnRegistration() {
-        Alert info = new Alert(AlertType.INFORMATION);
-        info.setTitle("Passkey Registration");
-        info.setHeaderText("Complete Your Registration");
-        info.setContentText("Click 'OK' to start. Your device will prompt you for authentication.\n\n" +
-                "This will register a passkey for passwordless login using:\n" +
-                "• Windows Hello (Biometric or PIN)\n" +
-                "• FIDO2 Security Key\n" +
-                "• Or other platform authenticators");
-        info.showAndWait();
-
-        // Simulate WebAuthn flow
-        Alert challenge = new Alert(AlertType.INFORMATION);
-        challenge.setTitle("Verify with Your Authenticator");
-        challenge.setHeaderText("Device Verification Required");
-        challenge.setContentText("Waiting for device authentication...\n\n" +
-                "Please verify using:\n" +
-                "• Windows Hello (face/fingerprint)\n" +
-                "• USB Security Key\n" +
-                "• Mobile authenticator");
-        challenge.showAndWait();
-
-        Alert registered = new Alert(AlertType.INFORMATION);
-        registered.setTitle("Passkey Registered");
-        registered.setHeaderText("Registration Successful");
-        registered.setContentText("Your passkey has been registered successfully!\n\n" +
-                "You can now use this credential for passwordless login.\n" +
-                "Keep your authenticator safe and secure.");
-        registered.showAndWait();
-
-        hideEnrollmentPanel();
-    }
-
-    /**
-     * Create 2FA settings panel with toggle and options
-     */
-    private VBox createTwoFAPanel() {
-        VBox panel = new VBox(12);
-        panel.setPadding(new Insets(16));
-        panel.setStyle("-fx-background-color: rgba(0,0,0,0.3);");
-
-        HBox topBar = new HBox(10);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
-        backBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
-        backBtn.setPrefSize(30, 30);
-
-        Text titleText = text("Two-Factor Authentication & Biometrics", 14, true, "#ffffff");
-        topBar.getChildren().addAll(backBtn, titleText);
-
-        // 2FA Toggle
-        HBox toggleBox = new HBox(10);
-        toggleBox.setAlignment(Pos.CENTER_LEFT);
-        toggleBox.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
-
-        Text toggleLabel = text("Two-Factor Authentication", 11, true, "rgba(255,255,255,0.9)");
-        Text toggleStatus = text("Disabled", 10, false, "rgba(255,255,255,0.6)");
-        VBox toggleInfo = new VBox(2, toggleLabel, toggleStatus);
-
-        HBox.setHgrow(toggleInfo, Priority.ALWAYS);
-        toggleBox.getChildren().addAll(toggleInfo);
-
-        // Email OTP Option
-        VBox emailOpt = new VBox(8);
-        emailOpt.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
-        Text emailTitle = text("Email OTP", 11, true, "rgba(255,255,255,0.7)");
-        Text emailDesc = text("A code is sent to your email at each login.", 10, false, "rgba(255,255,255,0.5)");
-        emailOpt.getChildren().addAll(emailTitle, emailDesc);
-
-        // TOTP Option
-        VBox totpOpt = new VBox(8);
-        totpOpt.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
-        Text totpTitle = text("Authenticator App", 11, true, "rgba(255,255,255,0.7)");
-        Text totpDesc = text("Use an authenticator app like Google Authenticator.", 10, false, "rgba(255,255,255,0.5)");
-        totpOpt.getChildren().addAll(totpTitle, totpDesc);
-
-        // FaceID Option
-        VBox faceIDOpt = new VBox(8);
-        faceIDOpt.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
-        Text faceIDTitle = text("Face ID", 11, true, "rgba(255,255,255,0.7)");
-        Text faceIDDesc = text("Login using facial recognition with a PIN-protected enrollment.", 10, false,
-                "rgba(255,255,255,0.5)");
-        faceIDOpt.getChildren().addAll(faceIDTitle, faceIDDesc);
-
-        // WebAuthn/Passkey Option
-        VBox webauthOpt = new VBox(8);
-        webauthOpt.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12;");
-        Text webauthTitle = text("WebAuthn / Passkey", 11, true, "rgba(255,255,255,0.7)");
-        Text webauthDesc = text("Passwordless login with security keys, Windows Hello, or Touch ID.", 10, false,
-                "rgba(255,255,255,0.5)");
-        webauthOpt.getChildren().addAll(webauthTitle, webauthDesc);
-
-        panel.getChildren().addAll(topBar, new Text(""), toggleBox, new Text(""),
-                text("2FA Methods", 12, true, "rgba(255,255,255,0.7)"),
-                emailOpt, totpOpt,
-                new Text(""), text("Biometric & Passwordless", 12, true, "rgba(255,255,255,0.7)"),
-                faceIDOpt, webauthOpt);
-        return panel;
-    }
-
-    /**
-     * Create comprehensive settings panel
-     */
-    private VBox createSettingsPanel() {
-        VBox panel = new VBox(12);
-        panel.setPadding(new Insets(16));
-        panel.setStyle("-fx-background-color: rgba(0,0,0,0.3);");
-
-        HBox topBar = new HBox(10);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        Button backBtn = new Button("←");
-        backBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.5); -fx-font-size: 14; -fx-padding: 0;");
-        backBtn.setPrefSize(30, 30);
-
-        Text titleText = text("Profile Settings", 14, true, "#ffffff");
-        topBar.getChildren().addAll(backBtn, titleText);
-
-        VBox form = new VBox(8);
-        form.setStyle(
-                "-fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-padding: 12; -fx-background-color: rgba(255,255,255,0.02);");
-
-        // Bio Field
-        form.getChildren().add(createSettingsLabel("Bio"));
-        form.getChildren().add(createSettingsInput("Tell us about yourself...", 60));
-
-        // Phone Field
-        form.getChildren().add(createSettingsLabel("Phone"));
-        form.getChildren().add(createSettingsInput("+216 ..."));
-
-        // Theme Dropdown
-        form.getChildren().add(createSettingsLabel("Theme"));
-        form.getChildren().add(createSettingsDropdown(new String[] { "Dark", "Light" }));
-
-        // Language Dropdown
-        form.getChildren().add(createSettingsLabel("Language"));
-        form.getChildren().add(createSettingsDropdown(new String[] { "English", "French", "Arabic" }));
-
-        // Timezone Field
-        form.getChildren().add(createSettingsLabel("Timezone"));
-        form.getChildren().add(createSettingsInput("Africa/Tunis"));
-
-        // Security Section
-        form.getChildren().add(createSettingsLabel("Security"));
-        form.getChildren().add(createSettingsInput("••••••••", 12));
-        form.getChildren().add(createSettingsInput("••••••••", 12));
-        form.getChildren().add(createSettingsInput("••••••••", 12));
-
-        // Save Button
-        Button saveBtn = new Button("Save Changes");
-        saveBtn.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-padding: 10 20 10 20;" +
-                        "-fx-background-radius: 12;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 12;" +
-                        "-fx-cursor: hand;");
-        saveBtn.setOnAction(e -> handleSettingsSave());
-
-        panel.getChildren().addAll(topBar, form, saveBtn);
-        return panel;
-    }
-
-    private Text createSettingsLabel(String label) {
-        return text(label.toUpperCase(), 10, true, "rgba(255,255,255,0.5)");
-    }
-
-    private javafx.scene.control.TextField createSettingsInput(String prompt) {
-        return createSettingsInput(prompt, 36);
-    }
-
-    private javafx.scene.control.TextField createSettingsInput(String prompt, double height) {
-        javafx.scene.control.TextField input = new javafx.scene.control.TextField();
-        input.setPromptText(prompt);
-        input.setPrefHeight(height);
-        input.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05);" +
-                        "-fx-border-color: rgba(255,255,255,0.12);" +
-                        "-fx-border-width: 1;" +
-                        "-fx-border-radius: 8;" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-prompt-text-fill: rgba(255,255,255,0.3);" +
-                        "-fx-padding: 8 12 8 12;" +
-                        "-fx-font-size: 11;");
-        return input;
-    }
-
-    private javafx.scene.control.ComboBox<String> createSettingsDropdown(String[] options) {
-        javafx.scene.control.ComboBox<String> combo = new javafx.scene.control.ComboBox<>();
-        combo.getItems().addAll(options);
-        combo.setPrefHeight(36);
-        return combo;
-    }
-
-    /**
-     * Handle settings save (stub - add database save logic here)
-     */
-    private void handleSettingsSave() {
-        showAlert("Success", "Settings saved successfully!");
-    }
-
-    /**
-     * Handle action tile click to show panel
-     */
 
     private VBox createStandingCard() {
         VBox card = cardShell();
         card.setPadding(new Insets(22));
 
-        UserStanding standing = currentStanding;
-        if (standing == null) {
-            standing = standingService.findOrCreateByUserId(
-                    currentUser != null && currentUser.getIdUser() != null ? currentUser.getIdUser() : 0);
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        UserStanding standing = SessionManager.getInstance().getCurrentStanding();
+        if ((standing == null || standing.getUserId() == null) && currentUser != null && currentUser.getIdUser() != null) {
+            UserStandingRepository repo = new UserStandingRepository();
+            Optional<UserStanding> opt = repo.findByUserId(currentUser.getIdUser());
+            standing = opt.orElse(null);
+            if (standing != null) {
+                SessionManager.getInstance().setCurrentStanding(standing);
+            }
         }
 
-        int levelValue = Math.max(1, standing.getLevel());
-        int pointsValue = Math.max(0, standing.getPoints());
-        int xpToNextLevel = pointsValue % 100;
-        String standingLabel = standing.getStandingLabel() == null ? "NORMAL"
-                : standing.getStandingLabel().toUpperCase();
-        double fillWidth = Math.max(16, (xpToNextLevel / 100.0) * 240.0);
-        String trackColor = standingTrackColor(standingLabel);
+        int levelValue = standing != null ? standing.getLevel() : 1;
+        int pointsValue = standing != null ? standing.getPoints() : 0;
+        String standingLabel = standing != null ? standing.getStandingLabel() : "NORMAL";
 
         HBox header = new HBox(16);
         header.setAlignment(Pos.CENTER_LEFT);
 
-        VBox level = new VBox(0, text(String.valueOf(levelValue), 28, true, "#ffffff"),
-                text("LVL", 10, true, tm.getAccentHex()));
+        VBox level = new VBox(0, text(String.valueOf(levelValue), 28, true, "#ffffff"), text("LVL", 10, true, tm.getAccentHex()));
         level.setAlignment(Pos.CENTER);
         level.setMinSize(72, 72);
         level.setStyle(shell(16, surfaceSoft(), 0.16));
 
-        VBox title = new VBox(4, text("RESIDENT STANDING", 18, true, "#ffffff"),
-                text("Your status within the Horizon community", 12, false, textMuted()));
+        VBox title = new VBox(4, text("RESIDENT STANDING", 18, true, "#ffffff"), text("Your status within the Horizon community", 12, false, textMuted()));
         HBox.setHgrow(title, Priority.ALWAYS);
 
-        VBox points = new VBox(2, text(String.valueOf(pointsValue), 24, true, "#ffffff"),
-                text("SYNDIC PTS", 10, true, "rgba(255,255,255,0.50)"));
+        VBox points = new VBox(2, text(String.valueOf(pointsValue), 24, true, "#ffffff"), text("SYNDIC PTS", 10, true, "rgba(255,255,255,0.50)"));
         points.setAlignment(Pos.CENTER_RIGHT);
 
         header.getChildren().addAll(level, title, points);
 
+        boolean isAllGood = "NORMAL".equals(standingLabel) || "GOOD".equals(standingLabel);
+        boolean isLimited = "LIMITED".equals(standingLabel);
+        boolean isAtRisk = "AT_RISK".equals(standingLabel);
+        boolean isSuspended = "SUSPENDED".equals(standingLabel);
+
         HBox standingBar = new HBox(12,
-                standingPoint("All good", true),
-                standingPoint("Limited", isStandingWarnedOrBeyond(standingLabel)),
-                standingPoint("At risk", isStandingSuspendedOrBeyond(standingLabel)),
-                standingPoint("Suspended", "BANNED".equals(standingLabel)));
+            standingPoint("All good", isAllGood),
+            standingPoint("Limited", isLimited),
+            standingPoint("At risk", isAtRisk),
+            standingPoint("Suspended", isSuspended)
+        );
         standingBar.setAlignment(Pos.CENTER_LEFT);
+
+        int nextLevelXp = (levelValue + 1) * 100;
+        int currentXp = pointsValue % 100;
+        int xpRemaining = 100 - currentXp;
 
         VBox xp = new VBox(8);
         HBox xpTop = new HBox();
         xpTop.setAlignment(Pos.CENTER_LEFT);
         Text left = text("XP TOWARDS LEVEL " + (levelValue + 1), 11, true, textMuted());
-        Text right = text(xpToNextLevel + "/100", 11, true, "#ffffff");
+        Text right = text(currentXp + "/100", 11, true, "#ffffff");
         HBox.setHgrow(left, Priority.ALWAYS);
         xpTop.getChildren().addAll(left, right);
 
@@ -1792,9 +528,9 @@ public class ProfileView implements ViewInterface {
         progressTrack.setMinHeight(8);
         progressTrack.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 999px;");
         StackPane fill = new StackPane();
-        fill.setPrefWidth(fillWidth);
+        fill.setPrefWidth(currentXp * 1.8);
         fill.setMinHeight(8);
-        fill.setStyle("-fx-background-color: " + trackColor + "; -fx-background-radius: 999px;");
+        fill.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-background-radius: 999px;");
         progressTrack.getChildren().add(fill);
 
         xp.getChildren().addAll(xpTop, progressTrack);
@@ -1807,85 +543,349 @@ public class ProfileView implements ViewInterface {
         VBox card = cardShell();
         card.setPadding(new Insets(22));
 
-        int friendCount = currentUser == null ? 0 : relationshipService.countFriends(currentUser);
-        int pendingCount = currentUser == null ? 0 : relationshipService.countPendingRequests(currentUser);
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser == null || currentUser.getIdUser() == null) {
+            card.getChildren().addAll(
+                text("CIRCLE", 18, true, "#ffffff"),
+                text("Sign in to manage your circle.", 12, false, textMuted())
+            );
+            return card;
+        }
 
-        currentCircleFriendCountText = badge(friendCount + " FRIENDS");
-        currentCirclePendingCountText = badge(pendingCount + " PENDING");
+        UserRelationshipController relationshipController = new UserRelationshipController();
+        UserController userController = new UserController();
 
-        HBox top = new HBox(10, text("CIRCLE", 18, true, "#ffffff"), currentCircleFriendCountText,
-                currentCirclePendingCountText);
+        Text friendsBadge = badge("0 FRIENDS");
+        Text pendingBadge = badge("0 PENDING");
+        HBox top = new HBox(10, text("CIRCLE", 18, true, "#ffffff"), friendsBadge, pendingBadge);
         top.setAlignment(Pos.CENTER_LEFT);
 
-        HBox switcher = new HBox(8);
         Button friendsTab = tabChip("Friends", true);
         Button pendingTab = tabChip("Pending", false);
-        switcher.getChildren().addAll(friendsTab, pendingTab);
+        HBox switcher = new HBox(8, friendsTab, pendingTab);
 
-        VBox friendsPane = new VBox(12);
-        friendsPane.setPadding(new Insets(14));
-        friendsPane.setStyle(shell(18, surfaceSoft(), 0.16));
-        friendsPane.getChildren().add(text("Active connections", 13, true, "#ffffff"));
+        GridPane friendsGrid = new GridPane();
+        friendsGrid.setHgap(12);
+        friendsGrid.setVgap(12);
 
-        currentCircleFriendsGrid = new GridPane();
-        currentCircleFriendsGrid.setHgap(12);
-        currentCircleFriendsGrid.setVgap(12);
-        populateFriendGrid(currentCircleFriendsGrid, currentCircleFriends);
-        friendsPane.getChildren().add(currentCircleFriendsGrid);
+        VBox pendingList = new VBox(10);
 
-        currentCirclePendingPane = new VBox(12);
-        currentCirclePendingPane.setPadding(new Insets(14));
-        currentCirclePendingPane.setStyle(shell(18, surfaceSoft(), 0.16));
-        populatePendingPane(currentCirclePendingPane, currentPendingRelationships);
-        currentCirclePendingPane.setVisible(false);
-        currentCirclePendingPane.setManaged(false);
-
-        friendsTab.setOnAction(e -> {
-            friendsPane.setVisible(true);
-            friendsPane.setManaged(true);
-            currentCirclePendingPane.setVisible(false);
-            currentCirclePendingPane.setManaged(false);
-            styleTabChip(friendsTab, true);
-            styleTabChip(pendingTab, false);
-        });
-
-        pendingTab.setOnAction(e -> {
-            friendsPane.setVisible(false);
-            friendsPane.setManaged(false);
-            currentCirclePendingPane.setVisible(true);
-            currentCirclePendingPane.setManaged(true);
-            styleTabChip(friendsTab, false);
-            styleTabChip(pendingTab, true);
-        });
+        StackPane listFace = new StackPane(friendsGrid, pendingList);
+        pendingList.setVisible(false);
+        pendingList.setManaged(false);
 
         VBox search = new VBox(10);
         search.setPadding(new Insets(14));
         search.setStyle(shell(18, surfaceSoft(), 0.16));
-        currentCircleSearchField = new TextField();
-        currentCircleSearchField.setPromptText("Search residents by name...");
-        currentCircleSearchField.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.06); -fx-text-fill: #ffffff; -fx-background-radius: 14px; -fx-border-radius: 14px; -fx-border-color: rgba(255,255,255,0.08); -fx-padding: 10 12 10 12;");
-        Button searchBtn = new Button("Explore Community");
-        searchBtn.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient()
-                + "; -fx-text-fill: #ffffff; -fx-font-weight: 800; -fx-background-radius: 14px; -fx-padding: 10 16 10 16;");
-        currentCircleSearchResultsBox = new VBox(10);
+        Text searchTitle = text("Explore Community", 13, true, "#ffffff");
+        Text searchSub = text("Search residents and send connection requests.", 12, false, textMuted());
 
-        Runnable runSearch = () -> populateResidentSearchResults(currentCircleSearchResultsBox,
-                currentCircleSearchField.getText());
-        searchBtn.setOnAction(e -> runSearch.run());
-        currentCircleSearchField.setOnAction(e -> runSearch.run());
-        currentCircleSearchField.textProperty().addListener((obs, oldValue, newValue) -> runSearch.run());
+        javafx.scene.control.TextField searchField = new javafx.scene.control.TextField();
+        searchField.setPromptText("Search by name...");
+        searchField.setStyle(
+            "-fx-padding: 9 12 9 12;" +
+            "-fx-background-color: rgba(255,255,255,0.05);" +
+            "-fx-text-fill: white;" +
+            "-fx-border-color: rgba(255,255,255,0.12);" +
+            "-fx-border-width: 1;" +
+            "-fx-background-radius: 12; -fx-border-radius: 12;"
+        );
 
-        search.getChildren().addAll(
-                text("Explore Community", 13, true, "#ffffff"),
-                text("Search residents and send connection requests.", 12, false, textMuted()),
-                currentCircleSearchField,
-                searchBtn,
-                currentCircleSearchResultsBox);
-        populateResidentSearchResults(currentCircleSearchResultsBox, "");
+        VBox searchResults = new VBox(8);
 
-        card.getChildren().addAll(top, switcher, friendsPane, currentCirclePendingPane, search);
+        Runnable[] refreshCircle = new Runnable[1];
+        Runnable[] refreshSearch = new Runnable[1];
+        int[] previousFriendCount = new int[] { -1 };
+        int[] previousPendingCount = new int[] { -1 };
+
+        refreshCircle[0] = () -> {
+            int friendCount = relationshipController.countFriends(currentUser);
+            int pendingCount = relationshipController.countPendingRequests(currentUser);
+            friendsBadge.setText(friendCount + " FRIENDS");
+            pendingBadge.setText(pendingCount + " PENDING");
+            if (previousFriendCount[0] != -1 && previousFriendCount[0] != friendCount) {
+                animateBadgePulse(friendsBadge);
+            }
+            if (previousPendingCount[0] != -1 && previousPendingCount[0] != pendingCount) {
+                animateBadgePulse(pendingBadge);
+            }
+            previousFriendCount[0] = friendCount;
+            previousPendingCount[0] = pendingCount;
+
+            friendsGrid.getChildren().clear();
+            List<User> friends = relationshipController.findFriends(currentUser, 24);
+            int col = 0;
+            int row = 0;
+            for (User friend : friends) {
+                VBox friendItem = circleFriendCard(friend, () -> {
+                    relationshipController.removeConnection(currentUser.getIdUser(), friend.getIdUser());
+                    refreshCircle[0].run();
+                    refreshSearch[0].run();
+                });
+                friendsGrid.add(friendItem, col, row);
+                col++;
+                if (col >= 4) {
+                    col = 0;
+                    row++;
+                }
+            }
+
+            if (friends.isEmpty()) {
+                friendsGrid.add(text("No friends yet.", 12, false, textMuted()), 0, 0);
+            }
+
+            pendingList.getChildren().clear();
+            List<UserRelationship> pending = relationshipController.findPendingRequestsFor(currentUser);
+            for (UserRelationship relationship : pending) {
+                Integer firstId = relationship.getUserFirstId();
+                Integer secondId = relationship.getUserSecondId();
+                if (firstId == null || secondId == null) {
+                    continue;
+                }
+
+                boolean incoming = secondId.equals(currentUser.getIdUser());
+                int otherId = incoming ? firstId : secondId;
+                Optional<User> otherUser = userController.findById(otherId);
+                if (otherUser.isEmpty()) {
+                    continue;
+                }
+
+                pendingList.getChildren().add(circlePendingRow(
+                    otherUser.get(),
+                    incoming,
+                    () -> {
+                        if (relationship.getId() != null) {
+                            relationshipController.acceptRequest(relationship.getId(), currentUser.getIdUser());
+                            refreshCircle[0].run();
+                            refreshSearch[0].run();
+                        }
+                    },
+                    () -> {
+                        relationshipController.removeConnection(currentUser.getIdUser(), otherUser.get().getIdUser());
+                        refreshCircle[0].run();
+                        refreshSearch[0].run();
+                    }
+                ));
+            }
+
+            if (pendingList.getChildren().isEmpty()) {
+                pendingList.getChildren().add(text("No pending requests.", 12, false, textMuted()));
+            }
+        };
+
+        refreshSearch[0] = () -> {
+            searchResults.getChildren().clear();
+            String query = searchField.getText() == null ? "" : searchField.getText().trim();
+            if (query.isEmpty()) {
+                searchResults.getChildren().add(text("Start typing to discover residents.", 11, false, textMuted()));
+                return;
+            }
+
+            List<User> users = userController.searchByName(query, currentUser.getIdUser(), 8);
+            if (users.isEmpty()) {
+                searchResults.getChildren().add(text("No users found.", 11, false, textMuted()));
+                return;
+            }
+
+            for (User candidate : users) {
+                if (candidate.getIdUser() == null || candidate.getIdUser().equals(currentUser.getIdUser())) {
+                    continue;
+                }
+
+                Optional<UserRelationship> relationshipOpt = relationshipController.findRelationship(currentUser.getIdUser(), candidate.getIdUser());
+                String actionLabel = relationshipController.getRelationshipLabel(currentUser.getIdUser(), candidate.getIdUser());
+                Button actionBtn = new Button(actionLabel);
+                actionBtn.setStyle(
+                    "-fx-padding: 7 12 7 12;" +
+                    "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+                    "-fx-text-fill: white; -fx-font-weight: 800;" +
+                    "-fx-background-radius: 12; -fx-cursor: hand;"
+                );
+
+                actionBtn.setOnAction(evt -> {
+                    String state = relationshipController.getRelationshipState(currentUser.getIdUser(), candidate.getIdUser());
+                    boolean done;
+                    switch (state) {
+                        case "NONE" -> done = relationshipController.sendFriendRequest(currentUser.getIdUser(), candidate.getIdUser());
+                        case "FRIENDS" -> done = relationshipController.removeConnection(currentUser.getIdUser(), candidate.getIdUser());
+                        case "PENDING" -> done = relationshipController.removeConnection(currentUser.getIdUser(), candidate.getIdUser());
+                        default -> done = false;
+                    }
+
+                    if (!done) {
+                        showAvatarAlert(Alert.AlertType.ERROR, "Circle", "Could not update relationship.");
+                        return;
+                    }
+                    refreshCircle[0].run();
+                    refreshSearch[0].run();
+                });
+
+                if ("BLOCKED".equals(relationshipController.getRelationshipState(currentUser.getIdUser(), candidate.getIdUser()))) {
+                    actionBtn.setDisable(true);
+                }
+
+                searchResults.getChildren().add(circleSearchRow(candidate, relationshipOpt, actionBtn, currentUser, () -> {
+                    refreshCircle[0].run();
+                    refreshSearch[0].run();
+                }));
+            }
+        };
+
+        javafx.animation.PauseTransition searchDebounce = new javafx.animation.PauseTransition(javafx.util.Duration.millis(220));
+        searchDebounce.setOnFinished(e -> refreshSearch[0].run());
+        searchField.textProperty().addListener((obs, oldValue, newValue) -> searchDebounce.playFromStart());
+
+        friendsTab.setOnAction(e -> {
+            styleCircleTabButton(friendsTab, true);
+            styleCircleTabButton(pendingTab, false);
+            animateCircleFace(pendingList, friendsGrid);
+        });
+
+        pendingTab.setOnAction(e -> {
+            styleCircleTabButton(friendsTab, false);
+            styleCircleTabButton(pendingTab, true);
+            animateCircleFace(friendsGrid, pendingList);
+        });
+
+        refreshCircle[0].run();
+        refreshSearch[0].run();
+
+        search.getChildren().addAll(searchTitle, searchSub, searchField, searchResults);
+
+        card.getChildren().addAll(top, switcher, listFace, search);
         return card;
+    }
+
+    private void styleCircleTabButton(Button btn, boolean active) {
+        String background = active ? tm.getEffectiveAccentGradient() : surfaceSoft();
+        String textFill = active ? "white" : textMuted();
+        btn.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-text-fill: " + textFill + ";" +
+            "-fx-font-weight: 800; -fx-background-radius: 12px; -fx-padding: 8 12 8 12;"
+        );
+    }
+
+    private VBox circleFriendCard(User friend, Runnable onRemove) {
+        String fullName = ((friend.getFirstName() == null ? "" : friend.getFirstName()) + " " + (friend.getLastName() == null ? "" : friend.getLastName())).trim();
+        String display = fullName.isBlank() ? "User" : fullName;
+
+        VBox c = new VBox(8);
+        c.setPadding(new Insets(10));
+        c.setAlignment(Pos.CENTER_LEFT);
+        c.setStyle(shell(14, "rgba(255,255,255,0.03)", 0.10));
+
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+        StackPane avatar = circleAvatarNode(friend, display, 38, 14);
+
+        VBox meta = new VBox(2);
+        meta.getChildren().addAll(
+            text(display, 11, true, "#ffffff"),
+            text(friend.getEmailUser() == null ? "" : friend.getEmailUser(), 10, false, textMuted())
+        );
+        row.getChildren().addAll(avatar, meta);
+
+        Button removeBtn = new Button("Remove");
+        removeBtn.setStyle(
+            "-fx-padding: 6 10 6 10;" +
+            "-fx-background-color: rgba(255,255,255,0.08);" +
+            "-fx-text-fill: white; -fx-font-weight: 800;" +
+            "-fx-background-radius: 10; -fx-cursor: hand;"
+        );
+        removeBtn.setOnAction(e -> onRemove.run());
+
+        c.getChildren().addAll(row, removeBtn);
+        return c;
+    }
+
+    private HBox circlePendingRow(User otherUser, boolean incoming, Runnable onAccept, Runnable onDeclineOrCancel) {
+        String fullName = ((otherUser.getFirstName() == null ? "" : otherUser.getFirstName()) + " " + (otherUser.getLastName() == null ? "" : otherUser.getLastName())).trim();
+        String display = fullName.isBlank() ? "User" : fullName;
+
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(10));
+        row.setStyle(shell(12, "rgba(255,255,255,0.03)", 0.10));
+
+        StackPane avatar = circleAvatarNode(otherUser, display, 34, 12);
+
+        VBox meta = new VBox(2);
+        meta.getChildren().addAll(
+            text(display, 12, true, "#ffffff"),
+            text(incoming ? "Incoming request" : "Sent request", 10, false, textMuted())
+        );
+        HBox.setHgrow(meta, Priority.ALWAYS);
+
+        HBox actions = new HBox(8);
+        if (incoming) {
+            Button accept = new Button("Accept");
+            accept.setStyle(
+                "-fx-padding: 6 10 6 10;" +
+                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+                "-fx-text-fill: white; -fx-font-weight: 800;" +
+                "-fx-background-radius: 10; -fx-cursor: hand;"
+            );
+            accept.setOnAction(e -> onAccept.run());
+            actions.getChildren().add(accept);
+        }
+
+        Button decline = new Button(incoming ? "Decline" : "Cancel");
+        decline.setStyle(
+            "-fx-padding: 6 10 6 10;" +
+            "-fx-background-color: rgba(255,255,255,0.08);" +
+            "-fx-text-fill: white; -fx-font-weight: 800;" +
+            "-fx-background-radius: 10; -fx-cursor: hand;"
+        );
+        decline.setOnAction(e -> onDeclineOrCancel.run());
+        actions.getChildren().add(decline);
+
+        row.getChildren().addAll(avatar, meta, actions);
+        return row;
+    }
+
+    private HBox circleSearchRow(User candidate, Optional<UserRelationship> relationshipOpt, Button actionBtn, User currentUser, Runnable onRefresh) {
+        String fullName = ((candidate.getFirstName() == null ? "" : candidate.getFirstName()) + " " + (candidate.getLastName() == null ? "" : candidate.getLastName())).trim();
+        String display = fullName.isBlank() ? "User" : fullName;
+
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8));
+        row.setStyle(shell(10, "rgba(255,255,255,0.03)", 0.08));
+
+        StackPane avatar = circleAvatarNode(candidate, display, 32, 12);
+
+        VBox meta = new VBox(1);
+        meta.getChildren().addAll(
+            text(display, 11, true, "#ffffff"),
+            text(candidate.getEmailUser() == null ? "" : candidate.getEmailUser(), 10, false, textMuted())
+        );
+        HBox.setHgrow(meta, Priority.ALWAYS);
+
+        if (relationshipOpt.isPresent()) {
+            UserRelationship r = relationshipOpt.get();
+            boolean incoming = r.getUserSecondId() != null && r.getUserSecondId().equals(currentUser.getIdUser())
+                && "PENDING_FIRST_SECOND".equalsIgnoreCase(r.getStatus());
+            if (incoming && r.getId() != null) {
+                Button acceptBtn = new Button("Accept");
+                acceptBtn.setStyle(
+                    "-fx-padding: 6 10 6 10;" +
+                    "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+                    "-fx-text-fill: white; -fx-font-weight: 800;" +
+                    "-fx-background-radius: 10; -fx-cursor: hand;"
+                );
+                UserRelationshipController relationshipController = new UserRelationshipController();
+                acceptBtn.setOnAction(e -> {
+                    relationshipController.acceptRequest(r.getId(), currentUser.getIdUser());
+                    onRefresh.run();
+                });
+                row.getChildren().addAll(avatar, meta, acceptBtn, actionBtn);
+                return row;
+            }
+        }
+
+        row.getChildren().addAll(avatar, meta, actionBtn);
+        return row;
     }
 
     private VBox createActivityPage() {
@@ -1898,13 +898,14 @@ public class ProfileView implements ViewInterface {
         tabNav.setMaxWidth(1120);
         tabNav.setStyle(shell(999, "rgba(255,255,255,0.04)", 0.1));
 
-        addDetailTab(tabNav, "Account", "account", createAccountTab());
-        addDetailTab(tabNav, "Forum", "forum", createForumTab());
-        addDetailTab(tabNav, "Events", "events", createEventsTab());
-        addDetailTab(tabNav, "Reclamation", "reclamation", createReclamationTab());
+        addDetailTab(tabNav, "Account", "account", new ProfileAccountSection().getRoot());
+        addDetailTab(tabNav, "Forum", "forum", new ProfileForumSectionEnhanced().getRoot());
+        addDetailTab(tabNav, "Events", "events", new ProfileEventsSectionEnhanced().getRoot());
+        addDetailTab(tabNav, "Reclamation", "reclamation", new ProfileReclamationSectionEnhanced().getRoot());
         addDetailTab(tabNav, "Residence", "residence", createResidenceTab());
 
         VBox wrapper = new VBox(0);
+        wrapper.setAlignment(Pos.TOP_CENTER);
         wrapper.setMaxWidth(1800);
         wrapper.prefWidthProperty().bind(root.widthProperty().multiply(0.95));
         wrapper.getChildren().addAll(tabNav);
@@ -1927,7 +928,6 @@ public class ProfileView implements ViewInterface {
     }
 
     private void setDetailTab(String key) {
-        currentDetailTabName = key;
         detailTabs.forEach((name, pane) -> {
             boolean active = name.equals(key);
             pane.setVisible(active);
@@ -1937,216 +937,13 @@ public class ProfileView implements ViewInterface {
     }
 
     private void styleDetailTabButton(Button btn, boolean active) {
-        btn.setStyle((active
-                ? "-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white;"
-                : "-fx-background-color: transparent; -fx-text-fill: " + textMuted() + ";")
-                + "-fx-font-weight: 800; -fx-background-radius: 999px; -fx-padding: 11 18 11 18;");
-    }
-
-    private VBox createAccountTab() {
-        VBox tab = new VBox(16);
-        tab.setPadding(new Insets(16, 0, 0, 0));
-
-        VBox account = cardShell();
-        account.setPadding(new Insets(22));
-        account.getChildren().addAll(
-                text("Account", 24, true, "#ffffff"),
-                infoLine("First name", displayFirstName()),
-                infoLine("Last name", displayLastName()),
-                infoLine("Email", displayEmail()),
-                infoLine("Role", displayRole()),
-                infoLine("Verified", displayVerified()),
-                infoLine("Account created", displayCreatedAt()),
-                infoLine("Bio", displayBio()),
-                infoLine("Timezone", displayTimezone()),
-                infoLine("Phone", displayPhone()));
-
-        Map<String, String> onboardingSummary = loadOnboardingSummary();
-
-        VBox onboarding = cardShell();
-        onboarding.setPadding(new Insets(22));
-
-        HBox onboardingHeader = new HBox();
-        onboardingHeader.setAlignment(Pos.CENTER_LEFT);
-        onboardingHeader.setSpacing(12);
-        VBox headerLeft = new VBox(4);
-        headerLeft.setAlignment(Pos.TOP_LEFT);
-        headerLeft.getChildren().addAll(
-                text("Your onboarding choices", 22, true, "#ffffff"),
-                text("Review and edit the choices you made during onboarding.", 13, false, textSoft()));
-        HBox.setHgrow(headerLeft, Priority.ALWAYS);
-
-        Button editOnboardingBtn = new Button("✎ Modify");
-        editOnboardingBtn.setStyle(
-                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
-                        "-fx-text-fill: " + tm.getAccentHex() + ";" +
-                        "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
-                        "-fx-border-width: 1px;" +
-                        "-fx-background-radius: 12px;" +
-                        "-fx-border-radius: 12px;" +
-                        "-fx-padding: 10 16 10 16;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 12px;");
-        editOnboardingBtn.setCursor(javafx.scene.Cursor.HAND);
-        editOnboardingBtn.setOnAction(e -> showOnboardingOverlay());
-        editOnboardingBtn.setOnMouseEntered(e -> editOnboardingBtn.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: white;" +
-                        "-fx-border-color: transparent;" +
-                        "-fx-background-radius: 12px;" +
-                        "-fx-border-radius: 12px;" +
-                        "-fx-padding: 10 16 10 16;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 12px;"));
-        editOnboardingBtn.setOnMouseExited(e -> editOnboardingBtn.setStyle(
-                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
-                        "-fx-text-fill: " + tm.getAccentHex() + ";" +
-                        "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
-                        "-fx-border-width: 1px;" +
-                        "-fx-background-radius: 12px;" +
-                        "-fx-border-radius: 12px;" +
-                        "-fx-padding: 10 16 10 16;" +
-                        "-fx-font-weight: 700;" +
-                        "-fx-font-size: 12px;"));
-
-        onboardingHeader.getChildren().addAll(headerLeft, editOnboardingBtn);
-
-        GridPane prefGrid = new GridPane();
-        prefGrid.setHgap(10);
-        prefGrid.setVgap(10);
-        for (int i = 0; i < 4; i++) {
-            ColumnConstraints column = new ColumnConstraints();
-            column.setPercentWidth(25);
-            prefGrid.getColumnConstraints().add(column);
-        }
-
-        prefGrid.add(pillCard("Language", onboardingSummary.get("Language")), 0, 0);
-        prefGrid.add(pillCard("Theme", onboardingSummary.get("Theme")), 1, 0);
-        prefGrid.add(pillCard("Notification", onboardingSummary.get("Notification")), 2, 0);
-        prefGrid.add(pillCard("Frequency", onboardingSummary.get("Frequency")), 3, 0);
-        prefGrid.add(pillCard("Property", onboardingSummary.get("Property")), 0, 1);
-        prefGrid.add(pillCard("Occupancy", onboardingSummary.get("Occupancy")), 1, 1);
-        prefGrid.add(pillCard("Parking", onboardingSummary.get("Parking")), 2, 1);
-        prefGrid.add(pillCard("Meeting", onboardingSummary.get("Meeting")), 3, 1);
-        prefGrid.add(pillCard("Delivery", onboardingSummary.get("Delivery")), 0, 2);
-        prefGrid.add(pillCard("Contact", onboardingSummary.get("Contact")), 1, 2);
-        prefGrid.add(pillCard("Maintenance", onboardingSummary.get("Maintenance")), 2, 2);
-        prefGrid.add(pillCard("Community", onboardingSummary.get("Community")), 3, 2);
-        prefGrid.add(pillCard("Payment", onboardingSummary.get("Payment")), 0, 3);
-        prefGrid.add(pillCard("Noise", onboardingSummary.get("Noise")), 1, 3);
-        prefGrid.add(pillCard("Pets", onboardingSummary.get("Pets")), 2, 3);
-        prefGrid.add(pillCard("Accessibility", onboardingSummary.get("Accessibility")), 3, 3);
-
-        onboarding.getChildren().addAll(
-                onboardingHeader,
-                prefGrid,
-                pillCard("Suggestions", onboardingSummary.get("Suggestions")));
-
-        tab.getChildren().addAll(account, onboarding);
-        return tab;
-    }
-
-    private VBox createForumTab() {
-        VBox tab = new VBox(16);
-        tab.setPadding(new Insets(16, 0, 0, 0));
-
-        VBox card = cardShell();
-        card.setPadding(new Insets(22));
-        card.getChildren().add(text("Your Forum Activity", 24, true, "#ffffff"));
-
-        HBox categoryFilters = new HBox(8,
-                smallPill("Announcements", false),
-                smallPill("General", true));
-
-        HBox subTabs = new HBox(8,
-                forumTabPill("Publications (2)", true),
-                forumTabPill("Comments (1)", false),
-                forumTabPill("Reactions (1)", false),
-                forumTabPill("Bookmarks (1)", false));
-        subTabs.setPadding(new Insets(6));
-        subTabs.setStyle(shell(999, surfaceSoft(), 0.16));
-
-        VBox publicationList = new VBox(10,
-                forumItem("Publication", "How to improve building communication?", "General", "15 Mar 2026"),
-                forumItem("Publication", "Monthly budget summary and maintenance", "Announcement", "09 Mar 2026"));
-
-        HBox pagination = new HBox(8,
-                pagePill("1", true),
-                pagePill("2", false),
-                pagePill("3", false));
-        pagination.setAlignment(Pos.CENTER);
-        pagination.setPadding(new Insets(8));
-        pagination.setMaxWidth(220);
-        pagination.setStyle(shell(999, surfaceSoft(), 0.16));
-
-        card.getChildren().addAll(categoryFilters, subTabs, publicationList, pagination);
-
-        tab.getChildren().add(card);
-        return tab;
-    }
-
-    private VBox createEventsTab() {
-        VBox tab = new VBox(16);
-        tab.setPadding(new Insets(16, 0, 0, 0));
-
-        VBox card = cardShell();
-        card.setPadding(new Insets(22));
-        card.getChildren().add(text("Your Events", 24, true, "#ffffff"));
-        card.getChildren()
-                .add(eventItem("Community rooftop meetup", "16 Mar 2026, 19:00", "Rooftop", "Planned", "Social"));
-        card.getChildren().add(
-                eventItem("Monthly co-owners assembly", "21 Mar 2026, 10:00", "Main Hall", "In progress", "Meeting"));
-        card.getChildren().add(eventItem("Emergency drill", "03 Mar 2026, 08:00", "Block C", "Completed", "Safety"));
-
-        HBox pagination = new HBox(8, pagePill("1", true), pagePill("2", false));
-        pagination.setAlignment(Pos.CENTER);
-        pagination.setPadding(new Insets(8));
-        pagination.setMaxWidth(170);
-        pagination.setStyle(shell(999, surfaceSoft(), 0.16));
-        card.getChildren().add(pagination);
-
-        tab.getChildren().add(card);
-        return tab;
-    }
-
-    private VBox createReclamationTab() {
-        VBox tab = new VBox(16);
-        tab.setPadding(new Insets(16, 0, 0, 0));
-
-        VBox card = cardShell();
-        card.setPadding(new Insets(22));
-        card.getChildren().add(text("Your Reclamations", 24, true, "#ffffff"));
-
-        com.syndicati.services.ReclamationService rs = com.syndicati.services.ReclamationService.getInstance();
-        int userId = (currentUser != null && currentUser.getIdUser() != null) ? currentUser.getIdUser() : 6;
-        java.util.List<com.syndicati.models.entities.Reclamation> myReclamations = rs.getReclamationsByUserId(userId);
-
-        if (myReclamations.isEmpty()) {
-            card.getChildren().add(text("No reclamations found.", 14, false, textMuted()));
-        } else {
-            for (com.syndicati.models.entities.Reclamation rec : myReclamations) {
-                String title = rec.getTitrereclamations();
-                String status = rec.getStatutreclamation();
-                String desc = rec.getDescreclamation() != null ? rec.getDescreclamation() : "";
-                if (desc.length() > 30) {
-                    desc = desc.substring(0, 30) + "...";
-                }
-                String dateStr = (rec.getCreatedAt() != null)
-                        ? rec.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
-                        : "";
-                card.getChildren().add(reclamationItem(rec, title, desc, status, "Submitted on " + dateStr));
-            }
-        }
-
-        HBox pagination = new HBox(8, pagePill("1", true));
-        pagination.setAlignment(Pos.CENTER);
-        pagination.setPadding(new Insets(8));
-        pagination.setMaxWidth(170);
-        pagination.setStyle(shell(999, surfaceSoft(), 0.16));
-        card.getChildren().add(pagination);
-
-        tab.getChildren().add(card);
-        return tab;
+        String background = active ? tm.getEffectiveAccentGradient() : "transparent";
+        String textFill = active ? "white" : textMuted();
+        btn.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-text-fill: " + textFill + ";" +
+            "-fx-font-weight: 800; -fx-background-radius: 999px; -fx-padding: 11 18 11 18;"
+        );
     }
 
     private VBox createResidenceTab() {
@@ -2156,8 +953,7 @@ public class ProfileView implements ViewInterface {
         VBox card = cardShell();
         card.setPadding(new Insets(22));
         card.getChildren().add(text("Your Residences", 24, true, "#ffffff"));
-        card.getChildren()
-                .add(residenceItem("Horizon Gardens", "Bloc A - Apt 302", "Owner", "Available", "Parking: Yes"));
+        card.getChildren().add(residenceItem("Horizon Gardens", "Bloc A - Apt 302", "Owner", "Available", "Parking: Yes"));
         card.getChildren().add(residenceItem("Horizon Park", "Bloc C - Apt 104", "Tenant", "Occupied", "Parking: No"));
 
         tab.getChildren().add(card);
@@ -2180,8 +976,9 @@ public class ProfileView implements ViewInterface {
         row.setPadding(new Insets(14));
         row.setStyle(shell(14, tm.toRgba(tm.getAccentHex(), 0.06), 0.13));
         row.getChildren().addAll(
-                text(type + " - " + status, 11, true, tm.getAccentHex()),
-                text(title, 14, true, "#ffffff"));
+            text(type + " - " + status, 11, true, tm.getAccentHex()),
+            text(title, 14, true, "#ffffff")
+        );
         return row;
     }
 
@@ -2212,8 +1009,9 @@ public class ProfileView implements ViewInterface {
         iconWrap.setStyle(shell(10, tm.toRgba(tm.getAccentHex(), 0.10), 0.18));
 
         VBox titleMeta = new VBox(5,
-                text(title, 15, true, "#ffffff"),
-                text(date + " | " + location, 12, false, textMuted()));
+            text(title, 15, true, "#ffffff"),
+            text(date + " | " + location, 12, false, textMuted())
+        );
         HBox.setHgrow(titleMeta, Priority.ALWAYS);
 
         Text statusTag = text(status, 11, true, "#ffffff");
@@ -2226,153 +1024,19 @@ public class ProfileView implements ViewInterface {
         return row;
     }
 
-    private VBox reclamationItem(com.syndicati.models.entities.Reclamation rec, String title, String description,
-            String status, String submitted) {
+    private VBox reclamationItem(String title, String status, String submitted) {
         VBox row = new VBox(8);
         row.setPadding(new Insets(16));
         row.setStyle(shell(16, "rgba(255,255,255,0.03)", 0.08));
 
-        HBox top = new HBox(12); // Spacing between elements
-        top.setAlignment(Pos.CENTER_LEFT);
-
-        Text titleText = text(title, 14, true, textDefault());
-        top.getChildren().add(titleText);
-
-        if (description != null && !description.isBlank()) {
-            Text descText = text(description, 13, false, textMuted());
-            top.getChildren().add(descText);
-        }
-
+        HBox top = new HBox();
+        Text titleText = text(title, 14, true, "#ffffff");
         Text statusText = text(status, 11, true, tm.getAccentHex());
-        top.getChildren().add(statusText);
-
-        javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Button detailsBtn = new Button("Details");
-        detailsBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: #22c55e; -fx-font-weight: 800; -fx-border-color: #22c55e; -fx-border-radius: 6px; -fx-padding: 4 10 4 10;");
-        detailsBtn.setCursor(javafx.scene.Cursor.HAND);
-        detailsBtn.setOnAction(e -> showReclamationDetailsModal(rec));
-
-        Button deleteBtn = new Button("Delete");
-        deleteBtn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: #ef4444; -fx-font-weight: 800; -fx-border-color: #ef4444; -fx-border-radius: 6px; -fx-padding: 4 10 4 10;");
-        deleteBtn.setCursor(javafx.scene.Cursor.HAND);
-        deleteBtn.setOnAction(e -> {
-            if (com.syndicati.services.ReclamationService.getInstance().deleteReclamation(rec.getIdreclamations())) {
-                refreshProfileContent();
-            } else {
-                showAlert("Error", "Could not delete reclamation.");
-            }
-        });
-
-        top.getChildren().addAll(spacer, detailsBtn, deleteBtn);
+        HBox.setHgrow(titleText, Priority.ALWAYS);
+        top.getChildren().addAll(titleText, statusText);
 
         row.getChildren().addAll(top, text(submitted, 12, false, textMuted()));
         return row;
-    }
-
-    private void showReclamationDetailsModal(com.syndicati.models.entities.Reclamation rec) {
-        Stage modal = new Stage(StageStyle.TRANSPARENT);
-        if (root.getScene() != null && root.getScene().getWindow() != null) {
-            modal.initOwner(root.getScene().getWindow());
-        }
-        modal.initModality(Modality.APPLICATION_MODAL);
-
-        VBox content = new VBox(12);
-        content.setPadding(new Insets(18));
-        content.setStyle(shell(16, "rgba(15,23,42,0.96)", 0.28));
-
-        String title = rec.getTitrereclamations() == null ? "-" : rec.getTitrereclamations();
-        String desc = rec.getDescreclamation() == null ? "-" : rec.getDescreclamation();
-        String status = rec.getStatutreclamation() == null ? "-" : rec.getStatutreclamation();
-        String created = rec.getCreatedAt() == null ? "-"
-                : rec.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"));
-
-        content.getChildren().addAll(
-                text("Reclamation Details", 18, true, "#ffffff"),
-                text("Title: " + title, 13, true, "#ffffff"),
-                text("Status: " + status, 12, true, tm.getAccentHex()),
-                text("Submitted: " + created, 12, false, textMuted()),
-                text("Description: " + desc, 13, false, textMuted()));
-
-        String imagePath = rec.getImagereclamation();
-        Image image = resolveUploadedImage(imagePath);
-        if (image != null) {
-            ImageView imageView = new ImageView(image);
-            imageView.setFitWidth(300);
-            imageView.setFitHeight(300);
-            imageView.setPreserveRatio(false);
-            Rectangle clip = new Rectangle(300, 300);
-            clip.setArcWidth(12);
-            clip.setArcHeight(12);
-            imageView.setClip(clip);
-            content.getChildren().addAll(text("Image", 13, true, "#ffffff"), imageView);
-        }
-
-        content.getChildren().add(text("Responses", 16, true, "#ffffff"));
-        java.util.List<com.syndicati.models.entities.Reponse> allResponses = com.syndicati.services.ReponseService
-                .getInstance().getAllReponses();
-        boolean found = false;
-        for (com.syndicati.models.entities.Reponse rep : allResponses) {
-            if (rep.getReclamationId() == rec.getIdreclamations()) {
-                found = true;
-                VBox responseCard = new VBox(4);
-                responseCard.setPadding(new Insets(10));
-                responseCard.setStyle(shell(10, "rgba(255,255,255,0.04)", 0.10));
-                String repTitle = rep.getTitrereponse() == null || rep.getTitrereponse().isBlank() ? "-"
-                        : rep.getTitrereponse();
-                String repMsg = rep.getMessagereponse() == null ? "-" : rep.getMessagereponse();
-                String repDate = rep.getCreatedAt() == null ? "-"
-                        : rep.getCreatedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"));
-                responseCard.getChildren().addAll(
-                        text("Title: " + repTitle, 13, true, "#ffffff"),
-                        text("Message: " + repMsg, 12, false, textMuted()),
-                        text("Date: " + repDate, 11, false, textMuted()));
-                content.getChildren().add(responseCard);
-            }
-        }
-        if (!found) {
-            content.getChildren().add(text("No responses yet.", 12, false, textMuted()));
-        }
-
-        Button close = new Button("Close");
-        close.setStyle(buttonStyle(true));
-        close.setOnAction(e -> modal.close());
-        content.getChildren().add(close);
-
-        ScrollPane scroll = new ScrollPane(content);
-        scroll.setFitToWidth(true);
-        scroll.setPrefViewportHeight(620);
-        scroll.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
-
-        StackPane rootPane = new StackPane(scroll);
-        rootPane.setPadding(new Insets(16));
-        rootPane.setStyle("-fx-background-color: rgba(3,7,18,0.65);");
-
-        Scene scene = new Scene(rootPane, 760, 720);
-        scene.setFill(Color.TRANSPARENT);
-        modal.setScene(scene);
-        modal.showAndWait();
-    }
-
-    private Image resolveUploadedImage(String imagePath) {
-        if (imagePath == null || imagePath.isBlank()) {
-            return null;
-        }
-        Image image = ImageLoaderUtil.loadImage(imagePath, true);
-        if (image != null) {
-            return image;
-        }
-        String normalized = imagePath.replace("\\", "/");
-        if (!normalized.contains("/")) {
-            image = ImageLoaderUtil.loadImage("uploads/reclamation_images/" + normalized, true);
-            if (image != null)
-                return image;
-            image = ImageLoaderUtil.loadImage("uploads/reponse_images/" + normalized, true);
-        }
-        return image;
     }
 
     private VBox residenceItem(String residence, String unit, String relation, String availability, String parking) {
@@ -2382,8 +1046,9 @@ public class ProfileView implements ViewInterface {
 
         HBox top = new HBox();
         VBox info = new VBox(4,
-                text(residence, 15, true, "#ffffff"),
-                text(unit, 12, false, textMuted()));
+            text(residence, 15, true, "#ffffff"),
+            text(unit, 12, false, textMuted())
+        );
         HBox.setHgrow(info, Priority.ALWAYS);
         Text relationTag = text(relation, 11, true, tm.getAccentHex());
         top.getChildren().addAll(info, relationTag);
@@ -2394,8 +1059,9 @@ public class ProfileView implements ViewInterface {
 
     private VBox pillCard(String label, String value) {
         VBox pill = new VBox(4,
-                text(label, 11, true, textMuted()),
-                text(value, 13, true, "#ffffff"));
+            text(label, 11, true, textMuted()),
+            text(value, 13, true, "#ffffff")
+        );
         pill.setPadding(new Insets(10, 12, 10, 12));
         pill.setStyle(shell(12, "rgba(255,255,255,0.04)", 0.09));
         return pill;
@@ -2403,30 +1069,670 @@ public class ProfileView implements ViewInterface {
 
     private Button smallPill(String text, boolean active) {
         Button b = new Button(text);
-        b.setStyle((active
-                ? "-fx-background-color: rgba(255,255,255,0.15); -fx-text-fill: #ffffff;"
-                : "-fx-background-color: transparent; -fx-text-fill: " + textMuted() + ";")
-                + "-fx-font-size: 11px; -fx-font-weight: 700; -fx-background-radius: 999px; -fx-padding: 7 12 7 12;");
+        String background = active ? "rgba(255,255,255,0.15)" : "transparent";
+        String textFill = active ? "#ffffff" : textMuted();
+        b.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-text-fill: " + textFill + ";" +
+            "-fx-font-size: 11px; -fx-font-weight: 700; -fx-background-radius: 999px; -fx-padding: 7 12 7 12;"
+        );
         return b;
     }
 
     private Button forumTabPill(String text, boolean active) {
         Button b = new Button(text);
-        b.setStyle((active
-                ? "-fx-background-color: rgba(255,255,255,0.10); -fx-text-fill: #ffffff;"
-                : "-fx-background-color: transparent; -fx-text-fill: " + textMuted() + ";")
-                + "-fx-font-size: 11px; -fx-font-weight: 700; -fx-background-radius: 999px; -fx-padding: 9 12 9 12;");
+        String background = active ? "rgba(255,255,255,0.10)" : "transparent";
+        String textFill = active ? "#ffffff" : textMuted();
+        b.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-text-fill: " + textFill + ";" +
+            "-fx-font-size: 11px; -fx-font-weight: 700; -fx-background-radius: 999px; -fx-padding: 9 12 9 12;"
+        );
         return b;
     }
 
     private Button pagePill(String text, boolean active) {
         Button b = new Button(text);
         b.setMinSize(34, 34);
-        b.setStyle((active
-                ? "-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: #ffffff;"
-                : "-fx-background-color: transparent; -fx-text-fill: " + textMuted() + ";")
-                + "-fx-font-size: 11px; -fx-font-weight: 800; -fx-background-radius: 999px;");
+        String background = active ? tm.getEffectiveAccentGradient() : "transparent";
+        String textFill = active ? "#ffffff" : textMuted();
+        b.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-text-fill: " + textFill + ";" +
+            "-fx-font-size: 11px; -fx-font-weight: 800; -fx-background-radius: 999px;"
+        );
         return b;
+    }
+
+    private VBox createActionTile(String label, String actionId, VBox switcherView, Button showActionsBtn) {
+        VBox tile = new VBox(6);
+        tile.setAlignment(Pos.CENTER);
+        tile.setPadding(new Insets(13, 8, 13, 8));
+        tile.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.04);" +
+            "-fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1px;" +
+            "-fx-background-radius: 16px; -fx-border-radius: 16px;"
+        );
+        tile.setCursor(javafx.scene.Cursor.HAND);
+        tile.setMinHeight(78);
+        
+        javafx.scene.text.Text icon = text(label.split(" ")[0], 18, true, tm.getAccentHex());
+        javafx.scene.text.Text title = text(label.substring(label.indexOf(" ")+1).toUpperCase(), 10, true, "rgba(255,255,255,0.70)");
+        
+        tile.getChildren().addAll(icon, title);
+        
+        tile.setOnMouseEntered(e -> {
+            tile.setStyle(
+                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
+                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.30) + "; -fx-border-width: 1px;" +
+                "-fx-background-radius: 16px; -fx-border-radius: 16px;"
+            );
+            tile.setTranslateY(-3);
+            title.setFill(Color.WHITE);
+        });
+        tile.setOnMouseExited(e -> {
+            tile.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.04);" +
+                "-fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1px;" +
+                "-fx-background-radius: 16px; -fx-border-radius: 16px;"
+            );
+            tile.setTranslateY(0);
+            title.setFill(Color.web("rgba(255,255,255,0.70)"));
+        });
+        tile.setOnMouseClicked(e -> {
+            awardInteractionXp(1);
+            showActionPanel(actionId, switcherView, showActionsBtn);
+        });
+        
+        return tile;
+    }
+    
+    private void showActionPanel(String actionId, VBox switcherView, Button showActionsBtn) {
+        StackPane parent = quickActionsContainer != null ? quickActionsContainer : (StackPane) switcherView.getParent();
+        VBox defaultView = quickActionsDefaultView;
+        VBox detailView = quickActionsDetailView;
+        if (parent == null || defaultView == null || detailView == null) {
+            return;
+        }
+
+        parent.getChildren().setAll(detailView);
+        detailView.getChildren().clear();
+        detailView.setVisible(true);
+        detailView.setManaged(true);
+        detailView.setMouseTransparent(false);
+        detailView.setOpacity(1);
+        detailView.setTranslateX(0);
+        detailView.toFront();
+        
+        HBox header = new HBox(12);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setPadding(new Insets(0, 0, 12, 0));
+        header.setStyle("-fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 0 0 1 0;");
+        
+        javafx.scene.control.Button backBtn = new javafx.scene.control.Button("←");
+        backBtn.setStyle(
+            "-fx-min-width: 30px; -fx-min-height: 30px;" +
+            "-fx-max-width: 30px; -fx-max-height: 30px;" +
+            "-fx-background-color: rgba(255,255,255,0.06);" +
+            "-fx-border-color: rgba(255,255,255,0.15); -fx-border-width: 1px;" +
+            "-fx-border-radius: 999px; -fx-background-radius: 999px;" +
+            "-fx-text-fill: rgba(255,255,255,0.75); -fx-font-weight: 700; -fx-cursor: hand;"
+        );
+        backBtn.setOnAction(e -> hideActionPanel(switcherView, detailView, showActionsBtn));
+        
+        javafx.scene.text.Text title = text(getTitleForAction(actionId), 14, true, "rgba(255,255,255,0.88)");
+        
+        header.getChildren().addAll(backBtn, title);
+        detailView.getChildren().add(header);
+        
+        // Add content based on action
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(12, 0, 0, 0));
+        content.setStyle("-fx-background-color: transparent;");
+        
+        ScrollPane scrollPane = null;
+        if ("settings".equals(actionId)) {
+            scrollPane = new ScrollPane(content);
+            scrollPane.setFitToWidth(true);
+            scrollPane.setMaxHeight(190);
+            scrollPane.setPrefHeight(190);
+            scrollPane.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0; -fx-border-color: transparent;");
+            scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+            scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        }
+        
+        switch(actionId) {
+            case "2fa" -> buildTwoFactorPanel(content);
+            case "biometrics" -> buildBiometricsPanel(content);
+            case "faceid" -> buildFaceIDPanel(content);
+            case "settings" -> {
+                User user = SessionManager.getInstance().getCurrentUser();
+                Profile profile = currentProfile();
+                content.getChildren().add(text("Profile Settings", 13, true, textSoft()));
+                
+                // Bio field
+                content.getChildren().add(text("Bio", 11, true, "rgba(255,255,255,0.70)"));
+                javafx.scene.control.TextArea bioArea = new javafx.scene.control.TextArea();
+                bioArea.setPromptText("Tell us a bit about yourself...");
+                bioArea.setWrapText(true);
+                bioArea.setStyle("-fx-padding: 9; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-control-inner-background: rgba(255,255,255,0.05); -fx-background-radius: 12; -fx-border-radius: 12;");
+                bioArea.setPrefHeight(50);
+                bioArea.setText(profile != null && profile.getDescriptionProfile() != null ? profile.getDescriptionProfile() : "");
+                content.getChildren().add(bioArea);
+                content.getChildren().add(text(" ", 8, false, "transparent"));
+                
+                // Phone field
+                content.getChildren().add(text("Phone", 11, true, "rgba(255,255,255,0.70)"));
+                javafx.scene.control.TextField phoneField = new javafx.scene.control.TextField();
+                phoneField.setPromptText("Phone number");
+                phoneField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                phoneField.setText(user != null && user.getPhone() != null ? user.getPhone() : "");
+                content.getChildren().add(phoneField);
+                content.getChildren().add(text(" ", 8, false, "transparent"));
+                
+                // Theme, Language, Timezone row
+                content.getChildren().add(text("Preferences", 11, true, "rgba(255,255,255,0.70)"));
+                HBox prefRow = new HBox(10);
+                prefRow.setStyle("-fx-fill-height: true;");
+                
+                javafx.scene.control.ComboBox<String> themeCombo = new javafx.scene.control.ComboBox<>();
+                themeCombo.getItems().addAll("Dark", "Light", "Auto");
+                themeCombo.setValue(themeFromCode(profile == null ? null : profile.getTheme()));
+                themeCombo.setStyle("-fx-padding: 8; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-background-radius: 12; -fx-border-radius: 12;");
+                HBox.setHgrow(themeCombo, Priority.ALWAYS);
+                
+                javafx.scene.control.ComboBox<String> langCombo = new javafx.scene.control.ComboBox<>();
+                langCombo.getItems().addAll("English", "French", "Arabic", "Spanish");
+                langCombo.setValue(languageFromLocale(profile == null ? null : profile.getLocale()));
+                langCombo.setStyle("-fx-padding: 8; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-background-radius: 12; -fx-border-radius: 12;");
+                HBox.setHgrow(langCombo, Priority.ALWAYS);
+                
+                javafx.scene.control.TextField tzField = new javafx.scene.control.TextField();
+                tzField.setPromptText("UTC+1");
+                tzField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                tzField.setText(timezoneText(profile == null ? null : profile.getTimezone()));
+                HBox.setHgrow(tzField, Priority.ALWAYS);
+                
+                prefRow.getChildren().addAll(themeCombo, langCombo, tzField);
+                content.getChildren().add(prefRow);
+                content.getChildren().add(text(" ", 8, false, "transparent"));
+                
+                // Security section
+                content.getChildren().add(text("SECURITY", 10, true, "rgba(255,255,255,0.50)"));
+                content.getChildren().add(text("Current Password", 11, true, "rgba(255,255,255,0.70)"));
+                javafx.scene.control.PasswordField currentPwdField = new javafx.scene.control.PasswordField();
+                currentPwdField.setPromptText("Required to change password");
+                currentPwdField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                content.getChildren().add(currentPwdField);
+                content.getChildren().add(text(" ", 8, false, "transparent"));
+                
+                content.getChildren().add(text("New Password", 11, true, "rgba(255,255,255,0.70)"));
+                javafx.scene.control.PasswordField newPwdField = new javafx.scene.control.PasswordField();
+                newPwdField.setPromptText("Min 6 characters");
+                newPwdField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                content.getChildren().add(newPwdField);
+                content.getChildren().add(text(" ", 8, false, "transparent"));
+                
+                content.getChildren().add(text("Confirm Password", 11, true, "rgba(255,255,255,0.70)"));
+                javafx.scene.control.PasswordField confirmPwdField = new javafx.scene.control.PasswordField();
+                confirmPwdField.setPromptText("Confirm new password");
+                confirmPwdField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                content.getChildren().add(confirmPwdField);
+                content.getChildren().add(text(" ", 4, false, "transparent"));
+                
+                javafx.scene.control.Button saveBtn = new javafx.scene.control.Button("Save Changes");
+                saveBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
+                saveBtn.setOnAction(e -> {
+                    User sessionUser = SessionManager.getInstance().getCurrentUser();
+                    if (sessionUser == null || sessionUser.getIdUser() == null) {
+                        showAvatarAlert(Alert.AlertType.ERROR, "Settings", "No active user session.");
+                        return;
+                    }
+
+                    UserController userController = new UserController();
+                    ProfileController profileController = new ProfileController();
+
+                    String phone = phoneField.getText() == null ? "" : phoneField.getText().trim();
+                    String currentPwd = currentPwdField.getText() == null ? "" : currentPwdField.getText().trim();
+                    String newPwd = newPwdField.getText() == null ? "" : newPwdField.getText().trim();
+                    String confirmPwd = confirmPwdField.getText() == null ? "" : confirmPwdField.getText().trim();
+
+                    boolean wantsPasswordChange = !currentPwd.isEmpty() || !newPwd.isEmpty() || !confirmPwd.isEmpty();
+                    if (wantsPasswordChange) {
+                        if (currentPwd.isEmpty() || newPwd.isEmpty() || confirmPwd.isEmpty()) {
+                            showAvatarAlert(Alert.AlertType.ERROR, "Settings", "Fill current, new and confirm password fields.");
+                            return;
+                        }
+                        if (!matchesPassword(currentPwd, sessionUser.getPasswordUser())) {
+                            showAvatarAlert(Alert.AlertType.ERROR, "Settings", "Current password is incorrect.");
+                            return;
+                        }
+                        if (newPwd.length() < 6) {
+                            showAvatarAlert(Alert.AlertType.ERROR, "Settings", "New password must be at least 6 characters.");
+                            return;
+                        }
+                        if (!newPwd.equals(confirmPwd)) {
+                            showAvatarAlert(Alert.AlertType.ERROR, "Settings", "New password and confirmation do not match.");
+                            return;
+                        }
+                    }
+
+                    User userToSave = sessionUser;
+                    userToSave.setPhone(phone.isEmpty() ? null : phone);
+                    if (wantsPasswordChange) {
+                        userToSave.setPasswordUser(BCrypt.hashpw(newPwd, BCrypt.gensalt(13)));
+                    }
+
+                    boolean userUpdated = userController.userEdit(userToSave);
+                    if (!userUpdated) {
+                        showAvatarAlert(Alert.AlertType.ERROR, "Settings", "Failed to update user account settings.");
+                        return;
+                    }
+
+                    Profile profileToSave = getOrCreateCurrentProfile(sessionUser);
+                    if (profileToSave == null) {
+                        showAvatarAlert(Alert.AlertType.ERROR, "Settings", "Failed to load profile settings.");
+                        return;
+                    }
+
+                    profileToSave.setDescriptionProfile(bioArea.getText() == null ? "" : bioArea.getText().trim());
+                    profileToSave.setTheme(themeToCode(themeCombo.getValue()));
+                    profileToSave.setLocale(languageToLocale(langCombo.getValue()));
+                    profileToSave.setTimezone(parseTimezone(tzField.getText()));
+                    if (profileToSave.getSettingsJson() == null || profileToSave.getSettingsJson().isBlank()) {
+                        profileToSave.setSettingsJson("{}");
+                    }
+
+                    boolean profileUpdated = profileController.updateProfile(profileToSave);
+                    if (!profileUpdated) {
+                        showAvatarAlert(Alert.AlertType.ERROR, "Settings", "Failed to update profile preferences.");
+                        return;
+                    }
+
+                    SessionManager.getInstance().setCurrentUser(userToSave);
+                    SessionManager.getInstance().setCurrentProfile(profileToSave);
+                    currentPwdField.clear();
+                    newPwdField.clear();
+                    confirmPwdField.clear();
+                    showAvatarAlert(Alert.AlertType.INFORMATION, "Settings", "Settings saved successfully.");
+                });
+                content.getChildren().add(saveBtn);
+            }
+            case "host" -> {
+                content.getChildren().add(text("Host Spotlight", 13, true, textSoft()));
+                content.getChildren().add(text("Start a video spotlight session and invite residents to join.", 11, false, textMuted()));
+                javafx.scene.control.Button startBtn = new javafx.scene.control.Button("Start Spotlight");
+                startBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
+                content.getChildren().add(startBtn);
+            }
+            case "join" -> {
+                content.getChildren().add(text("Join by Invitation Code", 13, true, textSoft()));
+                content.getChildren().add(text("Enter a room code to join an existing spotlight session.", 11, false, textMuted()));
+                javafx.scene.control.Button joinBtn = new javafx.scene.control.Button("Join Session");
+                joinBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
+                content.getChildren().add(joinBtn);
+            }
+        }
+        
+        if (scrollPane != null) {
+            detailView.getChildren().add(scrollPane);
+        } else {
+            detailView.getChildren().add(content);
+        }
+        parent.getChildren().setAll(detailView);
+        detailView.setVisible(true);
+        detailView.setManaged(true);
+        detailView.setMouseTransparent(false);
+        detailView.setOpacity(1);
+        detailView.setTranslateX(0);
+        detailView.toFront();
+    }
+    
+    private void hideActionPanel(VBox switcherView, VBox detailView, Button showActionsBtn) {
+        styleQuickActionsButton(showActionsBtn, true);
+        StackPane parent = quickActionsContainer != null ? quickActionsContainer : (StackPane) detailView.getParent();
+        if (parent == null) {
+            return;
+        }
+        parent.getChildren().setAll(switcherView);
+        switcherView.setVisible(true);
+        switcherView.setManaged(true);
+        switcherView.setMouseTransparent(false);
+        switcherView.setOpacity(1);
+        switcherView.setTranslateX(0);
+        switcherView.toFront();
+    }
+    
+    private String getTitleForAction(String actionId) {
+        return switch(actionId) {
+            case "2fa" -> "Two-Factor Auth";
+            case "biometrics" -> "Biometrics";
+            case "faceid" -> "Face ID";
+            case "settings" -> "Settings";
+            case "host" -> "Host Spotlight";
+            case "join" -> "Join by Code";
+            default -> "Action";
+        };
+    }
+    
+    private String formatRole(String role) {
+        return switch(role) {
+            case "ADMIN" -> "🔐 Administrator";
+            case "OWNER" -> "👑 Property Owner";
+            case "RESIDENT" -> "👤 Resident";
+            default -> role;
+        };
+    }
+
+    private void handleProfileAvatarUpload(User user, Circle avatarCircle, Text avatarText) {
+        if (user == null || user.getIdUser() == null || root.getScene() == null) {
+            return;
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Choose Profile Picture");
+        chooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("Images", "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp"),
+            new FileChooser.ExtensionFilter("All Files", "*.*")
+        );
+
+        File selected = chooser.showOpenDialog(root.getScene().getWindow());
+        if (selected == null) {
+            return;
+        }
+
+        try {
+            Profile profile = getOrCreateCurrentProfile(user);
+            if (profile == null || profile.getIdProfile() == null) {
+                showAvatarAlert(Alert.AlertType.ERROR, "Avatar", "Could not load your profile record.");
+                return;
+            }
+
+            byte[] data = Files.readAllBytes(selected.toPath());
+            ProfileAvatarController controller = new ProfileAvatarController();
+            ProfileAvatarController.AvatarUpdateResult result = controller.updateAvatar(profile, data, selected.getName());
+            if (!result.isSuccess()) {
+                showAvatarAlert(Alert.AlertType.ERROR, "Avatar", result.getMessage());
+                return;
+            }
+
+            profile.setAvatar(result.getImagePath());
+            SessionManager.getInstance().setCurrentProfile(profile);
+
+            boolean hasAvatar = applyAvatarFill(avatarCircle);
+            avatarText.setText(currentInitial(user));
+            avatarText.setVisible(!hasAvatar);
+            avatarText.setManaged(!hasAvatar);
+            showAvatarAlert(Alert.AlertType.INFORMATION, "Avatar", "Profile picture updated.");
+        } catch (Exception ex) {
+            showAvatarAlert(Alert.AlertType.ERROR, "Avatar", "Failed to upload image.");
+        }
+    }
+
+    private boolean applyAvatarFill(Circle avatarCircle) {
+        Profile profile = currentProfile();
+        String avatarPath = profile == null ? null : profile.getAvatar();
+        if (avatarPath != null && !avatarPath.isBlank()) {
+            Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
+            if (img != null && !img.isError()) {
+                avatarCircle.setFill(new ImagePattern(img));
+                return true;
+            }
+        }
+        avatarCircle.setFill(Color.web(tm.getAccentHex()));
+        return false;
+    }
+
+    private Profile currentProfile() {
+        SessionManager session = SessionManager.getInstance();
+        Profile profile = session.getCurrentProfile();
+        if (profile != null) {
+            return profile;
+        }
+
+        User user = session.getCurrentUser();
+        if (user == null || user.getIdUser() == null) {
+            return null;
+        }
+
+        ProfileService profileService = new ProfileService();
+        profile = profileService.findOneByUserId(user.getIdUser()).orElse(null);
+        if (profile != null) {
+            session.setCurrentProfile(profile);
+        }
+        return profile;
+    }
+
+    private Profile getOrCreateCurrentProfile(User user) {
+        Profile existing = currentProfile();
+        if (existing != null) {
+            return existing;
+        }
+
+        ProfileService profileService = new ProfileService();
+        Profile created = new Profile();
+        created.setUserId(user.getIdUser());
+        created.setAvatar(null);
+        created.setLocale("en");
+        created.setTheme(0);
+        created.setTimezone(1);
+        created.setDescriptionProfile("");
+        created.setSettingsJson("{}");
+
+        Optional<Integer> id = profileService.createProfile(created);
+        if (id.isEmpty()) {
+            return null;
+        }
+
+        Profile loaded = profileService.findById(id.get()).orElse(null);
+        if (loaded != null) {
+            SessionManager.getInstance().setCurrentProfile(loaded);
+        }
+        return loaded;
+    }
+
+    private String currentInitial(User user) {
+        if (user != null) {
+            String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+            String last = user.getLastName() == null ? "" : user.getLastName().trim();
+            String fullName = (first + " " + last).trim();
+            if (!fullName.isBlank()) {
+                return fullName.substring(0, 1).toUpperCase();
+            }
+            String email = user.getEmailUser() == null ? "" : user.getEmailUser().trim();
+            if (!email.isBlank()) {
+                return email.substring(0, 1).toUpperCase();
+            }
+        }
+        return "U";
+    }
+
+    private void showAvatarAlert(Alert.AlertType type, String title, String message) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    private boolean matchesPassword(String raw, String stored) {
+        if (stored == null || stored.isBlank()) {
+            return false;
+        }
+
+        try {
+            if (stored.startsWith("$2y$")) {
+                return BCrypt.checkpw(raw, "$2a$" + stored.substring(4));
+            }
+            if (stored.startsWith("$2a$") || stored.startsWith("$2b$")) {
+                return BCrypt.checkpw(raw, stored);
+            }
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+
+        return raw.equals(stored);
+    }
+
+    private String themeFromCode(Integer themeCode) {
+        if (themeCode == null) {
+            return "Dark";
+        }
+        return switch (themeCode) {
+            case 1 -> "Dark";
+            case 2 -> "Auto";
+            default -> "Light";
+        };
+    }
+
+    private Integer themeToCode(String themeValue) {
+        if (themeValue == null) {
+            return 1;
+        }
+        return switch (themeValue) {
+            case "Light" -> 0;
+            case "Auto" -> 2;
+            default -> 1;
+        };
+    }
+
+    private String languageFromLocale(String locale) {
+        if (locale == null || locale.isBlank()) {
+            return "English";
+        }
+        String normalized = locale.toLowerCase();
+        return switch (normalized) {
+            case "fr", "fr_fr" -> "French";
+            case "ar", "ar_tn" -> "Arabic";
+            case "es", "es_es" -> "Spanish";
+            default -> "English";
+        };
+    }
+
+    private String languageToLocale(String language) {
+        if (language == null) {
+            return "en";
+        }
+        return switch (language) {
+            case "French" -> "fr";
+            case "Arabic" -> "ar";
+            case "Spanish" -> "es";
+            default -> "en";
+        };
+    }
+
+    private Integer parseTimezone(String input) {
+        if (input == null || input.isBlank()) {
+            return 1;
+        }
+        String normalized = input.trim().toUpperCase().replace("UTC", "").replace("GMT", "").trim();
+        if (normalized.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(normalized);
+        } catch (NumberFormatException ignored) {
+            return 1;
+        }
+    }
+
+    private String timezoneText(Integer tz) {
+        if (tz == null) {
+            return "UTC+1";
+        }
+        if (tz == 0) {
+            return "UTC";
+        }
+        return "UTC" + (tz > 0 ? "+" : "") + tz;
+    }
+
+    private void installXpActionTracking(javafx.scene.Parent parent) {
+        parent.addEventFilter(ActionEvent.ACTION, event -> {
+            Object source = event.getSource();
+            if (source instanceof Button) {
+                awardInteractionXp(1);
+            }
+        });
+    }
+
+    private void awardInteractionXp(int xp) {
+        NavigationManager.getInstance().awardInteractionXp(Math.max(0, xp));
+    }
+
+    private void animateCircleFace(javafx.scene.Node from, javafx.scene.Node to) {
+        if (from == to || to.isVisible()) {
+            return;
+        }
+
+        javafx.animation.FadeTransition fadeOut = new javafx.animation.FadeTransition(javafx.util.Duration.millis(150), from);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> {
+            from.setVisible(false);
+            from.setManaged(false);
+
+            to.setVisible(true);
+            to.setManaged(true);
+            to.setOpacity(0);
+
+            javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(180), to);
+            fadeIn.setFromValue(0.0);
+            fadeIn.setToValue(1.0);
+            fadeIn.play();
+        });
+        fadeOut.play();
+    }
+
+    private void animateBadgePulse(Text badge) {
+        javafx.animation.ScaleTransition pulse = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(180), badge);
+        pulse.setFromX(1.0);
+        pulse.setFromY(1.0);
+        pulse.setToX(1.08);
+        pulse.setToY(1.08);
+        pulse.setCycleCount(2);
+        pulse.setAutoReverse(true);
+        pulse.play();
+    }
+
+    private StackPane circleAvatarNode(User user, String fallbackDisplay, double size, int fontSize) {
+        Circle circle = new Circle(size / 2.0);
+        circle.setFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.20)));
+        circle.setStroke(Color.web(tm.toRgba(tm.getAccentHex(), 0.34)));
+        circle.setStrokeWidth(1.4);
+
+        String initial = fallbackDisplay == null || fallbackDisplay.isBlank()
+            ? "U"
+            : fallbackDisplay.substring(0, 1).toUpperCase();
+        Text initialText = text(initial, fontSize, true, "#ffffff");
+
+        boolean hasAvatar = applyAvatarFillForUser(circle, user);
+        initialText.setVisible(!hasAvatar);
+        initialText.setManaged(!hasAvatar);
+
+        StackPane avatar = new StackPane(circle, initialText);
+        avatar.setMinSize(size, size);
+        avatar.setPrefSize(size, size);
+        return avatar;
+    }
+
+    private boolean applyAvatarFillForUser(Circle avatarCircle, User user) {
+        if (user == null || user.getIdUser() == null) {
+            return false;
+        }
+
+        ProfileService profileService = new ProfileService();
+        Profile userProfile = profileService.findOneByUserId(user.getIdUser()).orElse(null);
+        String avatarPath = userProfile == null ? null : userProfile.getAvatar();
+        if (avatarPath == null || avatarPath.isBlank()) {
+            return false;
+        }
+
+        Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
+        if (img == null || img.isError()) {
+            return false;
+        }
+        avatarCircle.setFill(new ImagePattern(img));
+        return true;
     }
 
     private VBox standingPoint(String label, boolean active) {
@@ -2450,459 +1756,6 @@ public class ProfileView implements ViewInterface {
         return c;
     }
 
-    private VBox friendCard(User friend) {
-        VBox card = new VBox(8);
-        card.setAlignment(Pos.CENTER);
-        card.setCursor(javafx.scene.Cursor.HAND);
-        card.setOnMouseClicked(e -> {
-            if (friend != null) {
-                showFriendDetailsPopup(friend, card);
-            }
-        });
-
-        Profile friendProfile = friend == null ? null : profileService.findOneByUserId(friend.getIdUser()).orElse(null);
-        StackPane avatar = avatarBadge(friendProfile != null ? friendProfile.getAvatar() : null, displayInitial(friend),
-                30);
-        avatar.setMinSize(60, 60);
-        avatar.setMaxSize(60, 60);
-
-        card.getChildren().addAll(avatar,
-                text(friend == null ? "Unknown" : valueOr(friend.getFirstName(), "Unknown"), 11, true, textMuted()));
-        return card;
-    }
-
-    private VBox pendingRequestRow(UserRelationship relationship) {
-        VBox row = new VBox(0);
-        row.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.07); -fx-border-width: 1px; -fx-background-radius: 14px; -fx-border-radius: 14px;");
-        row.setPadding(new Insets(12));
-
-        User sender = resolveSender(relationship);
-        Profile senderProfile = sender == null ? null : profileService.findOneByUserId(sender.getIdUser()).orElse(null);
-
-        HBox content = new HBox(12);
-        content.setAlignment(Pos.CENTER_LEFT);
-
-        StackPane avatar = avatarBadge(senderProfile != null ? senderProfile.getAvatar() : null, displayInitial(sender),
-                21);
-        avatar.setMinSize(42, 42);
-        avatar.setMaxSize(42, 42);
-
-        VBox textBox = new VBox(2);
-        textBox.getChildren().addAll(
-                text(sender == null ? "Unknown resident" : displayName(sender), 13, true, "#ffffff"),
-                text("Wants to connect", 10, false, textMuted()));
-        HBox.setHgrow(textBox, Priority.ALWAYS);
-
-        Button accept = new Button("✓");
-        accept.setPrefSize(32, 32);
-        accept.setStyle(
-                "-fx-background-color: rgba(67,181,129,0.2); -fx-text-fill: #43b581; -fx-background-radius: 10px; -fx-font-weight: 900;");
-        accept.setOnAction(e -> {
-            if (currentUser != null && currentUser.getIdUser() != null && relationship.getId() != null) {
-                if (relationshipService.acceptRequest(relationship.getId(), currentUser.getIdUser())) {
-                    refreshCircleSection();
-                } else {
-                    showAlert("Circle", "Could not accept this request.");
-                }
-            }
-        });
-
-        Button decline = new Button("×");
-        decline.setPrefSize(32, 32);
-        decline.setStyle(
-                "-fx-background-color: rgba(240,71,71,0.15); -fx-text-fill: #f04747; -fx-background-radius: 10px; -fx-font-weight: 900;");
-        decline.setOnAction(e -> {
-            if (currentUser != null && currentUser.getIdUser() != null && relationship.getId() != null) {
-                if (relationshipService.declineRequest(relationship.getId(), currentUser.getIdUser())) {
-                    refreshCircleSection();
-                } else {
-                    showAlert("Circle", "Could not decline this request.");
-                }
-            }
-        });
-
-        HBox actions = new HBox(6, accept, decline);
-        actions.setAlignment(Pos.CENTER_RIGHT);
-        content.getChildren().addAll(avatar, textBox, actions);
-        row.getChildren().add(content);
-        return row;
-    }
-
-    private VBox searchResultRow(User candidate) {
-        VBox row = new VBox(0);
-        row.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.07); -fx-border-width: 1px; -fx-background-radius: 14px; -fx-border-radius: 14px;");
-        row.setPadding(new Insets(12));
-
-        Profile candidateProfile = profileService.findOneByUserId(candidate.getIdUser()).orElse(null);
-        String state = currentUser == null || currentUser.getIdUser() == null
-                ? "NONE"
-                : relationshipService.getRelationshipState(currentUser.getIdUser(), candidate.getIdUser());
-
-        HBox content = new HBox(12);
-        content.setAlignment(Pos.CENTER_LEFT);
-
-        StackPane avatar = avatarBadge(candidateProfile != null ? candidateProfile.getAvatar() : null,
-                displayInitial(candidate), 21);
-        avatar.setMinSize(42, 42);
-        avatar.setMaxSize(42, 42);
-
-        VBox textBox = new VBox(2);
-        textBox.getChildren().addAll(
-                text(displayName(candidate), 13, true, "#ffffff"),
-                text(relationshipService.getRelationshipLabel(currentUser == null ? 0 : currentUser.getIdUser(),
-                        candidate.getIdUser()), 10, false, textMuted()));
-        HBox.setHgrow(textBox, Priority.ALWAYS);
-
-        Button action = new Button();
-        action.setPrefHeight(32);
-        action.setStyle("-fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
-        if ("FRIENDS".equals(state)) {
-            action.setText("Friends");
-            action.setDisable(true);
-            action.setStyle(
-                    "-fx-background-color: rgba(67,181,129,0.15); -fx-text-fill: #43b581; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
-        } else if ("PENDING".equals(state)) {
-            action.setText("Pending");
-            action.setDisable(true);
-            action.setStyle(
-                    "-fx-background-color: rgba(250,166,26,0.15); -fx-text-fill: #faa61a; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
-        } else if ("BLOCKED".equals(state)) {
-            action.setText("Blocked");
-            action.setDisable(true);
-            action.setStyle(
-                    "-fx-background-color: rgba(240,71,71,0.15); -fx-text-fill: #f04747; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
-        } else {
-            action.setText("Connect");
-            action.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient()
-                    + "; -fx-text-fill: #ffffff; -fx-background-radius: 10px; -fx-font-weight: 800; -fx-padding: 0 14 0 14;");
-            action.setOnAction(e -> {
-                if (currentUser != null && currentUser.getIdUser() != null
-                        && relationshipService.sendFriendRequest(currentUser.getIdUser(), candidate.getIdUser())) {
-                    refreshCircleSection();
-                } else {
-                    showAlert("Circle", "Could not send connection request.");
-                }
-            });
-        }
-
-        content.getChildren().addAll(avatar, textBox, action);
-        row.getChildren().add(content);
-        return row;
-    }
-
-    private StackPane avatarBadge(String avatarPath, String fallback, double radius) {
-        Circle circle = new Circle(radius);
-        circle.setFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.20)));
-
-        Text fallbackText = text(fallback, Math.max(12, (int) Math.round(radius)), true, "#ffffff");
-        fallbackText.setMouseTransparent(true);
-
-        if (avatarPath != null && !avatarPath.isBlank()) {
-            Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
-            if (img != null && !img.isError()) {
-                circle.setFill(new ImagePattern(img));
-                fallbackText.setVisible(false);
-            }
-        }
-
-        return new StackPane(circle, fallbackText);
-    }
-
-    private void populateFriendGrid(GridPane grid, List<User> friends) {
-        grid.getChildren().clear();
-        if (friends == null || friends.isEmpty()) {
-            VBox empty = new VBox(6);
-            empty.setAlignment(Pos.CENTER);
-            empty.getChildren().add(text("No active connections yet.", 12, true, textMuted()));
-            grid.add(empty, 0, 0);
-            return;
-        }
-
-        for (int i = 0; i < friends.size(); i++) {
-            grid.add(friendCard(friends.get(i)), i % 4, i / 4);
-        }
-    }
-
-    private void populatePendingPane(VBox pendingPane, List<UserRelationship> relationships) {
-        pendingPane.getChildren().clear();
-        pendingPane.getChildren().add(text("Pending requests", 13, true, "#ffffff"));
-
-        if (relationships == null || relationships.isEmpty()) {
-            VBox empty = new VBox(6);
-            empty.setPadding(new Insets(20, 0, 8, 0));
-            empty.setAlignment(Pos.CENTER);
-            empty.getChildren().add(text("No pending requests.", 12, true, textMuted()));
-            pendingPane.getChildren().add(empty);
-            return;
-        }
-
-        for (UserRelationship relationship : relationships) {
-            pendingPane.getChildren().add(pendingRequestRow(relationship));
-        }
-    }
-
-    private void populateResidentSearchResults(VBox resultsBox, String query) {
-        resultsBox.getChildren().clear();
-
-        if (currentUser == null || currentUser.getIdUser() == null) {
-            resultsBox.getChildren().add(text("Sign in to explore residents.", 11, false, textMuted()));
-            return;
-        }
-
-        if (query == null || query.trim().length() < 2) {
-            resultsBox.getChildren().add(text("Type at least 2 characters to search.", 11, false, textMuted()));
-            return;
-        }
-
-        List<User> results = userService.searchByName(query.trim(), currentUser.getIdUser(), 8);
-        if (results.isEmpty()) {
-            resultsBox.getChildren().add(text("No residents found.", 11, false, textMuted()));
-            return;
-        }
-
-        for (User candidate : results) {
-            if (candidate != null && candidate.getIdUser() != null
-                    && !candidate.getIdUser().equals(currentUser.getIdUser())) {
-                resultsBox.getChildren().add(searchResultRow(candidate));
-            }
-        }
-    }
-
-    private void refreshCircleSection() {
-        if (currentUser == null || currentUser.getIdUser() == null) {
-            return;
-        }
-
-        currentCircleFriends = relationshipService.findFriends(currentUser, 8);
-        currentPendingRelationships = relationshipService.findPendingRequestsFor(currentUser);
-
-        if (currentCircleFriendCountText != null) {
-            currentCircleFriendCountText.setText(currentCircleFriends.size() + " FRIENDS");
-        }
-        if (currentCirclePendingCountText != null) {
-            currentCirclePendingCountText.setText(currentPendingRelationships.size() + " PENDING");
-        }
-        if (currentCircleFriendsGrid != null) {
-            populateFriendGrid(currentCircleFriendsGrid, currentCircleFriends);
-        }
-        if (currentCirclePendingPane != null) {
-            populatePendingPane(currentCirclePendingPane, currentPendingRelationships);
-        }
-        if (currentCircleSearchResultsBox != null) {
-            populateResidentSearchResults(currentCircleSearchResultsBox,
-                    currentCircleSearchField == null ? "" : currentCircleSearchField.getText());
-        }
-    }
-
-    private void showFriendDetailsPopup(User friend, Node anchor) {
-        if (friend == null) {
-            return;
-        }
-
-        Profile friendProfile = profileService.findOneByUserId(friend.getIdUser()).orElse(null);
-        UserStanding friendStanding = standingService.findOrCreateByUserId(friend.getIdUser());
-        String relationshipLabel = currentUser == null || currentUser.getIdUser() == null
-                ? "Connect"
-                : relationshipService.getRelationshipLabel(currentUser.getIdUser(), friend.getIdUser());
-
-        Stage modal = new Stage(StageStyle.TRANSPARENT);
-        if (root.getScene() != null && root.getScene().getWindow() != null) {
-            modal.initOwner(root.getScene().getWindow());
-        }
-        modal.initModality(Modality.APPLICATION_MODAL);
-
-        VBox card = new VBox(12);
-        card.setPadding(new Insets(16));
-        card.setPrefWidth(340);
-        card.setStyle(
-                "-fx-background-color: " + surfaceCard() + ";" +
-                        "-fx-background-radius: 16;" +
-                        "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.28) + ";" +
-                        "-fx-border-width: 1;" +
-                        "-fx-border-radius: 16;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.58), 20, 0.24, 0, 8);");
-
-        HBox header = new HBox(12);
-        header.setAlignment(Pos.CENTER_LEFT);
-        StackPane avatar = avatarBadge(friendProfile != null ? friendProfile.getAvatar() : null, displayInitial(friend),
-                32);
-        avatar.setMinSize(48, 48);
-        avatar.setMaxSize(48, 48);
-        VBox headerText = new VBox(3);
-        headerText.getChildren().addAll(
-                text(displayName(friend), 16, true, textDefault()),
-                text(valueOr(friend.getEmailUser(), ""), 11, false, textMuted()));
-        header.getChildren().addAll(avatar, headerText);
-
-        HBox statRow = new HBox(8,
-                statPill("Standing", valueOr(friendStanding.getStandingLabel(), "NORMAL")),
-                statPill("Level", String.valueOf(friendStanding.getLevel())),
-                statPill("Points", String.valueOf(friendStanding.getPoints())));
-
-        VBox info = new VBox(8);
-        info.getChildren().addAll(
-                infoRow("Relationship", relationshipLabel),
-                infoRow("Joined",
-                        friend.getCreatedAt() == null ? "-" : PROFILE_DATE_FMT.format(friend.getCreatedAt())));
-
-        // Add phone if available
-        if (friend.getPhone() != null && !friend.getPhone().trim().isEmpty()) {
-            info.getChildren().add(infoRow("Phone", friend.getPhone()));
-        }
-
-        // Add bio/description if available
-        if (friendProfile != null && friendProfile.getDescriptionProfile() != null &&
-                !friendProfile.getDescriptionProfile().trim().isEmpty()) {
-            Text bioLabel = text("Bio", 11, true, textMuted());
-            Text bioContent = text(friendProfile.getDescriptionProfile(), 12, false, textDefault());
-            bioContent.setWrappingWidth(300);
-            VBox bioSection = new VBox(3);
-            bioSection.getChildren().addAll(bioLabel, bioContent);
-            info.getChildren().add(bioSection);
-        }
-
-        HBox actions = new HBox();
-        actions.setAlignment(Pos.CENTER_RIGHT);
-        Button ok = new Button("OK");
-        ok.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-                        "-fx-text-fill: #ffffff;" +
-                        "-fx-font-weight: 800;" +
-                        "-fx-padding: 8 20 8 20;" +
-                        "-fx-background-radius: 10;" +
-                        "-fx-cursor: hand;");
-        ok.setOnAction(e -> modal.close());
-        actions.getChildren().add(ok);
-
-        card.getChildren().addAll(header, statRow, info, actions);
-
-        StackPane overlay = new StackPane(card);
-        overlay.setStyle("-fx-background-color: transparent;");
-        StackPane.setAlignment(card, Pos.CENTER);
-
-        Scene scene = new Scene(overlay);
-        scene.setFill(Color.TRANSPARENT);
-        modal.setScene(scene);
-
-        // Position popup relative to anchor node
-        if (anchor != null) {
-            try {
-                Bounds anchorScreenBounds = anchor.localToScreen(anchor.getBoundsInLocal());
-                if (anchorScreenBounds != null) {
-                    // Measure actual popup size so the visual gap matches precisely.
-                    overlay.applyCss();
-                    overlay.layout();
-                    double popupWidth = Math.max(card.prefWidth(-1), card.getLayoutBounds().getWidth());
-                    double popupHeight = Math.max(card.prefHeight(-1), card.getLayoutBounds().getHeight());
-                    double x = anchorScreenBounds.getCenterX() - (popupWidth / 2);
-                    double y = anchorScreenBounds.getMinY() - popupHeight - 3; // Position above circle with 3px gap
-
-                    // Adjust if popup goes off-screen
-                    Rectangle2D screenBounds = Screen.getScreensForRectangle(
-                            anchorScreenBounds.getMinX(),
-                            anchorScreenBounds.getMinY(),
-                            anchorScreenBounds.getWidth(),
-                            anchorScreenBounds.getHeight()).stream().findFirst().orElse(Screen.getPrimary())
-                            .getVisualBounds();
-
-                    if (x < screenBounds.getMinX() + 10)
-                        x = screenBounds.getMinX() + 10;
-                    if (x + popupWidth > screenBounds.getMaxX() - 10)
-                        x = screenBounds.getMaxX() - popupWidth - 10;
-                    if (y < screenBounds.getMinY() + 10) {
-                        // If there's no room above, place below instead
-                        y = anchorScreenBounds.getMaxY() + 3;
-                    }
-
-                    if (y + popupHeight > screenBounds.getMaxY() - 10) {
-                        y = screenBounds.getMaxY() - popupHeight - 10;
-                    }
-
-                    modal.setX(x);
-                    modal.setY(y);
-                }
-            } catch (Exception e) {
-                // Fallback to centered if positioning fails
-            }
-        }
-
-        modal.showAndWait();
-    }
-
-    private HBox infoRow(String label, String value) {
-        HBox row = new HBox(10);
-        row.setAlignment(Pos.CENTER_LEFT);
-        Text left = text(label, 12, true, textMuted());
-        Text right = text(value, 12, false, textDefault());
-        HBox.setHgrow(left, Priority.NEVER);
-        HBox.setHgrow(right, Priority.ALWAYS);
-        row.getChildren().addAll(left, right);
-        return row;
-    }
-
-    private void styleTabChip(Button button, boolean active) {
-        button.setStyle((active
-                ? "-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: #ffffff;"
-                : "-fx-background-color: " + surfaceSoft() + "; -fx-text-fill: " + textMuted() + ";")
-                + "-fx-font-weight: 800; -fx-background-radius: 12px; -fx-padding: 8 12 8 12;");
-    }
-
-    private String displayName(User user) {
-        if (user == null) {
-            return "Unknown resident";
-        }
-
-        String full = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
-                + (user.getLastName() == null ? "" : user.getLastName())).trim();
-        return full.isBlank() ? "Unknown resident" : full;
-    }
-
-    private String displayInitial(User user) {
-        if (user == null) {
-            return "U";
-        }
-
-        String source = valueOr(user.getFirstName(), valueOr(user.getLastName(), "U"));
-        return source.substring(0, 1).toUpperCase();
-    }
-
-    private User resolveSender(UserRelationship relationship) {
-        if (relationship == null || currentUser == null || currentUser.getIdUser() == null) {
-            return null;
-        }
-
-        Integer senderId;
-        if (relationship.getUserFirstId() != null && relationship.getUserFirstId().equals(currentUser.getIdUser())) {
-            senderId = relationship.getUserSecondId();
-        } else {
-            senderId = relationship.getUserFirstId();
-        }
-
-        if (senderId == null || senderId <= 0) {
-            return null;
-        }
-
-        return userService.findById(senderId).orElse(null);
-    }
-
-    private boolean isStandingWarnedOrBeyond(String standingLabel) {
-        return "WARNED".equals(standingLabel) || "SUSPENDED".equals(standingLabel) || "BANNED".equals(standingLabel);
-    }
-
-    private boolean isStandingSuspendedOrBeyond(String standingLabel) {
-        return "SUSPENDED".equals(standingLabel) || "BANNED".equals(standingLabel);
-    }
-
-    private String standingTrackColor(String standingLabel) {
-        return switch (standingLabel) {
-            case "WARNED" -> "#faa61a";
-            case "SUSPENDED", "BANNED" -> "#f04747";
-            default -> "#43b581";
-        };
-    }
-
     private VBox statPill(String label, String value) {
         VBox pill = new VBox(4, text(label, 11, true, textMuted()), text(value, 13, true, "#ffffff"));
         pill.setPadding(new Insets(10, 14, 10, 14));
@@ -2912,12 +1765,431 @@ public class ProfileView implements ViewInterface {
 
     private Button tabChip(String label, boolean active) {
         Button b = new Button(label);
-        styleTabChip(b, active);
+        String background = active ? tm.getEffectiveAccentGradient() : surfaceSoft();
+        String textFill = active ? "white" : textMuted();
+        b.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-text-fill: " + textFill + ";" +
+            "-fx-font-weight: 800; -fx-background-radius: 12px; -fx-padding: 8 12 8 12;"
+        );
         return b;
     }
 
     private Text badge(String label) {
         return text(label, 10, true, "#ffffff");
+    }
+
+    private void buildTwoFactorPanel(VBox content) {
+        User user = SessionManager.getInstance().getCurrentUser();
+        TwoFactorService twoFactorService = new TwoFactorService();
+        
+        content.getChildren().add(text("Two-Factor Authentication", 13, true, textSoft()));
+        content.getChildren().add(text("Secure your account with time-based one-time passwords.", 11, false, textMuted()));
+        content.getChildren().add(text(" ", 4, false, "transparent"));
+        
+        // Check if TOTP is already configured
+        boolean totpConfigured = twoFactorService.isTotpConfigured();
+        
+        if (totpConfigured) {
+            // Show configured status
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, tm.toRgba(tm.getAccentHex(), 0.10), 0.15));
+            
+            Text statusIcon = text("✓", 18, true, tm.getAccentHex());
+            VBox statusInfo = new VBox(3,
+                text("Authenticator App Configured", 12, true, "#ffffff"),
+                text("Your account is protected with TOTP", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            Button removeBtn = new Button("Remove TOTP");
+            removeBtn.setStyle(
+                "-fx-padding: 8 12 8 12;" +
+                "-fx-background-color: rgba(255,0,0,0.15);" +
+                "-fx-text-fill: #ff6b6b; -fx-font-weight: 800;" +
+                "-fx-background-radius: 10; -fx-cursor: hand;"
+            );
+            removeBtn.setOnAction(e -> {
+                twoFactorService.disableTotpForUser();
+                showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP disabled successfully.");
+                content.getParent().getScene().getWindow().hide();
+            });
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo, removeBtn);
+            content.getChildren().add(statusBox);
+        } else {
+            // Show setup flow
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, "rgba(255,255,255,0.05)", 0.12));
+            
+            Text statusIcon = text("◯", 18, true, "rgba(255,255,255,0.50)");
+            VBox statusInfo = new VBox(3,
+                text("Authenticator App Setup", 12, true, "#ffffff"),
+                text("Set up time-based one-time passwords", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo);
+            content.getChildren().add(statusBox);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // Setup instructions
+            content.getChildren().add(text("Step 1: Generate Secret", 12, true, "rgba(255,255,255,0.88)"));
+            content.getChildren().add(text("Click the button below to generate a secret code. Save it in a secure location.", 11, false, textMuted()));
+            
+            javafx.scene.control.Button generateBtn = new javafx.scene.control.Button("Generate Secret");
+            generateBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            content.getChildren().add(generateBtn);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // QR and secret display (initially hidden)
+            VBox setupBox = new VBox(12);
+            setupBox.setPadding(new Insets(14));
+            setupBox.setStyle(shell(14, "rgba(255,255,255,0.04)", 0.11));
+            setupBox.setVisible(false);
+            setupBox.setManaged(false);
+            
+            StackPane qrPane = new StackPane();
+            qrPane.setMinSize(140, 140);
+            qrPane.setMaxSize(140, 140);
+            qrPane.setStyle("-fx-background-color: white; -fx-background-radius: 8;");
+            qrPane.getChildren().add(text("QR Code", 10, false, "black"));
+            
+            javafx.scene.control.TextField secretField = new javafx.scene.control.TextField();
+            secretField.setEditable(false);
+            secretField.setPromptText("Secret key will appear here");
+            secretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            
+            content.getChildren().add(setupBox);
+            VBox qrSection = new VBox(8);
+            qrSection.setAlignment(Pos.CENTER);
+            qrSection.getChildren().add(text("Step 2: Scan QR Code", 12, true, "rgba(255,255,255,0.88)"));
+            qrSection.getChildren().add(qrPane);
+            qrSection.getChildren().add(text("Or enter this code manually:", 11, false, textMuted()));
+            qrSection.getChildren().add(secretField);
+            setupBox.getChildren().add(qrSection);
+            
+            setupBox.getChildren().add(text(" ", 8, false, "transparent"));
+            setupBox.getChildren().add(text("Step 3: Verify Code", 12, true, "rgba(255,255,255,0.88)"));
+            setupBox.getChildren().add(text("Enter a 6-digit code from your authenticator app:", 11, false, textMuted()));
+            
+            javafx.scene.control.TextField codeField = new javafx.scene.control.TextField();
+            codeField.setPromptText("000000");
+            codeField.setMaxWidth(120);
+            codeField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10; -fx-font-size: 13px;");
+            
+            javafx.scene.control.Button verifyBtn = new javafx.scene.control.Button("Verify & Activate");
+            verifyBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            
+            HBox codeRow = new HBox(10);
+            codeRow.setAlignment(Pos.CENTER_LEFT);
+            codeRow.getChildren().addAll(codeField, verifyBtn);
+            setupBox.getChildren().add(codeRow);
+            
+            // Generate button action
+            generateBtn.setOnAction(e -> {
+                String secret = twoFactorService.generateTotpSecret();
+                String email = user != null ? user.getEmailUser() : "user@syndicati.tn";
+                String qrDataUrl = twoFactorService.generateQRCodeDataUrl(secret, email, "Syndicati");
+                
+                secretField.setText(secret);
+                // Note: In a real app, you'd display the actual QR code image from the data URL
+                qrPane.getChildren().clear();
+                qrPane.getChildren().add(text("QR Generated", 10, true, "black"));
+                
+                setupBox.setVisible(true);
+                setupBox.setManaged(true);
+                generateBtn.setDisable(true);
+            });
+            
+            // Verify button action
+            verifyBtn.setOnAction(e -> {
+                String code = codeField.getText();
+                if (code == null || code.trim().isEmpty() || code.length() != 6) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Please enter a valid 6-digit code.");
+                    return;
+                }
+                
+                String secret = secretField.getText();
+                if (secret == null || secret.isEmpty()) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Please generate a secret first.");
+                    return;
+                }
+                
+                boolean valid = twoFactorService.verifyTotpCode(secret, code);
+                if (!valid) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Invalid code. Please try again.");
+                    return;
+                }
+                
+                twoFactorService.enableTotpForUser(secret);
+                showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP activated successfully! Your account is now protected.");
+                content.getParent().getScene().getWindow().hide();
+            });
+        }
+    }
+    
+    private void buildBiometricsPanel(VBox content) {
+        User user = SessionManager.getInstance().getCurrentUser();
+        BiometricsService biometricsService = new BiometricsService();
+        
+        content.getChildren().add(text("Biometric Authentication", 13, true, textSoft()));
+        content.getChildren().add(text("Use your device's biometrics to log in faster and more securely.", 11, false, textMuted()));
+        content.getChildren().add(text(" ", 8, false, "transparent"));
+        
+        // Check Windows Hello availability
+        boolean windowsHelloAvailable = biometricsService.isWindowsHelloAvailable();
+        
+        if (!windowsHelloAvailable) {
+            HBox warningBox = new HBox(10);
+            warningBox.setAlignment(Pos.CENTER_LEFT);
+            warningBox.setPadding(new Insets(12));
+            warningBox.setStyle(shell(12, "rgba(255,150,0,0.10)", 0.18));
+            
+            Text warningIcon = text("⚠", 16, true, "#ffa600");
+            Text warningText = text("Windows Hello is not available on this device.", 11, false, "#ffffff");
+            warningBox.getChildren().addAll(warningIcon, warningText);
+            content.getChildren().add(warningBox);
+            return;
+        }
+        
+        // Registered credentials list
+        content.getChildren().add(text("Registered Devices", 12, true, "rgba(255,255,255,0.88)"));
+        
+        VBox credentialsList = new VBox(10);
+        credentialsList.setStyle("-fx-background-color: transparent;");
+        
+        List<BiometricsService.BiometricCredential> credentials = biometricsService.listCredentials();
+        if (credentials.isEmpty()) {
+            credentialsList.getChildren().add(text("No devices registered yet.", 11, false, textMuted()));
+        } else {
+            for (BiometricsService.BiometricCredential cred : credentials) {
+                HBox credRow = new HBox(10);
+                credRow.setAlignment(Pos.CENTER_LEFT);
+                credRow.setPadding(new Insets(10));
+                credRow.setStyle(shell(10, "rgba(255,255,255,0.04)", 0.10));
+                
+                VBox credInfo = new VBox(2);
+                credInfo.getChildren().addAll(
+                    text(cred.getDeviceName(), 11, true, "#ffffff"),
+                    text(cred.getDeviceType() + " | Created: " + cred.getCreatedAt(), 10, false, textMuted())
+                );
+                HBox.setHgrow(credInfo, Priority.ALWAYS);
+                
+                javafx.scene.control.Button removeBtn = new javafx.scene.control.Button("Remove");
+                removeBtn.setStyle(
+                    "-fx-padding: 6 10 6 10;" +
+                    "-fx-background-color: rgba(255,100,100,0.15);" +
+                    "-fx-text-fill: #ff6464; -fx-font-weight: 800;" +
+                    "-fx-background-radius: 8; -fx-cursor: hand;"
+                );
+                
+                BiometricsService.BiometricCredential finalCred = cred;
+                removeBtn.setOnAction(e -> {
+                    biometricsService.removeCredential(finalCred.getId());
+                    credentialsList.getChildren().remove(credRow);
+                    showAvatarAlert(Alert.AlertType.INFORMATION, "Biometrics", "Device removed successfully.");
+                });
+                
+                credRow.getChildren().addAll(credInfo, removeBtn);
+                credentialsList.getChildren().add(credRow);
+            }
+        }
+        
+        content.getChildren().add(credentialsList);
+        content.getChildren().add(text(" ", 8, false, "transparent"));
+        
+        // Register new device
+        content.getChildren().add(text("Register New Device", 12, true, "rgba(255,255,255,0.88)"));
+        
+        javafx.scene.control.TextField deviceNameField = new javafx.scene.control.TextField();
+        deviceNameField.setPromptText("e.g., My Laptop, Windows PC");
+        deviceNameField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+        content.getChildren().add(deviceNameField);
+        
+        javafx.scene.control.Button registerBtn = new javafx.scene.control.Button("Register Device");
+        registerBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+        registerBtn.setOnAction(e -> {
+            String deviceName = deviceNameField.getText();
+            if (deviceName == null || deviceName.trim().isEmpty()) {
+                showAvatarAlert(Alert.AlertType.ERROR, "Biometrics", "Please enter a device name.");
+                return;
+            }
+            
+            biometricsService.registerWindowsHello(deviceName);
+            showAvatarAlert(Alert.AlertType.INFORMATION, "Biometrics", "Device registered successfully. You can now use Windows Hello to log in.");
+            deviceNameField.clear();
+            // Refresh credentials list
+            content.getChildren().clear();
+            buildBiometricsPanel(content);
+        });
+        content.getChildren().add(registerBtn);
+    }
+    
+    private void buildFaceIDPanel(VBox content) {
+        User user = SessionManager.getInstance().getCurrentUser();
+        FaceIDService faceIDService = new FaceIDService();
+        
+        content.getChildren().add(text("Face ID Authentication", 13, true, textSoft()));
+        content.getChildren().add(text("Enroll your face for secure, local biometric authentication.", 11, false, textMuted()));
+        content.getChildren().add(text(" ", 8, false, "transparent"));
+        
+        boolean faceIDEnrolled = faceIDService.isFaceIDEnrolled();
+        
+        if (faceIDEnrolled) {
+            // Show enrolled status
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, tm.toRgba(tm.getAccentHex(), 0.10), 0.15));
+            
+            Text statusIcon = text("✓", 18, true, tm.getAccentHex());
+            VBox statusInfo = new VBox(3,
+                text("Face ID Enrolled", 12, true, "#ffffff"),
+                text("Your face is securely enrolled and encrypted locally", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            javafx.scene.control.Button removeBtn = new javafx.scene.control.Button("Remove Face ID");
+            removeBtn.setStyle(
+                "-fx-padding: 8 12 8 12;" +
+                "-fx-background-color: rgba(255,0,0,0.15);" +
+                "-fx-text-fill: #ff6b6b; -fx-font-weight: 800;" +
+                "-fx-background-radius: 10; -fx-cursor: hand;"
+            );
+            removeBtn.setOnAction(e -> {
+                faceIDService.removeFaceIDEnrollment();
+                showAvatarAlert(Alert.AlertType.INFORMATION, "Face ID", "Face ID enrollment removed.");
+                content.getParent().getScene().getWindow().hide();
+            });
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo, removeBtn);
+            content.getChildren().add(statusBox);
+        } else {
+            // Show enrollment setup
+            HBox statusBox = new HBox(10);
+            statusBox.setAlignment(Pos.CENTER_LEFT);
+            statusBox.setPadding(new Insets(12));
+            statusBox.setStyle(shell(12, "rgba(255,255,255,0.05)", 0.12));
+            
+            Text statusIcon = text("◯", 18, true, "rgba(255,255,255,0.50)");
+            VBox statusInfo = new VBox(3,
+                text("Face ID Setup", 12, true, "#ffffff"),
+                text("Enroll your face for authentication", 11, false, textMuted())
+            );
+            HBox.setHgrow(statusInfo, Priority.ALWAYS);
+            
+            statusBox.getChildren().addAll(statusIcon, statusInfo);
+            content.getChildren().add(statusBox);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // PIN setup
+            content.getChildren().add(text("Step 1: Set PIN", 12, true, "rgba(255,255,255,0.88)"));
+            content.getChildren().add(text("Your face encoding will be encrypted with this PIN. This PIN cannot be recovered.", 11, false, textMuted()));
+            
+            javafx.scene.control.PasswordField pinField = new javafx.scene.control.PasswordField();
+            pinField.setPromptText("4-8 digit PIN");
+            pinField.setMaxWidth(150);
+            pinField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            content.getChildren().add(pinField);
+            content.getChildren().add(text(" ", 8, false, "transparent"));
+            
+            // Enrollment button
+            javafx.scene.control.Button startEnrollBtn = new javafx.scene.control.Button("Start Enrollment");
+            startEnrollBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            
+            VBox enrollmentBox = new VBox(12);
+            enrollmentBox.setPadding(new Insets(14));
+            enrollmentBox.setStyle(shell(14, "rgba(255,255,255,0.04)", 0.11));
+            enrollmentBox.setVisible(false);
+            enrollmentBox.setManaged(false);
+            
+            // Enrollment video preview area
+            StackPane videoPreview = new StackPane();
+            videoPreview.setMinSize(280, 210);
+            videoPreview.setStyle("-fx-background-color: #1a1a1a; -fx-background-radius: 12;");
+            videoPreview.getChildren().add(text("📷 Video Preview\n(Simulated)", 13, false, "rgba(255,255,255,0.50)"));
+            
+            // Progress bar
+            javafx.scene.control.ProgressBar progressBar = new javafx.scene.control.ProgressBar(0);
+            progressBar.setStyle("-fx-padding: 0;");
+            
+            // Enrollment hint
+            Text enrollmentHint = text("Position your face in the frame and look directly at the camera.", 11, false, textMuted());
+            
+            // Simulate enrollment frames
+            javafx.scene.control.Button captureFramesBtn = new javafx.scene.control.Button("Simulate Capture (20 frames)");
+            captureFramesBtn.setStyle("-fx-padding: 8 12 8 12; -fx-background-color: rgba(255,255,255,0.10); -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            
+            javafx.scene.control.Button completeEnrollBtn = new javafx.scene.control.Button("Complete Enrollment");
+            completeEnrollBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            completeEnrollBtn.setDisable(true);
+            
+            enrollmentBox.getChildren().addAll(
+                text("Step 2: Capture Face Frames", 12, true, "rgba(255,255,255,0.88)"),
+                videoPreview,
+                enrollmentHint,
+                progressBar,
+                captureFramesBtn
+            );
+            
+            content.getChildren().add(startEnrollBtn);
+            content.getChildren().add(enrollmentBox);
+            
+            // Start enrollment button action
+            startEnrollBtn.setOnAction(e -> {
+                String pin = pinField.getText();
+                if (pin == null || pin.isEmpty() || pin.length() < 4 || pin.length() > 8) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "PIN must be 4-8 digits.");
+                    return;
+                }
+                
+                faceIDService.startEnrollment();
+                enrollmentBox.setVisible(true);
+                enrollmentBox.setManaged(true);
+                startEnrollBtn.setDisable(true);
+                pinField.setDisable(true);
+            });
+            
+            // Capture frames simulation
+            captureFramesBtn.setOnAction(e -> {
+                // Simulate adding 20 frames
+                for (int i = 0; i < 20; i++) {
+                    double[] mockEmbedding = new double[128];
+                    for (int j = 0; j < 128; j++) {
+                        mockEmbedding[j] = Math.random() * 2 - 1; // Range -1 to 1
+                    }
+                    faceIDService.addFrameEmbedding(mockEmbedding);
+                }
+                
+                progressBar.setProgress(1.0);
+                enrollmentHint.setText("Face captured successfully! " + faceIDService.getEnrollmentProgress() * 100 + "% complete.");
+                captureFramesBtn.setDisable(true);
+                
+                // Add complete button
+                if (enrollmentBox.getChildren().size() < 6) {
+                    enrollmentBox.getChildren().add(completeEnrollBtn);
+                }
+                completeEnrollBtn.setDisable(false);
+            });
+            
+            // Complete enrollment action
+            completeEnrollBtn.setOnAction(e -> {
+                String pin = pinField.getText();
+                boolean success = faceIDService.completeEnrollment(pin);
+                if (!success) {
+                    showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "Failed to complete enrollment.");
+                    return;
+                }
+                
+                showAvatarAlert(Alert.AlertType.INFORMATION, "Face ID", "Face ID enrollment completed successfully!");
+                content.getParent().getScene().getWindow().hide();
+            });
+        }
     }
 
     private VBox cardShell() {
@@ -2926,104 +2198,18 @@ public class ProfileView implements ViewInterface {
         return c;
     }
 
-    private void hydrateSessionData() {
-        currentUser = sessionManager.getCurrentUser();
-        currentProfile = sessionManager.getCurrentProfile();
-        currentStanding = null;
-        currentCircleFriends = new ArrayList<>();
-        currentPendingRelationships = new ArrayList<>();
-
-        if (currentUser != null && currentUser.getIdUser() != null) {
-            currentUser = userService.findById(currentUser.getIdUser()).orElse(currentUser);
-            sessionManager.setCurrentUser(currentUser);
-
-            if (currentProfile == null) {
-                currentProfile = profileService.findOneByUserId(currentUser.getIdUser()).orElse(null);
-                if (currentProfile != null) {
-                    sessionManager.setCurrentProfile(currentProfile);
-                }
-            }
-
-            currentStanding = standingService.findOrCreateByUserId(currentUser.getIdUser());
-            currentCircleFriends = relationshipService.findFriends(currentUser, 8);
-            currentPendingRelationships = relationshipService.findPendingRequestsFor(currentUser);
-        }
-    }
-
-    private String displayFirstName() {
-        return valueOr(currentUser != null ? currentUser.getFirstName() : null, "Unknown");
-    }
-
-    private String displayLastName() {
-        return valueOr(currentUser != null ? currentUser.getLastName() : null, "User");
-    }
-
-    private String displayName() {
-        String full = (displayFirstName() + " " + displayLastName()).trim();
-        return full.isBlank() ? "Syndicati Member" : full;
-    }
-
-    private String displayEmail() {
-        return valueOr(currentUser != null ? currentUser.getEmailUser() : null, "contact@syndicati.tn");
-    }
-
-    private String displayRole() {
-        String role = currentUser != null ? currentUser.getRoleUser() : null;
-        if (role == null || role.isBlank()) {
-            return "Resident";
-        }
-        if ("ROLE_ADMIN".equalsIgnoreCase(role) || "ADMIN".equalsIgnoreCase(role)) {
-            return "Admin";
-        }
-        return role;
-    }
-
-    private String displayVerified() {
-        return currentUser != null && currentUser.isVerified() ? "Yes" : "No";
-    }
-
-    private String displayCreatedAt() {
-        if (currentUser == null || currentUser.getCreatedAt() == null) {
-            return "-";
-        }
-        return PROFILE_DATE_FMT.format(currentUser.getCreatedAt());
-    }
-
-    private String displayBio() {
-        return valueOr(currentProfile != null ? currentProfile.getDescriptionProfile() : null, "No bio added yet.");
-    }
-
-    private String displayTimezone() {
-        Integer tz = currentProfile != null ? currentProfile.getTimezone() : null;
-        return tz == null ? "-" : String.valueOf(tz);
-    }
-
-    private String displayPhone() {
-        return valueOr(currentUser != null ? currentUser.getPhone() : null, "-");
-    }
-
-    private String displayInitial() {
-        String name = displayName();
-        return name.isBlank() ? "U" : name.substring(0, 1).toUpperCase();
-    }
-
-    private String valueOr(String value, String fallback) {
-        return (value == null || value.isBlank()) ? fallback : value;
-    }
-
     private String shell(double radius, String bg, double borderOpacity) {
         return "-fx-background-color: " + bg + ";"
-                + "-fx-border-color: rgba(255,255,255," + borderOpacity + ");"
-                + "-fx-border-width: 1px;"
-                + "-fx-background-radius: " + radius + "px;"
-                + "-fx-border-radius: " + radius + "px;";
+            + "-fx-border-color: rgba(255,255,255," + borderOpacity + ");"
+            + "-fx-border-width: 1px;"
+            + "-fx-background-radius: " + radius + "px;"
+            + "-fx-border-radius: " + radius + "px;";
     }
 
     private String surfaceCard() {
         return tm.isDarkMode()
-                ? "linear-gradient(from 0% 0% to 100% 100%, rgba(10,10,10,0.94) 0%, rgba(14,14,14,0.94) 62%, "
-                        + tm.toRgba(tm.getAccentHex(), 0.10) + " 100%)"
-                : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)";
+            ? "linear-gradient(from 0% 0% to 100% 100%, rgba(10,10,10,0.94) 0%, rgba(14,14,14,0.94) 62%, " + tm.toRgba(tm.getAccentHex(), 0.10) + " 100%)"
+            : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)";
     }
 
     private String surfaceSoft() {
@@ -3042,18 +2228,6 @@ public class ProfileView implements ViewInterface {
         return tm.isDarkMode() ? "rgba(255,255,255,0.79)" : "rgba(30,41,59,0.82)";
     }
 
-    private String textDefault() {
-        return tm.isDarkMode() ? "#ffffff" : "#0d1117";
-    }
-
-    private String surfaceDefault() {
-        return tm.isDarkMode() ? "#0d1117" : "#ffffff";
-    }
-
-    private String borderDefault() {
-        return tm.isDarkMode() ? "rgba(88,166,255,0.2)" : "rgba(30,41,59,0.2)";
-    }
-
     private Pane spacer(double width) {
         Pane p = new Pane();
         p.setMinWidth(width);
@@ -3063,312 +2237,12 @@ public class ProfileView implements ViewInterface {
     private Text text(String value, int size, boolean bold, String color) {
         Text t = new Text(value);
         t.setFont(Font.font(
-                bold ? MainApplication.getInstance().getBoldFontFamily()
-                        : MainApplication.getInstance().getLightFontFamily(),
-                bold ? FontWeight.BOLD : FontWeight.NORMAL,
-                size));
+            bold ? MainApplication.getInstance().getBoldFontFamily() : MainApplication.getInstance().getLightFontFamily(),
+            bold ? FontWeight.BOLD : FontWeight.NORMAL,
+            size
+        ));
         t.setFill(Color.web(color));
         return t;
-    }
-
-    private void showOnboardingOverlay() {
-        User sessionUser = sessionManager.getCurrentUser();
-        if (sessionUser == null) {
-            Alert err = new Alert(AlertType.ERROR);
-            err.setTitle("Error");
-            err.setContentText("User session not found");
-            err.showAndWait();
-            return;
-        }
-
-        if (root.getScene() == null || !(root.getScene().getRoot() instanceof StackPane sceneRoot)) {
-            Alert err = new Alert(AlertType.ERROR);
-            err.setTitle("Error");
-            err.setContentText("Unable to open onboarding editor right now.");
-            err.showAndWait();
-            return;
-        }
-
-        Runnable onComplete = () -> {
-            sceneRoot.getChildren().removeIf(node -> node instanceof StackPane && node.getId() != null
-                    && node.getId().equals("profile-onboarding-overlay"));
-            refreshOnboardingCard();
-        };
-
-        OnboardingOverlayView overlayView = new OnboardingOverlayView(sessionUser, onComplete, true);
-        if (!overlayView.shouldShow()) {
-            Alert info = new Alert(AlertType.INFORMATION);
-            info.setTitle("Onboarding");
-            info.setHeaderText(null);
-            info.setContentText("No onboarding record is available for this account.");
-            info.showAndWait();
-            return;
-        }
-
-        StackPane overlayRoot = overlayView.getRoot();
-        overlayRoot.setId("profile-onboarding-overlay");
-        overlayRoot.setPickOnBounds(true);
-        overlayRoot.prefWidthProperty().bind(sceneRoot.widthProperty());
-        overlayRoot.prefHeightProperty().bind(sceneRoot.heightProperty());
-        overlayRoot.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-        sceneRoot.getChildren().add(overlayRoot);
-        StackPane.setAlignment(overlayRoot, Pos.CENTER);
-    }
-
-    private void refreshOnboardingCard() {
-        refreshProfileContent();
-    }
-
-    public void refreshProfileContent() {
-        Platform.runLater(() -> {
-            String activeMainPage = currentMainPageName;
-            String activeDetailTab = currentDetailTabName;
-
-            root.getChildren().clear();
-            mainPages.clear();
-            mainNavButtons.clear();
-            detailTabs.clear();
-            detailTabButtons.clear();
-            build();
-
-            setMainPage(activeMainPage);
-            if ("activity".equals(activeMainPage) && detailTabs.containsKey(activeDetailTab)) {
-                setDetailTab(activeDetailTab);
-            }
-        });
-    }
-
-    private Map<String, String> loadOnboardingSummary() {
-        LinkedHashMap<String, String> summary = new LinkedHashMap<>();
-        summary.put("Language", labelForLanguage("fr"));
-        summary.put("Theme", labelForTheme("dark"));
-        summary.put("Notification", labelForNotificationChannel("EMAIL"));
-        summary.put("Frequency", labelForNotificationFrequency("DAILY_DIGEST"));
-        summary.put("Property", labelForPropertyType("APARTMENT"));
-        summary.put("Occupancy", labelForOccupancyStatus("OWNER_OCCUPIED"));
-        summary.put("Parking", labelForParkingType("NONE"));
-        summary.put("Meeting", labelForMeetingParticipation("HYBRID"));
-        summary.put("Delivery", labelForDocumentDelivery("DIGITAL"));
-        summary.put("Contact", labelForContactPreference("EMAIL"));
-        summary.put("Maintenance", labelForMaintenancePriority("FLEXIBLE"));
-        summary.put("Community", labelForCommunityEngagement("MODERATE"));
-        summary.put("Payment", labelForPaymentMethod("ONLINE"));
-        summary.put("Noise", labelForNoiseSensitivity("MODERATE"));
-        summary.put("Pets", labelForPetsStatus("NO_PETS"));
-        summary.put("Accessibility", labelForAccessibilityNeeds("NONE"));
-        summary.put("Suggestions", "No suggestions yet");
-
-        User sessionUser = sessionManager.getCurrentUser();
-        if (sessionUser == null || sessionUser.getIdUser() == null || sessionUser.getIdUser() <= 0) {
-            return summary;
-        }
-
-        Optional<Onboarding> onboardingOpt = onboardingService.findOneByUserId(sessionUser.getIdUser());
-        if (onboardingOpt.isEmpty()) {
-            return summary;
-        }
-
-        Onboarding onboarding = onboardingOpt.get();
-        JSONObject prefs = parsePreferences(onboarding.getSelectedPreferencesJson());
-
-        summary.put("Language", labelForLanguage(preferredLocaleValue(onboarding, prefs)));
-        summary.put("Theme", labelForTheme(preferredThemeValue(onboarding, prefs)));
-        summary.put("Notification", labelForNotificationChannel(prefs.optString("notification_channel", "EMAIL")));
-        summary.put("Frequency",
-                labelForNotificationFrequency(prefs.optString("notification_frequency", "DAILY_DIGEST")));
-        summary.put("Property", labelForPropertyType(prefs.optString("property_type", "APARTMENT")));
-        summary.put("Occupancy", labelForOccupancyStatus(prefs.optString("occupancy_status", "OWNER_OCCUPIED")));
-        summary.put("Parking", labelForParkingType(prefs.optString("parking_type", "NONE")));
-        summary.put("Meeting", labelForMeetingParticipation(prefs.optString("meeting_participation", "HYBRID")));
-        summary.put("Delivery", labelForDocumentDelivery(prefs.optString("document_delivery", "DIGITAL")));
-        summary.put("Contact", labelForContactPreference(prefs.optString("contact_preference", "EMAIL")));
-        summary.put("Maintenance", labelForMaintenancePriority(prefs.optString("maintenance_priority", "FLEXIBLE")));
-        summary.put("Community", labelForCommunityEngagement(prefs.optString("community_engagement", "MODERATE")));
-        summary.put("Payment", labelForPaymentMethod(prefs.optString("payment_method_preference", "ONLINE")));
-        summary.put("Noise", labelForNoiseSensitivity(prefs.optString("noise_sensitivity", "MODERATE")));
-        summary.put("Pets", labelForPetsStatus(prefs.optString("pets_status", "NO_PETS")));
-        summary.put("Accessibility", labelForAccessibilityNeeds(prefs.optString("accessibility_needs", "NONE")));
-        summary.put("Suggestions", onboarding.getSuggestions() == null || onboarding.getSuggestions().isBlank()
-                ? "No suggestions yet"
-                : onboarding.getSuggestions());
-
-        return summary;
-    }
-
-    private JSONObject parsePreferences(String json) {
-        if (json == null || json.isBlank()) {
-            return new JSONObject();
-        }
-        try {
-            return new JSONObject(json);
-        } catch (Exception ex) {
-            return new JSONObject();
-        }
-    }
-
-    private String preferredLocaleValue(Onboarding onboarding, JSONObject prefs) {
-        if (onboarding.getSelectedLocale() != null && !onboarding.getSelectedLocale().isBlank()) {
-            return switch (onboarding.getSelectedLocale().toLowerCase()) {
-                case "en" -> "EN";
-                case "ar" -> "AR";
-                case "fr_ar" -> "FR_AR";
-                default -> "FR";
-            };
-        }
-        return prefs.optString("language_preference", "FR");
-    }
-
-    private String preferredThemeValue(Onboarding onboarding, JSONObject prefs) {
-        if (onboarding.getSelectedTheme() != null && !onboarding.getSelectedTheme().isBlank()) {
-            return onboarding.getSelectedTheme().equalsIgnoreCase("light") ? "LIGHT" : "DARK";
-        }
-        return prefs.optString("theme_preference", "DARK");
-    }
-
-    private String labelForLanguage(String value) {
-        return switch (value) {
-            case "EN" -> "English";
-            case "AR" -> "Arabic";
-            case "FR_AR" -> "Bilingual FR/AR";
-            default -> "French";
-        };
-    }
-
-    private String labelForTheme(String value) {
-        return "LIGHT".equalsIgnoreCase(value) ? "Light" : "Dark";
-    }
-
-    private String labelForNotificationChannel(String value) {
-        return switch (value) {
-            case "SMS" -> "SMS";
-            case "IN_APP" -> "In-app";
-            case "ALL" -> "All";
-            case "NONE" -> "None";
-            default -> "Email";
-        };
-    }
-
-    private String labelForNotificationFrequency(String value) {
-        return switch (value) {
-            case "INSTANT" -> "Instant";
-            case "WEEKLY_DIGEST" -> "Weekly digest";
-            case "MONTHLY" -> "Monthly";
-            case "IMPORTANT_ONLY" -> "Important only";
-            default -> "Daily digest";
-        };
-    }
-
-    private String labelForPropertyType(String value) {
-        return switch (value) {
-            case "STUDIO" -> "Studio";
-            case "DUPLEX" -> "Duplex";
-            default -> "Apartment";
-        };
-    }
-
-    private String labelForOccupancyStatus(String value) {
-        return switch (value) {
-            case "OWNER_RENTING" -> "Owner renting";
-            case "TENANT" -> "Tenant";
-            case "TEMPORARY" -> "Temporary";
-            default -> "Owner occupied";
-        };
-    }
-
-    private String labelForParkingType(String value) {
-        return switch (value) {
-            case "OUTDOOR" -> "Outdoor";
-            case "COVERED" -> "Covered";
-            case "UNDERGROUND" -> "Underground";
-            case "MULTIPLE" -> "Multiple";
-            default -> "None";
-        };
-    }
-
-    private String labelForMeetingParticipation(String value) {
-        return switch (value) {
-            case "IN_PERSON" -> "In person";
-            case "ONLINE" -> "Online";
-            case "PROXY_ONLY" -> "Proxy only";
-            default -> "Hybrid";
-        };
-    }
-
-    private String labelForDocumentDelivery(String value) {
-        return switch (value) {
-            case "PAPER" -> "Paper";
-            case "BOTH" -> "Both";
-            case "ECO_FRIENDLY" -> "Eco friendly";
-            default -> "Digital";
-        };
-    }
-
-    private String labelForContactPreference(String value) {
-        return switch (value) {
-            case "PHONE" -> "Phone";
-            case "WHATSAPP" -> "WhatsApp";
-            case "IN_PERSON" -> "In person";
-            case "NO_CONTACT" -> "Emergency only";
-            default -> "Email";
-        };
-    }
-
-    private String labelForMaintenancePriority(String value) {
-        return switch (value) {
-            case "URGENT_ONLY" -> "Urgent only";
-            case "PREVENTIVE" -> "Preventive";
-            case "SCHEDULED" -> "Scheduled";
-            default -> "Flexible";
-        };
-    }
-
-    private String labelForCommunityEngagement(String value) {
-        return switch (value) {
-            case "VERY_ACTIVE" -> "Very active";
-            case "ACTIVE" -> "Active";
-            case "OBSERVER" -> "Observer";
-            case "MINIMAL" -> "Minimal";
-            default -> "Moderate";
-        };
-    }
-
-    private String labelForPaymentMethod(String value) {
-        return switch (value) {
-            case "BANK_TRANSFER" -> "Bank transfer";
-            case "CASH" -> "Cash";
-            case "CHECK" -> "Check";
-            case "AUTO_DEBIT" -> "Auto debit";
-            default -> "Online";
-        };
-    }
-
-    private String labelForNoiseSensitivity(String value) {
-        return switch (value) {
-            case "HIGH" -> "High";
-            case "LOW" -> "Low";
-            case "NOT_CONCERNED" -> "Not concerned";
-            default -> "Moderate";
-        };
-    }
-
-    private String labelForPetsStatus(String value) {
-        return switch (value) {
-            case "CAT" -> "Cat";
-            case "DOG" -> "Dog";
-            case "MULTIPLE" -> "Multiple";
-            case "OTHER" -> "Other";
-            default -> "No pets";
-        };
-    }
-
-    private String labelForAccessibilityNeeds(String value) {
-        return switch (value) {
-            case "ELEVATOR_REQUIRED" -> "Elevator required";
-            case "WHEELCHAIR" -> "Wheelchair";
-            case "VISUAL_IMPAIRMENT" -> "Visual impairment";
-            case "OTHER" -> "Other";
-            default -> "None";
-        };
     }
 
     @Override
@@ -3380,75 +2254,6 @@ public class ProfileView implements ViewInterface {
     public void cleanup() {
         // No resources to release in this static UI replica.
     }
-
-    /**
-     * Handle avatar click to upload a new profile image
-     */
-    private void handleAvatarClick(Circle avatar, Text avatarText) {
-        try {
-            Profile profile = sessionManager.getCurrentProfile();
-            if (profile == null) {
-                showAlert("Error", "No profile loaded");
-                return;
-            }
-
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Select Profile Image");
-            fileChooser.getExtensionFilters().addAll(
-                    new FileChooser.ExtensionFilter("Image Files", "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp"),
-                    new FileChooser.ExtensionFilter("All Files", "*.*"));
-
-            File selectedFile = fileChooser.showOpenDialog(null);
-            if (selectedFile != null && selectedFile.exists()) {
-                byte[] fileData = Files.readAllBytes(selectedFile.toPath());
-                String newImagePath = ProfileImageService.saveAvatarImage(fileData, selectedFile.getName(),
-                        profile.getIdProfile());
-
-                if (newImagePath != null) {
-                    // Update profile in database
-                    profile.setAvatar(newImagePath);
-                    profileService.updateProfile(profile);
-
-                    // Update avatar display
-                    Image img = ImageLoaderUtil.loadProfileAvatar(newImagePath, false);
-                    if (img != null && !img.isError()) {
-                        avatar.setFill(new ImagePattern(img));
-                        avatarText.setVisible(false);
-                        avatarText.setMouseTransparent(true);
-                        showAlert("Success", "Profile image updated successfully!");
-                    } else {
-                        showAlert("Error", "Failed to load uploaded image");
-                    }
-                } else {
-                    showAlert("Error", "Failed to save image");
-                }
-            }
-        } catch (Exception ex) {
-            System.err.println("ProfileView: Error uploading avatar: " + ex.getMessage());
-            ex.printStackTrace();
-            showAlert("Error", "Error uploading image: " + ex.getMessage());
-        }
-    }
-
-    /**
-     * Show alert dialog
-     */
-    private void showAlert(String title, String message) {
-        Alert alert = new Alert(AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
-
-    /**
-     * Get button style
-     */
-    private String buttonStyle(boolean primary) {
-        if (primary) {
-            return "-fx-background-color:#0066cc;-fx-text-fill: white;-fx-padding: 8 16 8 16;-fx-font-size: 12;-fx-background-radius: 4;";
-        } else {
-            return "-fx-background-color: #f0f0f0;-fx-text-fill: #333333;-fx-padding: 8 16 8 16;-fx-font-size: 12;-fx-background-radius: 4;";
-        }
-    }
 }
+
+

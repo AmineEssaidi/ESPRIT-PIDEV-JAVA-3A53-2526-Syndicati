@@ -1,7 +1,9 @@
 package com.syndicati.utils.session;
 
-import com.syndicati.models.entities.User;
-import com.syndicati.models.entities.Profile;
+import com.syndicati.models.user.User;
+import com.syndicati.models.user.Profile;
+import com.syndicati.models.user.UserStanding;
+import com.syndicati.controllers.user.standing.UserStandingController;
 
 /**
  * Session manager to track the currently logged-in user.
@@ -11,6 +13,8 @@ public class SessionManager {
     private static SessionManager instance;
     private User currentUser;
     private Profile currentProfile;
+    private UserStanding currentStanding;
+    private long lastXpAwardAt;
 
     private SessionManager() {
     }
@@ -38,9 +42,40 @@ public class SessionManager {
         return currentProfile;
     }
 
+    public void setCurrentStanding(UserStanding standing) {
+        this.currentStanding = standing;
+    }
+
+    public UserStanding getCurrentStanding() {
+        return currentStanding;
+    }
+
+    public synchronized UserStanding awardXp(int xpDelta) {
+        if (currentUser == null || currentUser.getIdUser() == null || currentUser.getIdUser() <= 0) {
+            return currentStanding;
+        }
+
+        int safeDelta = Math.max(0, xpDelta);
+        if (safeDelta <= 0) {
+            return currentStanding;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastXpAwardAt < 120) {
+            return currentStanding;
+        }
+        lastXpAwardAt = now;
+
+        UserStandingController controller = new UserStandingController();
+        currentStanding = controller.addExperience(currentUser.getIdUser(), safeDelta);
+        return currentStanding;
+    }
+
     public void clear() {
         currentUser = null;
         currentProfile = null;
+        currentStanding = null;
+        lastXpAwardAt = 0L;
     }
 
     public boolean isLoggedIn() {
@@ -59,3 +94,4 @@ public class SessionManager {
         return fullName.isEmpty() ? null : fullName;
     }
 }
+

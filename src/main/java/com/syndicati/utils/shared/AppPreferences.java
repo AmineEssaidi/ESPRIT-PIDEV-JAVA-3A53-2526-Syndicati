@@ -10,16 +10,12 @@ public class AppPreferences {
 
     private static final Preferences PREFS =
             Preferences.userNodeForPackage(AppPreferences.class);
-
-    // â”€â”€ keys â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public static final String KEY_THEME            = "theme";           // "dark" | "light"
     public static final String KEY_ACCENT_COLOR     = "accent-color";    // hex e.g. "#6c5ce7"
     public static final String KEY_ACCENT_GRADIENT  = "accent-gradient"; // JavaFX linear-gradient(...)
     public static final String KEY_ACCENT_NAME      = "accent-name";     // e.g. "Violet"
     public static final String KEY_LANGUAGE         = "lang";            // "en" | "fr" | "ar"
     public static final String KEY_ANIM_ACCENTS     = "animated-accents";// "true"/"false"
-
-    // â”€â”€ defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public static final String DEFAULT_THEME        = "dark";
     public static final String DEFAULT_ACCENT_COLOR = "#6c5ce7";
     public static final String DEFAULT_ACCENT_GRADIENT = "linear-gradient(from 0% 0% to 100% 100%, #6c5ce7 0%, #8b5cf6 50%, #06b6d4 100%)";
@@ -45,4 +41,6 @@ public class AppPreferences {
         return PREFS.getBoolean(key, defaultValue);
     }
 }
+
+
 
