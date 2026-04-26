@@ -186,8 +186,7 @@ public abstract class BaseDashboardPage {
         return card;
     }
 
-    protected VBox fieldGroup(String label, TextField input, Text errorText) {
-        VBox group = new VBox(6);
+    protected VBox fieldGroup(String label, TextField input) {
         Text lbl = new Text(label);
         lbl.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
         lbl.setFill(isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(15,23,42,0.64)"));
@@ -201,10 +200,7 @@ public abstract class BaseDashboardPage {
                         "-fx-prompt-text-fill:" + (isDark() ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.35)") + ";" +
                         "-fx-background-radius:10px;-fx-border-radius:10px;-fx-padding:10 12 10 12;"
         );
-        errorText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 11));
-        errorText.setFill(Color.web("#ef4444"));
-        group.getChildren().addAll(lbl, input, errorText);
-        return group;
+        return new VBox(6, lbl, input);
     }
     protected VBox fieldGroup(String label, ComboBox<String> comboBox, Text errorText) {
         VBox group = new VBox(6);
@@ -231,12 +227,37 @@ public abstract class BaseDashboardPage {
                 );
             }
         });
+
+
         errorText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 11));
         errorText.setFill(Color.web("#ef4444"));
         group.getChildren().addAll(lbl, comboBox, errorText);
         return group;
     }
 
+    protected VBox fieldGroup(String label, TextField input, Text errorText) {
+        VBox group = new VBox(6);
+        Text lbl = new Text(label);
+        lbl.setFont(Font.font(lightFont(), FontWeight.NORMAL, 12));
+        lbl.setFill(isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(15,23,42,0.64)"));
+        input.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13));
+        input.setMaxWidth(Double.MAX_VALUE);
+        input.setStyle(
+                "-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)") + ";" +
+                        "-fx-border-color:" + (isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
+                        "-fx-border-width:1;" +
+                        "-fx-text-fill:" + (isDark() ? "white" : "#111827") + ";" +
+                        "-fx-prompt-text-fill:" + (isDark() ? "rgba(255,255,255,0.25)" : "rgba(15,23,42,0.35)") + ";" +
+                        "-fx-background-radius:10px;-fx-border-radius:10px;-fx-padding:10 12 10 12;"
+        );
+        errorText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 11));
+        errorText.setFill(Color.web("#ef4444"));
+        group.getChildren().addAll(lbl, input, errorText);
+        return group;
+    }
+    protected VBox fieldGroup(String label, ComboBox<String> comboBox) {
+        return fieldGroup(label, comboBox, new Text(""));
+    }
     protected Button primaryButton(String label) {
         Button b = new Button(label);
         b.setFont(Font.font(boldFont(), FontWeight.BOLD, 13));

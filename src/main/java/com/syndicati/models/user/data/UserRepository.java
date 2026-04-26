@@ -356,6 +356,30 @@ public class UserRepository {
         }
     }
 
+
+    public List<User> findAllUserNames() {
+        String sql = "SELECT id_user, first_name, last_name FROM user ORDER BY created_at DESC";
+        List<User> users = new ArrayList<>();
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return users;
+
+            try (PreparedStatement ps = conn.prepareStatement(sql);
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    User u = new User();
+                    u.setIdUser(rs.getInt("id_user"));
+                    u.setFirstName(rs.getString("first_name"));
+                    u.setLastName(rs.getString("last_name"));
+                    users.add(u);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("UserRepository.findAllUserNames error: " + e.getMessage());
+        }
+
+        return users;
+    }
     private Timestamp toTimestamp(LocalDateTime value) {
         return value == null ? null : Timestamp.valueOf(value);
     }

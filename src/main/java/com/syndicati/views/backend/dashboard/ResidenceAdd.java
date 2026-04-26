@@ -83,14 +83,8 @@ public class ResidenceAdd extends BaseDashboardPage {
         VBox card = glassCard();
         VBox imageGroup = new VBox(5, imageButton, ImageText, ImageErreur);
 
-        card.getChildren().addAll(
-                imageGroup,
-                fieldGroup("Nom de la Résidence", nomResidenceField, nomError),
-                fieldGroup("Adresse", adresseField, adresseError),
-                fieldGroup("Nombre d'Appartements", nAppartementsField, nAppartementsError),
-                fieldGroup("Date d'Ajout", dateAjoutField, dateAjoutError),
-                fieldGroup("Nombre de Blocs", nBlocsField, nBlocsError)
-        );
+
+
 
         Button submitBtn = primaryButton("Create Residence");
         submitBtn.setOnAction(e -> {

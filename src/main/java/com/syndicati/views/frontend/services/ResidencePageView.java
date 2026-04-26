@@ -478,10 +478,10 @@ public class ResidencePageView implements ViewInterface {
         info.getChildren().addAll(
                 pill("Type " + apt.getType_a(), 11, 0.10, 0.25),
                 text(residence.getNom_r(), 30, true, "#ffffff"),
-                infoRow("Loyer", apt.getPrix_location() + " TND"),
+                infoRow("Prix Location", apt.getPrix_location() + " TND"),
                 infoRow("Surface", apt.getSuperficie() + " m2"),
                 infoRow("Bloc", aptInfo.has("bloc") && !aptInfo.get("bloc").isJsonNull() ? aptInfo.get("bloc").getAsString() : "N/A"),
-                infoRow("Floor", aptInfo.has("floor") && !aptInfo.get("floor").isJsonNull() ? aptInfo.get("floor").getAsString() : "N/A")
+                infoRow("Etage", aptInfo.has("floor") && !aptInfo.get("floor").isJsonNull() ? aptInfo.get("floor").getAsString() : "N/A")
         );
         if (apt.getParking()==1) {
             info.getChildren().add(featureTag("Parking inclus"));
@@ -670,6 +670,8 @@ public class ResidencePageView implements ViewInterface {
         String userName = SessionManager.getInstance().getCurrentUserName();
         String apptName = residences.get(selectedResidence).getNom_r();
         String waMessage = ("L'utilisateur " + userName + " est interesse a louer votre appartement a " + apptName).replaceAll("[^\\x20-\\x7E]", "");
+        String MessageWhatsapp = ("Salut, je suis " + userName + ", je suis interesse a louer votre appartement a " + apptName).replaceAll("[^\\x20-\\x7E]", "");
+
 
         TextField phoneField = new TextField();
         phoneField.setPromptText("Numéro de téléphone");
@@ -681,7 +683,7 @@ public class ResidencePageView implements ViewInterface {
 
         Runnable refreshQR = () -> {
             String phone = "+216" + phoneField.getText().trim();
-            String qrContent = "https://wa.me/" + phone.replace("+", "") + "?text=" + waMessage.replace(" ", "%20");
+            String qrContent = "https://wa.me/" + phone.replace("+", "") + "?text=" + MessageWhatsapp.replace(" ", "%20");
             try {
                 qrCodeResidence = new ServiceQRCodeResidence(qrContent, BarcodeFormat.QR_CODE, 180, 180, BufferedImage.TYPE_INT_ARGB);
                 imageView.setImage(SwingFXUtils.toFXImage(qrCodeResidence.qrImage(), null));

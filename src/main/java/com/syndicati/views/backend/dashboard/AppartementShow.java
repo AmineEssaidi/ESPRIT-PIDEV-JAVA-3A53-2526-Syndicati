@@ -3,8 +3,13 @@ package com.syndicati.views.backend.dashboard;
 import com.syndicati.controllers.residence.DetailAppartementController;
 import com.syndicati.models.residence.Appartement;
 import com.syndicati.models.residence.Maintenance;
+import com.syndicati.models.user.data.UserRepository;
 import com.syndicati.services.residence.ServiceMaintenance;
+import com.syndicati.services.residence.ServicePredictionMaintenance;
 import com.syndicati.services.residence.ServiceResidence;
+import com.syndicati.services.residence.ServicePredictionPrix;
+import com.syndicati.services.user.UserService;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -22,6 +27,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.sql.SQLDataException;
 
+
 public class AppartementShow extends BaseDashboardPage {
 
     private Appartement appartement;
@@ -30,11 +36,19 @@ public class AppartementShow extends BaseDashboardPage {
 
     ServiceResidence ServiceResidence= new ServiceResidence();
     ServiceMaintenance ServiceMaintenance= new ServiceMaintenance();
+    ServicePredictionPrix predictionService = new ServicePredictionPrix();
+    UserRepository userRepository = new UserRepository();
+    ServicePredictionMaintenance maintenancePrediction = new ServicePredictionMaintenance();
 
     public AppartementShow(Stage stage, Scene previousScene, Appartement appartement) {
         super(stage, previousScene);
         this.appartement= appartement;
         this.controller = new DetailAppartementController(stage, previousScene, appartement);
+        try {
+            predictionService.trainFromCsv();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -61,7 +75,6 @@ public class AppartementShow extends BaseDashboardPage {
                         "-fx-text-fill:#fecaca;" +
                         "-fx-cursor:hand;"
         );
-
         deleteBtn.setOnAction(e -> controller.supprimerAppartementAction());
 
         Button editBtn = primaryButton("Edit Appartement");
@@ -83,60 +96,84 @@ public class AppartementShow extends BaseDashboardPage {
         } else {
             if (appartement.getImage_a() != null) {
                 ImageView imageView = new ImageView();
-
-                String imagePath = "uploads/residence_images/" + appartement.getImage_a();
+                String imagePath = "uploads/appartement_images/" + appartement.getImage_a();
                 File imageFile = new File(imagePath);
-
                 Image loadedImage = null;
                 try {
                     if (imageFile.exists()) {
                         loadedImage = new Image(imageFile.toURI().toString());
                     } else {
                         File fallback = new File(appartement.getImage_a());
-                        if (fallback.exists()) {
-                            loadedImage = new Image(fallback.toURI().toString());
-                        }
+                        if (fallback.exists()) loadedImage = new Image(fallback.toURI().toString());
                     }
                 } catch (Exception ex) {
                     System.err.println("Image load failed: " + ex.getMessage());
                 }
-
                 if (loadedImage != null) {
                     imageView.setImage(loadedImage);
                     imageView.setFitWidth(200);
                     imageView.setFitHeight(150);
                     imageView.setPreserveRatio(true);
-
                     Label imageLabel = new Label("Image:");
                     imageLabel.setStyle("-fx-font-weight: bold;");
-
                     HBox imageRow = new HBox(10, imageLabel, imageView);
                     imageRow.setAlignment(Pos.CENTER_LEFT);
                     card.getChildren().add(imageRow);
                 } else {
-                    System.err.println("Image not found at: " + imagePath);
                     card.getChildren().add(detailRow("Image", "— (introuvable)"));
                 }
             }
 
             card.getChildren().add(detailRow("Résidence", ServiceResidence.TrouverResidenceParId(appartement.getResidence_id()).getNom_r()));
-            card.getChildren().add(detailRow("Type", appartement.getType_a()));
-            card.getChildren().add(detailRow("ID Utilisateur", String.valueOf(appartement.getId_user())));
             card.getChildren().add(divider());
 
-            card.getChildren().add(detailRow("Bloc", new JSONObject(appartement.getAppartement_info()).getString("bloc")));
-            card.getChildren().add(detailRow("Etage", new JSONObject(appartement.getAppartement_info()).getString("floor")));
+            GridPane infosGrid = new GridPane();
+            infosGrid.setHgap(12);
+            infosGrid.setVgap(0);
+            infosGrid.setMaxWidth(Double.MAX_VALUE);
+            ColumnConstraints third1 = new ColumnConstraints(); third1.setPercentWidth(33.3);
+            ColumnConstraints third2 = new ColumnConstraints(); third2.setPercentWidth(33.3);
+            ColumnConstraints third3 = new ColumnConstraints(); third3.setPercentWidth(33.3);
+            infosGrid.getColumnConstraints().addAll(third1, third2, third3);
+            infosGrid.add(detailRow("Type",  appartement.getType_a()), 0, 0);
+            infosGrid.add(detailRow("Bloc",  new JSONObject(appartement.getAppartement_info()).getString("bloc")), 1, 0);
+            infosGrid.add(detailRow("Étage", new JSONObject(appartement.getAppartement_info()).getString("floor")), 2, 0);
+            card.getChildren().add(infosGrid);
             card.getChildren().add(divider());
 
-            card.getChildren().add(detailRow("Parking", appartement.getParking() == 1 ? "Disponible" : "Non Disponible"));
-            card.getChildren().add(detailRow("Disponible", appartement.getDisponible() == 1 ? "Disponible" : "Non Disponible"));
+            GridPane availGrid = new GridPane();
+            availGrid.setHgap(12);
+            availGrid.setMaxWidth(Double.MAX_VALUE);
+            ColumnConstraints half1 = new ColumnConstraints(); half1.setPercentWidth(50);
+            ColumnConstraints half2 = new ColumnConstraints(); half2.setPercentWidth(50);
+            availGrid.getColumnConstraints().addAll(half1, half2);
+            availGrid.add(detailRow("Parking",    appartement.getParking()    == 1 ? "Disponible" : "Non Disponible"), 0, 0);
+            availGrid.add(detailRow("Disponible", appartement.getDisponible() == 1 ? "Disponible" : "Non Disponible"), 1, 0);
+            card.getChildren().add(availGrid);
             card.getChildren().add(divider());
 
-            card.getChildren().add(detailRow("Superficie", appartement.getSuperficie() + " m²"));
-            card.getChildren().add(detailRow("Prix Location", appartement.getPrix_location() + " TND"));
+            GridPane prixGrid = new GridPane();
+            prixGrid.setHgap(12);
+            prixGrid.setMaxWidth(Double.MAX_VALUE);
+            ColumnConstraints p1 = new ColumnConstraints(); p1.setPercentWidth(50);
+            ColumnConstraints p2 = new ColumnConstraints(); p2.setPercentWidth(50);
+            prixGrid.getColumnConstraints().addAll(p1, p2);
+            prixGrid.add(detailRow("Superficie",    appartement.getSuperficie() + " m²"),     0, 0);
+            prixGrid.add(detailRow("Prix Location", appartement.getPrix_location() + " TND"), 1, 0);
+            card.getChildren().add(prixGrid);
             card.getChildren().add(divider());
-            System.out.println("ID DEP"+appartement.getId_app());
-            System.out.println(appartement.toString());
+
+            double prixPrédit = predictionService.predict(appartement);
+            HBox aiRow = (HBox) detailRow("💡 Prix Prédiction IA", String.format("%.0f TND", prixPrédit));
+            aiRow.setStyle(
+                    "-fx-background-color: linear-gradient(to right, rgba(108,92,231,0.18), rgba(139,92,246,0.18), rgba(6,182,212,0.18));" +
+                            "-fx-background-radius:10px;" +
+                            "-fx-border-color: #8b5cf6;" +
+                            "-fx-border-width:1;" +
+                            "-fx-border-radius:10px;"
+            );
+            card.getChildren().add(aiRow);
+            card.getChildren().add(divider());
 
             Maintenance maintenance = null;
             try {
@@ -144,7 +181,7 @@ public class AppartementShow extends BaseDashboardPage {
             } catch (SQLDataException e) {
                 throw new RuntimeException(e);
             }
-            System.out.println(appartement.getId_app());
+
             card.getChildren().add(detailSection("Etat de l'appartement"));
             card.getChildren().add(detailSection("Maintenance"));
 
@@ -153,25 +190,71 @@ public class AppartementShow extends BaseDashboardPage {
                 maintenanceGrid.setHgap(12);
                 maintenanceGrid.setVgap(12);
                 maintenanceGrid.setMaxWidth(Double.MAX_VALUE);
-
-                ColumnConstraints col1 = new ColumnConstraints();
-                col1.setPercentWidth(50);
-                ColumnConstraints col2 = new ColumnConstraints();
-                col2.setPercentWidth(50);
-                maintenanceGrid.getColumnConstraints().addAll(col1, col2);
-
-                maintenanceGrid.add(detailRow("État Générale",    maintenance.getEtat_app()),           0, 0);
-                maintenanceGrid.add(detailRow("État Plomberie",   maintenance.getEtat_plomberie()),      1, 0);
-                maintenanceGrid.add(detailRow("État Electricité", maintenance.getEtat_electricite()),    0, 1);
-                maintenanceGrid.add(detailRow("État Chauffage",   maintenance.getEtat_chauffage()),      1, 1);
-
+                ColumnConstraints mc1 = new ColumnConstraints(); mc1.setPercentWidth(50);
+                ColumnConstraints mc2 = new ColumnConstraints(); mc2.setPercentWidth(50);
+                maintenanceGrid.getColumnConstraints().addAll(mc1, mc2);
+                maintenanceGrid.add(detailRow("État Générale",    maintenance.getEtat_app()),        0, 0);
+                maintenanceGrid.add(detailRow("État Plomberie",   maintenance.getEtat_plomberie()),   1, 0);
+                maintenanceGrid.add(detailRow("État Electricité", maintenance.getEtat_electricite()), 0, 1);
+                maintenanceGrid.add(detailRow("État Chauffage",   maintenance.getEtat_chauffage()),   1, 1);
                 card.getChildren().add(maintenanceGrid);
                 card.getChildren().add(divider());
 
                 card.getChildren().add(detailRow("Date de la dernière maintenance", maintenance.getDate_derniere_maintenance()));
                 card.getChildren().add(detailRow("Description de la maintenance",   maintenance.getdescription_maint()));
-                card.getChildren().add(detailRow("Recommendation IA",               maintenance.getRecommendation_ia()));
+
+                String existingReco = maintenance.getRecommendation_ia();
+                boolean hasReco = existingReco != null && !existingReco.isBlank();
+
+                Label recoKeyLabel = new Label("✨ Recommendation IA");
+                recoKeyLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 12px;");
+
+                Label recoValueLabel = new Label(hasReco ? existingReco : "⏳ Génération en cours...");
+                recoValueLabel.setWrapText(true);
+                recoValueLabel.setMaxWidth(Double.MAX_VALUE);
+                HBox.setHgrow(recoValueLabel, Priority.ALWAYS);
+
+                HBox recoRow = new HBox(12, recoKeyLabel, recoValueLabel);
+                recoRow.setPadding(new Insets(10, 14, 10, 14));
+                recoRow.setAlignment(Pos.CENTER_LEFT);
+                recoRow.setStyle(
+                        "-fx-background-color: linear-gradient(to right, rgba(108,92,231,0.18), rgba(139,92,246,0.18), rgba(6,182,212,0.18));" +
+                                "-fx-background-radius:10px;" +
+                                "-fx-border-color: #8b5cf6;" +
+                                "-fx-border-width:1;" +
+                                "-fx-border-radius:10px;"
+                );
+                card.getChildren().add(recoRow);
                 card.getChildren().add(divider());
+
+                if (!hasReco) {
+                    final Maintenance maintenanceFinal = maintenance;
+
+                    Task<String> aiTask = new Task<>() {
+                        @Override
+                        protected String call() {
+                            return maintenancePrediction.predict(appartement, maintenanceFinal);
+                        }
+                    };
+
+                    aiTask.setOnSucceeded(e -> {
+                        String result = aiTask.getValue();
+                        recoValueLabel.setText(result);
+                        try {
+                            maintenanceFinal.setRecommendation_ia(result);
+                            ServiceMaintenance.Modifier(maintenanceFinal);
+                        } catch (Exception ex) {
+                            System.err.println("[Mistral] Failed to save recommendation: " + ex.getMessage());
+                        }
+                    });
+
+                    aiTask.setOnFailed(e ->
+                            recoValueLabel.setText("Impossible de générer une recommandation.")
+                    );
+
+                    new Thread(aiTask).start();
+                }
+
             } else {
                 Text noMaint = new Text("Aucune maintenance enregistrée pour cet appartement.");
                 noMaint.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13));
@@ -185,7 +268,6 @@ public class AppartementShow extends BaseDashboardPage {
         form.setFillWidth(true);
         return form;
     }
-
     private Node detailSection(String label) {
         Text t = new Text(label.toUpperCase());
         t.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));

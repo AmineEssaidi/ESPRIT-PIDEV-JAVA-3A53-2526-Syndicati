@@ -19,33 +19,32 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
-
 public class AjouterAppartementController {
 
-    private  Stage stage;
-    private  Scene previousScene;
+    private Stage stage;
+    private Scene previousScene;
 
-    private  ComboBox<String> residenceChamp;
-    private  TextField IDUtilisateurChamp;
-    private  ComboBox<String> parkingChamp;
-    private  ComboBox<String> disponibleChamp;
-    private  ComboBox<String> typeAChamp;
-    private   ComboBox<String> numeroChamp;
+    private ComboBox<String> residenceChamp;
+    private ComboBox<String> userChamp;          // was TextField IDUtilisateurChamp
+    private ComboBox<String> parkingChamp;
+    private ComboBox<String> disponibleChamp;
+    private ComboBox<String> typeAChamp;
+    private ComboBox<String> numeroChamp;
     private ComboBox<String> blocChamp;
     private ComboBox<String> etageChamp;
-    private  TextField superficieChamp;
-    private  TextField prixLocationChamp;
+    private TextField superficieChamp;
+    private TextField prixLocationChamp;
 
-    private  Text imageErreur;
-    private  Text IDUtilisateurChampErreur;
-    private  Text superficieChampErreur;
-    private  Text prixLocationChampErreur;
+    private Text imageErreur;
+    private Text IDUtilisateurChampErreur;
+    private Text superficieChampErreur;
+    private Text prixLocationChampErreur;
 
     private File imageA;
 
     public AjouterAppartementController(Stage stage, Scene previousScene,
                                         ComboBox<String> residenceChamp,
-                                        TextField IDUtilisateurChamp,
+                                        ComboBox<String> userChamp,
                                         ComboBox<String> parkingChamp,
                                         ComboBox<String> disponibleChamp,
                                         ComboBox<String> typeAChamp,
@@ -61,7 +60,7 @@ public class AjouterAppartementController {
         this.stage = stage;
         this.previousScene = previousScene;
         this.residenceChamp = residenceChamp;
-        this.IDUtilisateurChamp = IDUtilisateurChamp;
+        this.userChamp = userChamp;
         this.parkingChamp = parkingChamp;
         this.disponibleChamp = disponibleChamp;
         this.typeAChamp = typeAChamp;
@@ -80,36 +79,19 @@ public class AjouterAppartementController {
         this.imageA = imageA;
     }
 
-    public void ajouterAppartementAction() {
-        imageErreur.setText("");
-        IDUtilisateurChampErreur.setText("");
-        superficieChampErreur.setText("");
-        prixLocationChampErreur.setText("");
+    public void ajouterAppartementAction() throws SQLException {
+        String selected = userChamp.getValue();
+        int idUtilisateur = Integer.parseInt(selected.split(" - ")[0]);
 
         String residence = residenceChamp.getValue();
-        String idUtilisateurStr = IDUtilisateurChamp.getText();
         String typeA = typeAChamp.getValue();
         String bloc = blocChamp.getValue();
         String numero = numeroChamp.getValue();
         String etageStr = etageChamp.getValue();
-        String superficieStr = superficieChamp.getText();
-        String prixLocationStr = prixLocationChamp.getText();
+        int superficie = Integer.parseInt(superficieChamp.getText());
+        int prixLocation = Integer.parseInt(prixLocationChamp.getText());
         boolean parking = "Disponible".equals(parkingChamp.getValue());
         boolean disponible = "Disponible".equals(disponibleChamp.getValue());
-
-        if (!VerifierAppartement(IDUtilisateurChamp, superficieChamp, prixLocationChamp,
-                IDUtilisateurChampErreur, superficieChampErreur, prixLocationChampErreur)) {
-            return;
-        }
-
-        if (imageA == null) {
-            imageErreur.setText("Image obligatoire!");
-            return;
-        }
-
-        int idUtilisateur = Integer.parseInt(idUtilisateurStr);
-        int superficie = Integer.parseInt(superficieStr);
-        int prixLocation = Integer.parseInt(prixLocationStr);
 
         String appartementInfo = String.format(
                 "{\"bloc\": \"%s\", \"floor\": \"%s\", \"number\": \"%s\", \"parking\": %b, \"disponible\": %b}",
@@ -121,7 +103,9 @@ public class AjouterAppartementController {
         ServiceResidence serviceResidence = new ServiceResidence();
         Residence residence_obj = serviceResidence.TrouverResidenceParNom(residence);
 
-        SauvegarderImage(imageA, appartement);
+        if (imageA != null) {
+            SauvegarderImage(imageA, appartement);
+        }
 
         appartement.setResidence_id(residence_obj.getId_residence());
         appartement.setId_user(idUtilisateur);
@@ -132,28 +116,11 @@ public class AjouterAppartementController {
         appartement.setParking(parking ? 1 : 0);
         appartement.setDisponible(disponible ? 1 : 0);
 
-        ServiceAppartement serviceAppartement = new ServiceAppartement();
-
-        try {
-            serviceAppartement.Ajouter(appartement);
-            if (!ServiceAlert.showConfirmation(
-                    "Appartement Ajouté",
-                    "Appartement ajouté avec succès!", ""
-            )) return;
-            new AppartementShow(stage, previousScene, appartement).show();
-
-        } catch (SQLException e) {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Erreur");
-            alert.setHeaderText(e.getMessage());
-            alert.show();
-        }
+        new ServiceAppartement().Ajouter(appartement);
     }
 
-    private boolean VerifierAppartement(TextField IDUtilisateurChamp,
-                                        TextField superficieChamp,
+    private boolean VerifierAppartement(TextField superficieChamp,
                                         TextField prixLocationChamp,
-                                        Text IDUtilisateurChampErreur,
                                         Text superficieChampErreur,
                                         Text prixLocationChampErreur) {
         boolean test = true;
@@ -166,57 +133,42 @@ public class AjouterAppartementController {
         superficieChampErreur.setVisible(true);    superficieChampErreur.setManaged(true);
         prixLocationChampErreur.setVisible(true);  prixLocationChampErreur.setManaged(true);
 
-        String idUtilisateurStr = IDUtilisateurChamp.getText();
-        if (!idUtilisateurStr.matches("\\d+")) {
-            IDUtilisateurChampErreur.setText("ID utilisateur invalide!");
+        if (userChamp.getValue() == null || userChamp.getValue().isBlank()) {
+            IDUtilisateurChampErreur.setText("Veuillez sélectionner un utilisateur!");
             test = false;
-        } else {
-            int idUtilisateur = Integer.parseInt(idUtilisateurStr);
-            if (idUtilisateur <= 0) {
-                IDUtilisateurChampErreur.setText("ID utilisateur doit être positif!");
-                test = false;
-            }
         }
 
         String superficieStr = superficieChamp.getText();
         if (!superficieStr.matches("\\d+")) {
             superficieChampErreur.setText("Superficie invalide!");
             test = false;
-        } else {
-            int superficie = Integer.parseInt(superficieStr);
-            if (superficie <= 0) {
-                superficieChampErreur.setText("Superficie doit être positive!");
-                test = false;
-            }
+        } else if (Integer.parseInt(superficieStr) <= 0) {
+            superficieChampErreur.setText("Superficie doit être positive!");
+            test = false;
         }
 
         String prixLocationStr = prixLocationChamp.getText();
         if (!prixLocationStr.matches("\\d+")) {
             prixLocationChampErreur.setText("Prix de location invalide!");
             test = false;
-        } else {
-            int prixLocation = Integer.parseInt(prixLocationStr);
-            if (prixLocation <= 0) {
-                prixLocationChampErreur.setText("Prix de location doit être positif!");
-                test = false;
-            }
+        } else if (Integer.parseInt(prixLocationStr) <= 0) {
+            prixLocationChampErreur.setText("Prix de location doit être positif!");
+            test = false;
         }
 
         return test;
     }
 
     public boolean SauvegarderImage(File imageA, Appartement appartement) {
-        if (imageA != null) {
-            String destDir = System.getProperty("user.dir") + "/uploads/appartement_images/";
-            new File(destDir).mkdirs();
-            String destPath = (destDir + imageA.getName()).replace("\\", "/");
-            try {
-                Files.copy(imageA.toPath(), Path.of(destPath), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            appartement.setImage_a(imageA.getName());
+        String destDir = System.getProperty("user.dir") + "/uploads/appartement_images/";
+        new File(destDir).mkdirs();
+        String destPath = (destDir + imageA.getName()).replace("\\", "/");
+        try {
+            Files.copy(imageA.toPath(), Path.of(destPath), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+        appartement.setImage_a(imageA.getName());
         return true;
     }
 }
