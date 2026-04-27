@@ -187,11 +187,10 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.syndicati.Launcher</mainClass>
-                    <executable>C:\Users\DELL\.jdks\jbr-25.0.2\bin\java.exe</executable>
+                    <executable>${java.home}/bin/java</executable>
                     <options>
                         <option>--enable-native-access=ALL-UNNAMED</option>
                         <option>--enable-native-access=javafx.graphics,javafx.media</option>
-                        <!-- Suppress sun.misc.Unsafe deprecation warnings from Guice 5.1.0 -->
                     </options>
                 </configuration>
             </plugin>

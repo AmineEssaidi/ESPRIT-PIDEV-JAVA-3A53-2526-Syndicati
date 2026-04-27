@@ -3,6 +3,7 @@ package com.syndicati.services.syndicat;
 import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.syndicat.data.ReclamationRepository;
 import com.syndicati.models.user.User;
+import com.syndicati.services.mail.AsyncMailerService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -12,6 +13,7 @@ import java.util.Optional;
  * Handles validation and CRUD operations aligned with Horizon patterns.
  */
 public class ReclamationService {
+    private static final String RECLAMATION_NOTIFICATION_EMAIL = "medbahahamdi2002@gmail.com";
 
     private final ReclamationRepository repository;
 
@@ -59,27 +61,11 @@ public class ReclamationService {
         reclamation.setUser(user);
         reclamation.setStatutReclamation("en_attente");
 
-        Integer newId = repository.create(reclamation);
-        
-        // Notify admin via email
-        try {
-            com.syndicati.services.mail.AsyncMailerService mailer = com.syndicati.services.mail.AsyncMailerService.getInstance();
-            String html = "<div style='font-family: sans-serif; color: #333;'>" +
-                          "<h2 style='color: #4f46e5;'>New Reclamation Submitted #"+ newId +"</h2>" +
-                          "<p><strong>Title:</strong> " + titre + "</p>" +
-                          "<p><strong>Description:</strong> " + description + "</p>" +
-                          "<p><strong>Submitted by:</strong> " + (user != null ? user.getEmailUser() : "Unknown User") + "</p>" +
-                          "<p><strong>Date:</strong> " + date + "</p>" +
-                          "<hr/>" +
-                          "<p style='font-size: 0.9em; color: #666;'>Log in to Syndicati Admin Dashboard to respond.</p>" +
-                          "</div>";
-            mailer.sendHtmlAsync("medbahahamdi2002@gmail.com", "🚨 New Reclamation: " + titre, html);
-            System.out.println("Notification email queued for medbahahamdi2002@gmail.com");
-        } catch (Exception e) {
-            System.err.println("Failed to queue notification email: " + e.getMessage());
+        Integer createdId = repository.create(reclamation);
+        if (createdId != null && createdId > 0) {
+            sendCreationNotification(reclamation, createdId);
         }
-
-        return newId;
+        return createdId;
     }
 
     public boolean update(Integer id, String titre, String description, LocalDateTime date, String statut) {
@@ -179,6 +165,41 @@ public class ReclamationService {
 
     public ReclamationRepository getRepository() {
         return repository;
+    }
+
+    private void sendCreationNotification(Reclamation reclamation, Integer reclamationId) {
+        try {
+            String subject = "Nouvelle reclamation creee";
+            String html = buildCreationEmailHtml(reclamation, reclamationId);
+            AsyncMailerService.getInstance().sendHtmlAsync(
+                RECLAMATION_NOTIFICATION_EMAIL,
+                subject,
+                html
+            );
+        } catch (Exception e) {
+            // Never block reclamation creation if email delivery fails.
+            System.err.println("Reclamation notification email failed: " + e.getMessage());
+        }
+    }
+
+    private String buildCreationEmailHtml(Reclamation reclamation, Integer reclamationId) {
+        String titre = safe(reclamation.getTitreReclamations());
+        String description = safe(reclamation.getDescReclamation());
+        String userEmail = reclamation.getUser() != null ? safe(reclamation.getUser().getEmailUser()) : "N/A";
+        String date = reclamation.getDateReclamation() != null ? reclamation.getDateReclamation().toString() : "N/A";
+
+        return "<html><body>"
+            + "<h2>Nouvelle reclamation creee</h2>"
+            + "<p><b>Titre:</b> " + titre + "</p>"
+            + "<p><b>Description:</b> " + description + "</p>"
+            + "<p><b>Email utilisateur:</b> " + userEmail + "</p>"
+            + "<p><b>Date reclamation:</b> " + date + "</p>"
+            + "<p><b>Statut:</b> en_attente</p>"
+            + "</body></html>";
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private static class ValidationResult {
