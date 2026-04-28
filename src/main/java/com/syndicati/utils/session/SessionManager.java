@@ -36,6 +36,9 @@ public class SessionManager {
 
     public void setCurrentProfile(Profile profile) {
         this.currentProfile = profile;
+        if (profile != null) {
+            com.syndicati.utils.shared.AppPreferences.syncFromProfile(profile);
+        }
     }
 
     public Profile getCurrentProfile() {

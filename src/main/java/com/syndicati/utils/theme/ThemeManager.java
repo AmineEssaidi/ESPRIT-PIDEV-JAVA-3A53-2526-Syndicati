@@ -60,6 +60,32 @@ public class ThemeManager {
         initGradientTimeline();
     }
 
+    public void reloadFromPreferences() {
+        String savedTheme = AppPreferences.get(AppPreferences.KEY_THEME, AppPreferences.DEFAULT_THEME);
+        this.isDarkMode = "dark".equals(savedTheme);
+        this.isDarkModeProperty.set(isDarkMode);
+
+        String savedAccent = AppPreferences.get(AppPreferences.KEY_ACCENT_COLOR, AppPreferences.DEFAULT_ACCENT_COLOR);
+        this.accentColor = savedAccent;
+        this.accentColorProperty.set(accentColor);
+
+        String savedGradient = AppPreferences.get(
+            AppPreferences.KEY_ACCENT_GRADIENT,
+            buildGradientFromAccent(savedAccent)
+        );
+        this.accentGradient = savedGradient;
+
+        this.animatedAccents = AppPreferences.getBoolean(AppPreferences.KEY_ANIM_ACCENTS, AppPreferences.DEFAULT_ANIM_ACCENTS);
+        
+        if (gradientTimeline != null) {
+            if (animatedAccents) gradientTimeline.play();
+            else { gradientTimeline.stop(); gradientPhase.set(0.0); }
+        }
+
+        applyTheme();
+        notifyAccentListeners();
+    }
+
     private void initGradientTimeline() {
         gradientTimeline = new Timeline(
             new KeyFrame(Duration.ZERO, new KeyValue(gradientPhase, 0.0, Interpolator.EASE_BOTH)),

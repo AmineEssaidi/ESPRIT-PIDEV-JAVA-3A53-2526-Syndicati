@@ -27,6 +27,7 @@ public class AppPreferences {
 
     public static void set(String key, String value) {
         PREFS.put(key, value);
+        syncToDatabase(key, value);
     }
 
     public static String get(String key, String defaultValue) {
@@ -35,10 +36,50 @@ public class AppPreferences {
 
     public static void setBoolean(String key, boolean value) {
         PREFS.putBoolean(key, value);
+        syncToDatabase(key, value);
     }
 
     public static boolean getBoolean(String key, boolean defaultValue) {
         return PREFS.getBoolean(key, defaultValue);
+    }
+
+    private static void syncToDatabase(String key, Object value) {
+        com.syndicati.utils.session.SessionManager session = com.syndicati.utils.session.SessionManager.getInstance();
+        if (session.isLoggedIn() && session.getCurrentProfile() != null) {
+            com.syndicati.models.user.Profile profile = session.getCurrentProfile();
+            String json = profile.getSettingsJson();
+            org.json.JSONObject obj;
+            try {
+                obj = (json == null || json.trim().isEmpty()) ? new org.json.JSONObject() : new org.json.JSONObject(json);
+            } catch (Exception e) {
+                obj = new org.json.JSONObject();
+            }
+            obj.put(key, value);
+            profile.setSettingsJson(obj.toString());
+            new com.syndicati.models.user.data.ProfileRepository().update(profile);
+        }
+    }
+
+    public static void syncFromProfile(com.syndicati.models.user.Profile profile) {
+        if (profile == null) return;
+        String json = profile.getSettingsJson();
+        if (json == null || json.trim().isEmpty()) return;
+
+        try {
+            org.json.JSONObject obj = new org.json.JSONObject(json);
+            for (String key : obj.keySet()) {
+                Object value = obj.get(key);
+                if (value instanceof Boolean) {
+                    PREFS.putBoolean(key, (Boolean) value);
+                } else {
+                    PREFS.put(key, value.toString());
+                }
+            }
+            // Trigger theme update
+            com.syndicati.utils.theme.ThemeManager.getInstance().reloadFromPreferences();
+        } catch (Exception e) {
+            System.err.println("Failed to sync settings from profile: " + e.getMessage());
+        }
     }
 }
 
