@@ -40,6 +40,10 @@ import javafx.util.Duration;
 
 import com.syndicati.services.MapService;
 import com.syndicati.services.SocialShareService;
+import com.syndicati.services.RecommendationService;
+import com.syndicati.services.TicketService;
+import com.syndicati.services.VoiceService;
+import com.syndicati.services.mail.EventMailingService;
 import javafx.scene.web.WebView;
 import javafx.scene.web.WebEngine;
 import netscape.javascript.JSObject;
@@ -57,6 +61,10 @@ public class EvenementPageView implements ViewInterface {
     private WebEngine webEngine;
     private MapBridge mapBridge; // Keep reference to prevent GC
     private VBox weatherPreview;
+    private final VoiceService voiceService;
+    private final RecommendationService recommendationService;
+    private final TicketService ticketService;
+    private VBox recommendationsBox;
 
     // Form fields for CRUD
     private TextField titreField;
@@ -77,6 +85,9 @@ public class EvenementPageView implements ViewInterface {
         this.weatherService = new WeatherService();
         this.mapService = new MapService();
         this.socialShareService = new SocialShareService();
+        this.voiceService = new VoiceService();
+        this.recommendationService = new RecommendationService();
+        this.ticketService = new TicketService();
 
         root = new VBox(26);
         root.setAlignment(Pos.TOP_CENTER);
@@ -88,8 +99,11 @@ public class EvenementPageView implements ViewInterface {
 
     private void refreshContent() {
         root.getChildren().clear();
+        // Add hidden voice webview to the scene to ensure permissions/context
+        root.getChildren().add(voiceService.getView());
         root.getChildren().addAll(
             buildHeroSection(),
+            buildRecommendationsSection(),
             buildDashboardSection(),
             buildEventsSection()
         );
@@ -367,6 +381,7 @@ public class EvenementPageView implements ViewInterface {
             row1,
             lieuWithControls,
             descArea.getParent(),
+            addVoiceControl(descArea),
             row2,
             saveBtn
         );
@@ -580,7 +595,7 @@ public class EvenementPageView implements ViewInterface {
             VBox card = eventCard(events.get(i));
             GridPane.setFillWidth(card, true);
             card.setMaxWidth(Double.MAX_VALUE);
-            card.setMinWidth(260);
+            card.setMinWidth(240);
             grid.add(card, i % cols, i / cols);
         }
     }
@@ -620,9 +635,11 @@ public class EvenementPageView implements ViewInterface {
         VBox body = new VBox(12);
         body.setPadding(new Insets(20));
 
+        Text metaLoc = text(e.getLieuEvent(), 11, false, textMuted());
+        metaLoc.setWrappingWidth(150); // Prevent long address from breaking layout
         HBox meta = new HBox(14,
-            text(e.getDateEvent() != null ? e.getDateEvent().toString() : "", 12, false, textMuted()),
-            text(e.getLieuEvent(), 12, false, textMuted())
+            text(e.getDateEvent() != null ? e.getDateEvent().toString() : "", 11, false, textMuted()),
+            metaLoc
         );
         Text title = text(e.getTitreEvent(), 24, true, tm.getTextColor());
         title.wrappingWidthProperty().bind(card.widthProperty().subtract(52));
@@ -646,24 +663,26 @@ public class EvenementPageView implements ViewInterface {
             text("Places Left", 11, false, textMuted())
         );
 
-        HBox actions = new HBox(8);
-        Button editBtn = iconButton("✎");
-        editBtn.setOnAction(ev -> prepareEdit(e));
-        Button deleteBtn = iconButton("🗑");
-        deleteBtn.setStyle(deleteBtn.getStyle() + "-fx-text-fill: #ff4d4d;");
-        deleteBtn.setOnAction(ev -> handleDelete(e));
-
         Button shareBtn = iconButton("🔗");
-        shareBtn.setStyle(shareBtn.getStyle() + "-fx-text-fill: " + tm.getAccentHex() + "; -fx-font-size: 14px;");
+        shareBtn.setStyle(shareBtn.getStyle() + "-fx-text-fill: " + tm.getAccentHex() + "; -fx-font-size: 16px; -fx-min-width: 34px;");
         shareBtn.setOnAction(ev -> socialShareService.shareOnFacebook(e.getTitreEvent(), e.getDescriptionEvent()));
 
-        Button details = gradientButton("Details", 10, new Insets(6, 10, 6, 10));
+        Button editBtn = iconButton("✎");
+        editBtn.setStyle(editBtn.getStyle() + "-fx-font-size: 16px; -fx-min-width: 34px;");
+        editBtn.setOnAction(ev -> prepareEdit(e));
+
+        Button deleteBtn = iconButton("🗑");
+        deleteBtn.setStyle(deleteBtn.getStyle() + "-fx-text-fill: #ff4d4d; -fx-font-size: 16px; -fx-min-width: 34px;");
+        deleteBtn.setOnAction(ev -> handleDelete(e));
+
+        Button details = gradientButton("Details", 10, new Insets(6, 12, 6, 12));
         details.setOnAction(ev -> switchFace(mainFace, detailsFace));
         
-        HBox btnBox = new HBox(6, shareBtn, editBtn, deleteBtn, details);
+        HBox btnBox = new HBox(8, shareBtn, editBtn, deleteBtn, details);
         btnBox.setAlignment(Pos.CENTER_RIGHT);
+        HBox.setHgrow(btnBox, Priority.ALWAYS);
         
-        footer.getChildren().addAll(avail, spacer(), btnBox);
+        footer.getChildren().addAll(avail, btnBox);
 
         body.getChildren().addAll(meta, title, desc, pushFooter, footer);
         mainFace.getChildren().addAll(image, body);
@@ -901,6 +920,42 @@ public class EvenementPageView implements ViewInterface {
         );
     }
 
+    private Node addVoiceControl(TextArea target) {
+        Button micBtn = new Button("🎤 Start Voice Dictation");
+        micBtn.setMaxWidth(Double.MAX_VALUE);
+        micBtn.setStyle(
+            "-fx-background-color: rgba(99, 102, 241, 0.15);" +
+            "-fx-border-color: rgba(99, 102, 241, 0.4);" +
+            "-fx-border-width: 1px;" +
+            "-fx-text-fill: #818cf8;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-border-radius: 10px;" +
+            "-fx-padding: 8 12;"
+        );
+
+        micBtn.setOnAction(ev -> {
+            if (voiceService.isListening()) {
+                voiceService.stopListening();
+                micBtn.setText("🎤 Start Voice Dictation");
+                micBtn.setStyle(micBtn.getStyle().replace("#ef4444", "#818cf8"));
+            } else {
+                micBtn.setText("🔴 Listening... Click to Stop");
+                micBtn.setStyle(micBtn.getStyle().replace("#818cf8", "#ef4444"));
+                voiceService.startListening(text -> {
+                    System.out.println("DEBUG UI: Received from VoiceService: " + text);
+                    javafx.application.Platform.runLater(() -> {
+                        String current = target.getText();
+                        target.setText(current.isEmpty() ? text : current + " " + text);
+                        System.out.println("DEBUG UI: TextArea updated.");
+                    });
+                });
+            }
+        });
+
+        return micBtn;
+    }
+
     private void handleSaveEvent(Node from, Node to) {
         try {
             // Basic validation
@@ -949,10 +1004,18 @@ public class EvenementPageView implements ViewInterface {
             if (editingEvent == null) {
                 e.setNbRestants(e.getNbPlaces());
                 boolean ok = evenementService.createEvent(e);
-                if (ok) System.out.println("✅ Event created successfully with ID: " + e.getIdEvent());
+                if (ok) {
+                    System.out.println("✅ Event created successfully with ID: " + e.getIdEvent());
+                    showSuccessAlert("Event Created", "Your event '" + e.getTitreEvent() + "' is now live! Sending confirmation email...");
+                    // Send creation email (Async)
+                    EventMailingService.getInstance().sendEventCreationNotification(e);
+                }
             } else {
                 boolean ok = evenementService.updateEvent(e);
-                if (ok) System.out.println("✅ Event updated successfully.");
+                if (ok) {
+                    System.out.println("✅ Event updated successfully.");
+                    showSuccessAlert("Event Updated", "Modifications saved successfully.");
+                }
             }
             
             clearForm();
@@ -1149,18 +1212,34 @@ public class EvenementPageView implements ViewInterface {
 
                 boolean ok = participationService.registerParticipation(p);
                 if (ok) {
+                    // Send confirmation email (Async)
+                    EventMailingService.getInstance().sendParticipationConfirmation(p);
+                    
                     // Immediate visual feedback on the card
                     e.setNbRestants(e.getNbRestants() - totalNeeded);
                     joinBtn.setText("Registered!");
                     joinBtn.setDisable(true);
                     joinBtn.setStyle(joinBtn.getStyle() + "-fx-opacity: 0.7;");
                     
-                    showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. A confirmation email has been sent.");
+                    showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. Your ticket is ready!");
                     
-                    if (overlay.getParent() instanceof Pane) {
-                        ((Pane) overlay.getParent()).getChildren().remove(overlay);
+                    // Offer to download ticket
+                    Button downloadBtn = gradientButton("📥 Download My Ticket (PDF)", 13, new Insets(10, 20, 10, 20));
+                    downloadBtn.setOnAction(dev -> {
+                        try {
+                            String path = ticketService.generateTicketPDF(p);
+                            ticketService.openTicket(path);
+                        } catch (Exception ex) {
+                            showErrorAlert("Export Error", "Could not generate PDF: " + ex.getMessage());
+                        }
+                    });
+                    
+                    if (overlay.getChildren().get(0) instanceof VBox) {
+                        VBox v = (VBox) overlay.getChildren().get(0);
+                        v.getChildren().add(downloadBtn);
+                        // Optional: remove the previous form fields to clean up
                     }
-                    
+
                     // Refresh after a small delay to let user see the change
                     javafx.application.Platform.runLater(() -> refreshContent());
                 } else {
@@ -1280,5 +1359,54 @@ public class EvenementPageView implements ViewInterface {
                 }
             }).start();
         }
+    }
+
+    private Node buildRecommendationsSection() {
+        recommendationsBox = new VBox(14);
+        recommendationsBox.setAlignment(Pos.CENTER);
+        recommendationsBox.setPadding(new Insets(20, 48, 0, 48));
+        recommendationsBox.setVisible(false);
+        recommendationsBox.setManaged(false);
+
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.getChildren().addAll(
+            text("✨ Recommended For You", 20, true, tm.getAccentHex())
+        );
+
+        HBox cards = new HBox(20);
+        cards.setAlignment(Pos.CENTER);
+
+        recommendationsBox.getChildren().addAll(header, cards);
+
+        // Load recommendations in background
+        com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+        if (sm.isLoggedIn()) {
+            new Thread(() -> {
+                try {
+                    List<com.syndicati.models.entities.Participation> history = participationService.getParticipationsByUser(sm.getCurrentUser().getIdUser());
+                    List<com.syndicati.models.entities.Evenement> recs = recommendationService.getRecommendations(evenementService.getAllEvents(), history);
+                    
+                    Platform.runLater(() -> {
+                        if (recs != null && !recs.isEmpty()) {
+                            cards.getChildren().clear();
+                            for (com.syndicati.models.entities.Evenement e : recs) {
+                                VBox card = eventCard(e);
+                                card.setMinWidth(320);
+                                card.setMaxWidth(320);
+                                card.setStyle(card.getStyle() + "-fx-border-color: " + tm.getAccentHex() + "; -fx-border-width: 2px; -fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.3) + ", 20, 0, 0, 0);");
+                                cards.getChildren().add(card);
+                            }
+                            recommendationsBox.setVisible(true);
+                            recommendationsBox.setManaged(true);
+                        }
+                    });
+                } catch (Exception ex) {
+                    System.err.println("[RecommendationUI] Failed to load suggestions: " + ex.getMessage());
+                }
+            }).start();
+        }
+
+        return recommendationsBox;
     }
 }
