@@ -11,6 +11,8 @@ import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.services.forum.OpenAIModerationService;
+import com.syndicati.services.forum.SentimentAnalysisService;
+import com.syndicati.services.forum.SentimentAnalysisService.SentimentResult;
 import com.syndicati.services.forum.ReactionService.ReactionActionResult;
 import com.syndicati.services.forum.ReactionService.ReactionPayload;
 import com.syndicati.services.forum.ReactionService.ReactionStatus;
@@ -93,6 +95,7 @@ public class ForumPageView implements ViewInterface {
     private final ReactionController reactions = new ReactionController();
     private final ProfileController profiles = new ProfileController();
     private final OpenAIModerationService moderationService = new OpenAIModerationService();
+    private final SentimentAnalysisService sentimentService = new SentimentAnalysisService();
 
     private final VBox listBox = new VBox(10);
     private final StackPane faceStack = new StackPane();
@@ -118,6 +121,7 @@ public class ForumPageView implements ViewInterface {
     private final Button postEmojiButton = new Button("Emoji");
     private final Button postBookmarkButton = new Button("Bookmark");
     private final Button postReportButton = new Button("Report");
+    private Button feelingButton;
     private final Label postLikeCount = new Label("");
     private final Label postDislikeCount = new Label("");
     private final Label postRatioText = new Label("0%");
@@ -347,6 +351,7 @@ public class ForumPageView implements ViewInterface {
         Button createSwitcher = ghostButton("New Post", () -> openCreateFace(false));
         Button editSwitcher = ghostButton("Edit", this::openEditFace);
         Button deleteSwitcher = ghostButton("Delete", this::deleteCurrentPublication);
+        feelingButton = ghostButton("Feeling", this::showSentimentAnalysis);
 
         ownerActions.getChildren().setAll(editSwitcher, deleteSwitcher);
         ownerActions.setManaged(false);
@@ -360,7 +365,7 @@ public class ForumPageView implements ViewInterface {
         postReportButton.setMinWidth(Region.USE_PREF_SIZE);
         postReportButton.setMaxWidth(Region.USE_PREF_SIZE);
 
-        HBox rightActions = new HBox(8, ownerActions, postReportButton);
+        HBox rightActions = new HBox(8, ownerActions, feelingButton, postReportButton);
         rightActions.setAlignment(Pos.CENTER_RIGHT);
         rightActions.setMinWidth(Region.USE_PREF_SIZE);
         rightActions.setMaxWidth(Region.USE_PREF_SIZE);
@@ -368,10 +373,17 @@ public class ForumPageView implements ViewInterface {
 
         reactionCluster.setMinWidth(0);
         reactionCluster.prefWrapLengthProperty().bind(
-                Bindings.max(120, actionsBar.widthProperty().subtract(rightActions.widthProperty()).subtract(40)));
+                actionsBar.widthProperty().subtract(rightActions.widthProperty()).subtract(40));
 
-        actionsBar.setCenter(reactionWrap);
+        actionsBar.setLeft(reactionWrap);
         actionsBar.setRight(rightActions);
+
+        feelingButton.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.06);" +
+                        "-fx-border-color: rgba(255,255,255,0.15);" +
+                        "-fx-border-radius: 12px; -fx-background-radius: 12px;" +
+                        "-fx-text-fill: white; -fx-padding: 8 14 8 14;");
+        feelingButton.setOnAction(e -> showSentimentAnalysis());
 
         VBox publicationBody = new VBox(10, heroBody, actionsBar);
         publicationBody.setPadding(new Insets(22, 0, 10, 0));
@@ -2858,5 +2870,127 @@ public class ForumPageView implements ViewInterface {
 
         seq.setOnFinished(e -> notificationBox.getChildren().remove(toast));
         seq.play();
+    }
+
+    private void showSentimentAnalysis() {
+        if (current == null) return;
+
+        String textToAnalyze = current.getTitrePub() + ". " + current.getDescriptionPub();
+        
+        // Show loading state
+        showNotification("Analyzing feelings... please wait", true);
+
+        sentimentService.analyzeContent(textToAnalyze).thenAccept(result -> {
+            javafx.application.Platform.runLater(() -> {
+                if (!result.success) {
+                    showInfo("Sentiment Analysis", result.explanation);
+                    return;
+                }
+                showSentimentPopup(result);
+            });
+        });
+    }
+
+    private void showSentimentPopup(SentimentResult result) {
+        javafx.stage.Stage stage = new javafx.stage.Stage();
+        stage.initStyle(javafx.stage.StageStyle.TRANSPARENT);
+        if (root.getScene() != null && root.getScene().getWindow() != null) {
+            stage.initOwner(root.getScene().getWindow());
+            stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        }
+
+        VBox container = new VBox(20);
+        container.setPadding(new Insets(30));
+        container.setPrefWidth(450);
+        container.setStyle(
+            "-fx-background-color: rgba(17, 24, 39, 0.95);" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: rgba(236, 72, 153, 0.3);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 20px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 30, 0, 0, 15);"
+        );
+
+        Text titleText = new Text("AI Sentiment Analysis");
+        titleText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 24));
+        titleText.setFill(Color.web("#ec4899"));
+
+        Label sentimentLabel = new Label(result.sentiment.toUpperCase());
+        String color = result.sentiment.toLowerCase().contains("pos") ? "#4ade80" : 
+                       (result.sentiment.toLowerCase().contains("neg") ? "#f87171" : "#fbbf24");
+        sentimentLabel.setStyle(
+            "-fx-background-color: " + color + "22;" +
+            "-fx-text-fill: " + color + ";" +
+            "-fx-font-weight: bold;" +
+            "-fx-padding: 5 12 5 12;" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: " + color + "44;" +
+            "-fx-border-radius: 20px;"
+        );
+
+        HBox header = new HBox(15, titleText, sentimentLabel);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        VBox scoreBox = new VBox(5);
+        Label scoreLabel = new Label("Confidence Score: " + result.confidence + "%");
+        scoreLabel.setTextFill(Color.web("rgba(255,255,255,0.7)"));
+        scoreLabel.setFont(Font.font(12));
+        
+        double confidenceVal = 0.5;
+        try { confidenceVal = Double.parseDouble(result.confidence.replace("%", "")) / 100.0; } catch(Exception e){}
+        ProgressBar pb = new ProgressBar(confidenceVal);
+        pb.setPrefWidth(Double.MAX_VALUE);
+        pb.setStyle("-fx-accent: " + color + ";");
+        scoreBox.getChildren().addAll(scoreLabel, pb);
+
+        VBox emotionBox = new VBox(8);
+        Label emotionTitle = new Label("Primary Emotion Detected");
+        emotionTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        emotionTitle.setTextFill(Color.WHITE);
+        
+        Label emotionValue = new Label(result.primaryEmotion);
+        emotionValue.setFont(Font.font(20));
+        emotionValue.setTextFill(Color.web("#8b5cf6")); 
+        emotionBox.getChildren().addAll(emotionTitle, emotionValue);
+
+        VBox explanationBox = new VBox(8);
+        Label expTitle = new Label("AI Detailed Explanation");
+        expTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        expTitle.setTextFill(Color.WHITE);
+        
+        Text expText = new Text(result.explanation);
+        expText.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 14));
+        expText.setFill(Color.web("rgba(255,255,255,0.8)"));
+        expText.setWrappingWidth(390);
+        explanationBox.getChildren().addAll(expTitle, expText);
+
+        Button closeBtn = new Button("Close Analysis");
+        closeBtn.setStyle(
+            "-fx-background-color: linear-gradient(to right, #ec4899, #8b5cf6);" +
+            "-fx-text-fill: white;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-padding: 10 30 10 30;" +
+            "-fx-cursor: hand;"
+        );
+        closeBtn.setOnAction(e -> stage.close());
+        
+        HBox btnBox = new HBox(closeBtn);
+        btnBox.setAlignment(Pos.CENTER);
+        btnBox.setPadding(new Insets(10, 0, 0, 0));
+
+        container.getChildren().addAll(header, scoreBox, emotionBox, explanationBox, btnBox);
+
+        javafx.scene.Scene scene = new javafx.scene.Scene(container);
+        scene.setFill(Color.TRANSPARENT);
+        stage.setScene(scene);
+        
+        if (root.getScene() != null && root.getScene().getWindow() != null) {
+            javafx.stage.Window owner = root.getScene().getWindow();
+            stage.setX(owner.getX() + (owner.getWidth() - 450) / 2);
+            stage.setY(owner.getY() + (owner.getHeight() - 450) / 2);
+        }
+        
+        stage.show();
     }
 }
