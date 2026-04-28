@@ -5,7 +5,10 @@ import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.models.services.EvenementService;
 import com.syndicati.models.services.ParticipationService;
+import com.syndicati.models.weather.WeatherData;
+import com.syndicati.services.WeatherService;
 import java.util.List;
+import javafx.application.Platform;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
@@ -13,6 +16,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Pagination;
 import javafx.scene.control.TextArea;
@@ -33,12 +38,25 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 
+import com.syndicati.services.MapService;
+import com.syndicati.services.SocialShareService;
+import javafx.scene.web.WebView;
+import javafx.scene.web.WebEngine;
+import netscape.javascript.JSObject;
+
 public class EvenementPageView implements ViewInterface {
 
     private final VBox root;
     private final ThemeManager tm = ThemeManager.getInstance();
     private final EvenementService evenementService;
     private final ParticipationService participationService;
+    private final WeatherService weatherService;
+    private MapService mapService;
+    private SocialShareService socialShareService;
+    private WebView mapView;
+    private WebEngine webEngine;
+    private MapBridge mapBridge; // Keep reference to prevent GC
+    private VBox weatherPreview;
 
     // Form fields for CRUD
     private TextField titreField;
@@ -56,6 +74,9 @@ public class EvenementPageView implements ViewInterface {
     public EvenementPageView() {
         this.evenementService = new EvenementService();
         this.participationService = new ParticipationService();
+        this.weatherService = new WeatherService();
+        this.mapService = new MapService();
+        this.socialShareService = new SocialShareService();
 
         root = new VBox(26);
         root.setAlignment(Pos.TOP_CENTER);
@@ -237,6 +258,94 @@ public class EvenementPageView implements ViewInterface {
         row1.getChildren().addAll(dateCol, typeCol);
         
         lieuField = (TextField) addFormInput(null, "Location", "Rooftop");
+        
+        weatherPreview = new VBox();
+        weatherPreview.setManaged(false);
+        weatherPreview.setVisible(false);
+        
+        VBox mapContainer = new VBox();
+        mapContainer.setManaged(false);
+        mapContainer.setVisible(false);
+        mapContainer.setMinHeight(300);
+        mapContainer.setStyle("-fx-border-color: " + borderSoft() + "; -fx-border-width: 1px; -fx-border-radius: 16px; -fx-background-radius: 16px; -fx-overflow: hidden;");
+        
+        mapView = new WebView();
+        mapView.setPrefHeight(300);
+        webEngine = mapView.getEngine();
+        
+        // Initial HTML for Leaflet
+        String mapHtml = "<!DOCTYPE html><html><head>" +
+                "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />" +
+                "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>" +
+                "<style>#map { height: 100vh; width: 100%; margin: 0; padding: 0; border-radius: 16px; }</style>" +
+                "</head><body><div id=\"map\"></div><script>" +
+                "var map = L.map('map').setView([36.8065, 10.1815], 13);" + // Default to Tunis
+                "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);" +
+                "var marker = L.marker([36.8065, 10.1815], {draggable: true}).addTo(map);" +
+                "function updateMarker(lat, lon, label) {" +
+                "  var pos = [lat, lon];" +
+                "  map.setView(pos, 13);" +
+                "  marker.setLatLng(pos);" +
+                "  if(label) marker.bindPopup(label).openPopup();" +
+                "}" +
+                "map.on('click', function(e) {" +
+                "  var lat = e.latlng.lat; var lon = e.latlng.lng;" +
+                "  marker.setLatLng([lat, lon]);" +
+                "  console.log('Map Clicked:', lat, lon);" +
+                "  javaApp.onMapClick(lat, lon);" +
+                "});" +
+                "marker.on('dragend', function(e) {" +
+                "  var lat = marker.getLatLng().lat; var lon = marker.getLatLng().lng;" +
+                "  console.log('Marker Dragged:', lat, lon);" +
+                "  javaApp.onMapClick(lat, lon);" +
+                "});" +
+                "</script></body></html>";
+        
+        mapBridge = new MapBridge();
+        webEngine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
+            if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
+                JSObject window = (JSObject) webEngine.executeScript("window");
+                window.setMember("javaApp", mapBridge);
+                System.out.println("DEBUG: MapBridge bound to window.javaApp");
+            }
+        });
+        
+        // Listen to JS console messages
+        webEngine.setOnError(event -> System.err.println("JS Error: " + event.getMessage()));
+        
+        webEngine.loadContent(mapHtml);
+        mapContainer.getChildren().add(mapView);
+        
+        Button checkWeatherBtn = iconButton("☁ Weather");
+        // (Weather logic kept same)
+        
+        Button showMapBtn = iconButton("📍 Map");
+        showMapBtn.setOnAction(e -> {
+            boolean visible = !mapContainer.isVisible();
+            mapContainer.setVisible(visible);
+            mapContainer.setManaged(visible);
+            
+            if (visible && !lieuField.getText().trim().isEmpty()) {
+                // Try to find the typed location on map
+                new Thread(() -> {
+                    try {
+                        double[] coords = mapService.geocode(lieuField.getText().trim());
+                        if (coords != null) {
+                            Platform.runLater(() -> webEngine.executeScript(
+                                "updateMarker(" + coords[0] + ", " + coords[1] + ", '" + lieuField.getText().replace("'", "\\'") + "')"
+                            ));
+                        }
+                    } catch (Exception ex) {}
+                }).start();
+            }
+        });
+
+        HBox lieuBox = new HBox(10, lieuField.getParent(), checkWeatherBtn, showMapBtn);
+        HBox.setHgrow(lieuField.getParent(), Priority.ALWAYS);
+        lieuBox.setAlignment(Pos.BOTTOM_LEFT);
+        
+        VBox lieuWithControls = new VBox(10, lieuBox, weatherPreview, mapContainer);
+
         descArea = (TextArea) addFormInput(null, "Description", "A sunset meetup with music and community networking.", true);
 
         HBox row2 = new HBox(14);
@@ -256,7 +365,7 @@ public class EvenementPageView implements ViewInterface {
             text("Share your vision with the community", 13, false, textMuted()),
             titreField.getParent(),
             row1,
-            lieuField.getParent(),
+            lieuWithControls,
             descArea.getParent(),
             row2,
             saveBtn
@@ -458,7 +567,7 @@ public class EvenementPageView implements ViewInterface {
 
         // Use effective width to avoid early collapse to 1 column at minimum app size.
         double effectiveWidth = Math.max(width, grid.getWidth());
-        int cols = effectiveWidth < 820 ? 1 : (effectiveWidth < 1400 ? 2 : 3);
+        int cols = effectiveWidth < 700 ? 1 : (effectiveWidth < 1100 ? 2 : 3);
         for (int i = 0; i < cols; i++) {
             ColumnConstraints c = new ColumnConstraints();
             c.setPercentWidth(100.0 / cols);
@@ -496,7 +605,7 @@ public class EvenementPageView implements ViewInterface {
         detailsFace.setPadding(new Insets(18));
 
         StackPane image = new StackPane();
-        image.setMinHeight(220);
+        image.setMinHeight(180);
         image.setStyle(
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.22) + ";" +
             "-fx-background-radius: 32px 32px 0 0;"
@@ -544,9 +653,17 @@ public class EvenementPageView implements ViewInterface {
         deleteBtn.setStyle(deleteBtn.getStyle() + "-fx-text-fill: #ff4d4d;");
         deleteBtn.setOnAction(ev -> handleDelete(e));
 
-        Button details = gradientButton("View Details", 11, new Insets(8, 14, 8, 14));
+        Button shareBtn = iconButton("🔗");
+        shareBtn.setStyle(shareBtn.getStyle() + "-fx-text-fill: " + tm.getAccentHex() + "; -fx-font-size: 14px;");
+        shareBtn.setOnAction(ev -> socialShareService.shareOnFacebook(e.getTitreEvent(), e.getDescriptionEvent()));
+
+        Button details = gradientButton("Details", 10, new Insets(6, 10, 6, 10));
         details.setOnAction(ev -> switchFace(mainFace, detailsFace));
-        footer.getChildren().addAll(avail, spacer(), editBtn, deleteBtn, details);
+        
+        HBox btnBox = new HBox(6, shareBtn, editBtn, deleteBtn, details);
+        btnBox.setAlignment(Pos.CENTER_RIGHT);
+        
+        footer.getChildren().addAll(avail, spacer(), btnBox);
 
         body.getChildren().addAll(meta, title, desc, pushFooter, footer);
         mainFace.getChildren().addAll(image, body);
@@ -605,9 +722,41 @@ public class EvenementPageView implements ViewInterface {
                 text(String.valueOf(e.getNbRestants()), 14, true, tm.getAccentHex()),
                 text("places available", 13, false, textMuted())
             ),
-            text("Hosted by " + (e.getUser() != null ? e.getUser().getFirstName() + " " + e.getUser().getLastName() : "Community Team"), 12, false, textMuted()),
-            joinBtn
+            text("Hosted by " + (e.getUser() != null ? e.getUser().getFirstName() + " " + e.getUser().getLastName() : "Community Team"), 12, false, textMuted())
         );
+
+        VBox weatherContainer = new VBox();
+        weatherContainer.setAlignment(Pos.CENTER_LEFT);
+        
+        new Thread(() -> {
+            try {
+                WeatherData wd = weatherService.getCurrentWeather(e.getLieuEvent());
+                Platform.runLater(() -> {
+                    HBox wBox = new HBox(8);
+                    wBox.setAlignment(Pos.CENTER_LEFT);
+                    wBox.setPadding(new Insets(8));
+                    wBox.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.1) + "; -fx-background-radius: 12px;");
+                    
+                    try {
+                        ImageView icon = new ImageView(new Image(wd.getIconUrl(), true));
+                        icon.setFitWidth(32); icon.setFitHeight(32);
+                        wBox.getChildren().add(icon);
+                    } catch (Exception imgEx) {}
+                    
+                    VBox detailsBox = new VBox(2);
+                    detailsBox.getChildren().addAll(
+                        text(Math.round(wd.getTemperature()) + "°C", 13, true, tm.getTextColor()),
+                        text(wd.getDescription(), 11, false, textSoft())
+                    );
+                    wBox.getChildren().add(detailsBox);
+                    weatherContainer.getChildren().add(wBox);
+                });
+            } catch (Exception ex) {
+                // Ignore silent failure for weather
+            }
+        }).start();
+        detailsFace.getChildren().add(weatherContainer);
+        detailsFace.getChildren().add(joinBtn);
 
         switcher.getChildren().addAll(mainFace, detailsFace);
         card.getChildren().add(switcher);
@@ -1080,4 +1229,56 @@ public class EvenementPageView implements ViewInterface {
 
     @Override
     public void cleanup() {}
+    /**
+     * Bridge class for JavaScript to call Java
+     */
+    public class MapBridge {
+        public void onMapClick(double lat, double lon) {
+            new Thread(() -> {
+                try {
+                    System.out.println("DEBUG: Map clicked at Lat: " + lat + ", Lon: " + lon);
+                    // 1. Get Address
+                    String address = mapService.reverseGeocode(lat, lon);
+                    System.out.println("DEBUG: Address found: " + address);
+                    Platform.runLater(() -> {
+                        lieuField.setText(address);
+                        lieuField.requestFocus(); // Force focus to see the change
+                    });
+
+                    // 2. Automatically update weather using coordinates (more accurate than city name)
+                    Platform.runLater(() -> {
+                        weatherPreview.getChildren().clear();
+                        weatherPreview.getChildren().add(text("Loading weather...", 11, false, textMuted()));
+                        weatherPreview.setManaged(true);
+                        weatherPreview.setVisible(true);
+                    });
+
+                    WeatherData wd = weatherService.getCurrentWeather(lat, lon);
+                    Platform.runLater(() -> {
+                        weatherPreview.getChildren().clear();
+                        HBox wBox = new HBox(10);
+                        wBox.setAlignment(Pos.CENTER_LEFT);
+                        wBox.setPadding(new Insets(10));
+                        wBox.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1px; -fx-border-radius: 12px;");
+                        
+                        try {
+                            ImageView icon = new ImageView(new Image(wd.getIconUrl(), true));
+                            icon.setFitWidth(40); icon.setFitHeight(40);
+                            wBox.getChildren().add(icon);
+                        } catch (Exception imgEx) {}
+                        
+                        VBox details = new VBox(2);
+                        details.getChildren().addAll(
+                            text(Math.round(wd.getTemperature()) + "°C - " + wd.getDescription(), 12, true, tm.getTextColor()),
+                            text("Feels like " + Math.round(wd.getFeelsLike()) + "°C", 11, false, textMuted())
+                        );
+                        wBox.getChildren().add(details);
+                        weatherPreview.getChildren().add(wBox);
+                    });
+                } catch (Exception ex) {
+                    System.err.println("Map interaction failed: " + ex.getMessage());
+                }
+            }).start();
+        }
+    }
 }

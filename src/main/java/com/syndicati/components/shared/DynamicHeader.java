@@ -171,8 +171,16 @@ public class DynamicHeader {
         aboutItems.put("Company", "about");
         aboutItems.put("Contact", "about");
         attachTabDropdown("about", about, aboutItems);
+        
+        Button weather = createTabButton("weather", "Weather");
+        weather.setOnAction(e -> {
+            activeTab = "weather";
+            updateTabsState();
+            closeAllPopups();
+            NavigationManager.getInstance().navigateTo("weather");
+        });
 
-        tabsPill.getChildren().addAll(home, services, about);
+        tabsPill.getChildren().addAll(home, services, about, weather);
         center.getChildren().add(tabsPill);
         updateTabsState();
         return center;

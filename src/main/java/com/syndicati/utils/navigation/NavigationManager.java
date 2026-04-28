@@ -14,6 +14,7 @@ import com.syndicati.views.frontend.services.ForumPageView;
 import com.syndicati.views.frontend.services.SyndicatPageView;
 import com.syndicati.views.frontend.services.EvenementPageView;
 import com.syndicati.views.frontend.services.ParticipationsPageView;
+import com.syndicati.views.frontend.weather.WeatherPageView;
 import com.syndicati.utils.security.AccessControlService;
 import javafx.scene.control.Alert;
 
@@ -36,6 +37,7 @@ public class NavigationManager {
     private SyndicatPageView syndicatView;
     private EvenementPageView evenementView;
     private ParticipationsPageView participationsView;
+    private WeatherPageView weatherView;
     
     private NavigationManager() {}
     
@@ -65,6 +67,7 @@ public class NavigationManager {
         this.syndicatView = null;
         this.evenementView = null;
         this.participationsView = null;
+        this.weatherView = null;
     }
 
     private ServicesView servicesView() {
@@ -126,6 +129,11 @@ public class NavigationManager {
         if (participationsView == null) participationsView = new ParticipationsPageView();
         return participationsView;
     }
+
+    private WeatherPageView weatherView() {
+        if (weatherView == null) weatherView = new WeatherPageView();
+        return weatherView;
+    }
     
     public Pane getPage(String pageName) {
         switch (pageName.toLowerCase()) {
@@ -155,6 +163,8 @@ public class NavigationManager {
                 return evenementView().getRoot();
             case "services/participations":
                 return participationsView().getRoot();
+            case "weather":
+                return weatherView().getRoot();
             default:
                 return landingPageView.getRoot();
         }

@@ -175,7 +175,7 @@
                     <mainClass>com.syndicati.Launcher</mainClass>
                     <options>
                         <option>--enable-native-access=ALL-UNNAMED</option>
-                        <option>--enable-native-access=javafx.graphics,javafx.media</option>
+                        <option>--enable-native-access=javafx.graphics,javafx.media,javafx.web</option>
                         <!-- Suppress sun.misc.Unsafe deprecation warnings from Guice 5.1.0 -->
                         <option>--sun-misc-unsafe-memory-access=allow</option>
                     </options>
