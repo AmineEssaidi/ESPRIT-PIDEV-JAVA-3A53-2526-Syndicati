@@ -1384,6 +1384,12 @@ public class ForumPageView implements ViewInterface {
             return;
         }
 
+        List<String> flaggedCategories = moderationService.checkContent(description);
+        if (!flaggedCategories.isEmpty()) {
+            showInfo("Moderation Alert", "Votre commentaire a été bloqué pour contenu inapproprié.\nCatégories détectées : " + String.join(", ", flaggedCategories));
+            return;
+        }
+
         String image = null;
         try {
             if (!commentImages.isEmpty()) {
@@ -1786,6 +1792,12 @@ public class ForumPageView implements ViewInterface {
             String newText = safe(editInput.getText());
             if (newText.isBlank()) {
                 showInfo("Edit", "Comment cannot be empty.");
+                return;
+            }
+
+            List<String> flaggedCategories = moderationService.checkContent(newText);
+            if (!flaggedCategories.isEmpty()) {
+                showInfo("Moderation Alert", "Votre commentaire a été bloqué pour contenu inapproprié.\nCatégories détectées : " + String.join(", ", flaggedCategories));
                 return;
             }
 
