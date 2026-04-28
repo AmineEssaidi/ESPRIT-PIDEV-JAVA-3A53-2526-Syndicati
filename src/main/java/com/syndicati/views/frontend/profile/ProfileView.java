@@ -7,6 +7,7 @@ import com.syndicati.controllers.user.standing.UserStandingController;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.controllers.user.profile.ProfileAvatarController;
 import com.syndicati.controllers.user.user.UserController;
+import com.syndicati.controllers.biometric.CameraController;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.models.user.UserRelationship;
@@ -20,13 +21,23 @@ import com.syndicati.services.user.profile.ProfileService;
 import com.syndicati.services.security.TwoFactorService;
 import com.syndicati.services.security.BiometricsService;
 import com.syndicati.services.security.FaceIDService;
+import com.syndicati.services.biometric.RealCameraService;
+import com.syndicati.services.InsightFaceService;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
+import java.util.Arrays;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar.ButtonData;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Alert;
 import javafx.scene.image.Image;
@@ -44,7 +55,13 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
+import javafx.scene.control.TextArea;
 import org.mindrot.jbcrypt.BCrypt;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
+import javafx.scene.Scene;
+import java.util.concurrent.atomic.AtomicReference;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -74,16 +91,20 @@ public class ProfileView implements ViewInterface {
     private final Map<String, VBox> detailTabs = new LinkedHashMap<>();
     private final Map<String, Button> detailTabButtons = new LinkedHashMap<>();
     private long lastXpInteractionAt = 0L;
+    private volatile boolean avatarUpdateInProgress = false;
 
     private StackPane quickActionsContainer;
     private VBox quickActionsDefaultView;
     private VBox quickActionsSwitcherView;
     private VBox quickActionsDetailView;
     private Button quickActionsButton;
+    private final InsightFaceService insightFaceService;
 
     public ProfileView() {
         this.tm = ThemeManager.getInstance();
         this.root = new VBox();
+        this.insightFaceService = InsightFaceService.getInstance();
+        this.insightFaceService.initialize();
         build();
     }
 
@@ -1429,6 +1450,21 @@ public class ProfileView implements ViewInterface {
             return;
         }
 
+        if (avatarUpdateInProgress) {
+            showAvatarAlert(Alert.AlertType.INFORMATION, "Avatar", "An avatar update is already running.");
+            return;
+        }
+
+        Optional<String> selectedChoice = showAvatarSourceDialog();
+        if (selectedChoice.isEmpty()) {
+            return;
+        }
+
+        if ("generate".equals(selectedChoice.get())) {
+            handleProfileAvatarGeneration(user, avatarCircle, avatarText);
+            return;
+        }
+
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Choose Profile Picture");
         chooser.getExtensionFilters().addAll(
@@ -1467,6 +1503,175 @@ public class ProfileView implements ViewInterface {
         } catch (Exception ex) {
             showAvatarAlert(Alert.AlertType.ERROR, "Avatar", "Failed to upload image.");
         }
+    }
+
+    private void handleProfileAvatarGeneration(User user, Circle avatarCircle, Text avatarText) {
+        if (avatarUpdateInProgress) {
+            showAvatarAlert(Alert.AlertType.INFORMATION, "Avatar", "An avatar update is already running.");
+            return;
+        }
+
+        Optional<String> promptResult = showAvatarPromptDialog();
+        if (promptResult.isEmpty()) {
+            return;
+        }
+
+        String prompt = promptResult.get().trim();
+        if (prompt.isBlank()) {
+            showAvatarAlert(Alert.AlertType.ERROR, "Avatar", "Please enter a prompt for the generated avatar.");
+            return;
+        }
+
+        avatarUpdateInProgress = true;
+
+        Task<ProfileAvatarController.AvatarUpdateResult> task = new Task<>() {
+            @Override
+            protected ProfileAvatarController.AvatarUpdateResult call() {
+                Profile profile = getOrCreateCurrentProfile(user);
+                if (profile == null || profile.getIdProfile() == null) {
+                    return ProfileAvatarController.AvatarUpdateResult.failure("Could not load your profile record.");
+                }
+
+                ProfileAvatarController controller = new ProfileAvatarController();
+                return controller.generateAvatar(profile, prompt);
+            }
+        };
+
+        task.setOnSucceeded(event -> {
+            avatarUpdateInProgress = false;
+            ProfileAvatarController.AvatarUpdateResult result = task.getValue();
+            if (!result.isSuccess()) {
+                showAvatarAlert(Alert.AlertType.ERROR, "Avatar", result.getMessage());
+                return;
+            }
+
+            Profile profile = getOrCreateCurrentProfile(user);
+            if (profile != null) {
+                profile.setAvatar(result.getImagePath());
+                SessionManager.getInstance().setCurrentProfile(profile);
+            }
+
+            boolean hasAvatar = applyAvatarFill(avatarCircle);
+            avatarText.setText(currentInitial(user));
+            avatarText.setVisible(!hasAvatar);
+            avatarText.setManaged(!hasAvatar);
+            showAvatarAlert(Alert.AlertType.INFORMATION, "Avatar", "Generated profile picture updated.");
+        });
+
+        task.setOnFailed(event -> {
+            avatarUpdateInProgress = false;
+            Throwable t = task.getException();
+            if (t != null) {
+                System.out.println("ProfileView: Avatar generation task failed: " + t.getMessage());
+                t.printStackTrace();
+                String msg = t.getMessage() == null ? "Failed to generate image." : t.getMessage();
+                showAvatarAlert(Alert.AlertType.ERROR, "Avatar", msg);
+            } else {
+                showAvatarAlert(Alert.AlertType.ERROR, "Avatar", "Failed to generate image.");
+            }
+        });
+
+        Thread worker = new Thread(task, "profile-avatar-generation");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private Optional<String> showAvatarSourceDialog() {
+        if (root.getScene() == null || root.getScene().getWindow() == null) {
+            return Optional.empty();
+        }
+
+        Stage stage = new Stage();
+        stage.initOwner(root.getScene().getWindow());
+        stage.initModality(Modality.APPLICATION_MODAL);
+        stage.initStyle(StageStyle.TRANSPARENT);
+
+        Label title = new Label("Update your profile picture");
+        title.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: 800;");
+        Label subtitle = new Label("Choose a local image file or generate one with Pollinations AI.");
+        subtitle.setWrapText(true);
+        subtitle.setStyle("-fx-text-fill: rgba(255,255,255,0.72); -fx-font-size: 13px;");
+
+        Button generateBtn = new Button("Generate with AI");
+        generateBtn.setStyle(fancyAvatarSecondaryButtonStyle());
+        Button uploadBtn = new Button("Upload Image");
+        uploadBtn.setStyle(fancyAvatarPrimaryButtonStyle());
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setStyle(fancyAvatarGhostButtonStyle());
+
+        HBox actions = new HBox(8, generateBtn, uploadBtn, cancelBtn);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+
+        VBox content = new VBox(12, title, subtitle, actions);
+        content.setStyle("-fx-padding: 14; -fx-background-color: linear-gradient(to bottom right, #11131a, #171a24); -fx-background-radius: 18; -fx-border-radius: 18; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+
+        AtomicReference<String> resultRef = new AtomicReference<>(null);
+        generateBtn.setOnAction(e -> { resultRef.set("generate"); stage.close(); });
+        uploadBtn.setOnAction(e -> { resultRef.set("upload"); stage.close(); });
+        cancelBtn.setOnAction(e -> { resultRef.set(null); stage.close(); });
+
+        Scene scene = new Scene(content);
+        scene.setFill(Color.TRANSPARENT);
+        stage.setScene(scene);
+        stage.showAndWait();
+
+        String res = resultRef.get();
+        return res == null ? Optional.empty() : Optional.of(res);
+    }
+
+    private Optional<String> showAvatarPromptDialog() {
+        if (root.getScene() == null || root.getScene().getWindow() == null) {
+            return Optional.empty();
+        }
+
+        Stage stage = new Stage();
+        stage.initOwner(root.getScene().getWindow());
+        stage.initModality(Modality.APPLICATION_MODAL);
+        stage.initStyle(StageStyle.TRANSPARENT);
+
+        Label title = new Label("Describe the avatar you want");
+        title.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: 800;");
+        Label subtitle = new Label("Pollinations AI will use your prompt and the result will be saved like a normal profile image.");
+        subtitle.setWrapText(true);
+        subtitle.setStyle("-fx-text-fill: rgba(255,255,255,0.72); -fx-font-size: 13px;");
+
+        TextArea area = new TextArea("professional portrait, clean background, soft lighting");
+        area.setWrapText(true);
+        area.setPrefRowCount(5);
+        area.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.06);" +
+            "-fx-text-fill: white;" +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.4);" +
+            "-fx-control-inner-background: rgba(255,255,255,0.06);" +
+            "-fx-background-radius: 18;" +
+            "-fx-border-color: rgba(255,255,255,0.12);" +
+            "-fx-border-radius: 18;"
+        );
+
+        Button generateBtn = new Button("Generate");
+        generateBtn.setStyle(fancyAvatarPrimaryButtonStyle());
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setStyle(fancyAvatarGhostButtonStyle());
+
+        HBox actions = new HBox(8, generateBtn, cancelBtn);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+
+        VBox content = new VBox(12, title, subtitle, area, actions);
+        content.setStyle("-fx-padding: 14; -fx-background-color: linear-gradient(to bottom right, #11131a, #171a24); -fx-background-radius: 18; -fx-border-radius: 18; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+
+        AtomicReference<String> resultRef = new AtomicReference<>(null);
+        generateBtn.setOnAction(e -> { resultRef.set(safePrompt(area.getText())); stage.close(); });
+        cancelBtn.setOnAction(e -> { resultRef.set(null); stage.close(); });
+
+        Scene scene = new Scene(content);
+        scene.setFill(Color.TRANSPARENT);
+        stage.setScene(scene);
+        stage.showAndWait();
+
+        String out = resultRef.get();
+        if (out == null) return Optional.empty();
+        if (out.isBlank()) return Optional.of("");
+        return Optional.of(out);
     }
 
     private boolean applyAvatarFill(Circle avatarCircle) {
@@ -1548,11 +1753,80 @@ public class ProfileView implements ViewInterface {
     }
 
     private void showAvatarAlert(Alert.AlertType type, String title, String message) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
+        if (root.getScene() == null || root.getScene().getWindow() == null) {
+            return;
+        }
+
+        Stage stage = new Stage();
+        stage.initOwner(root.getScene().getWindow());
+        stage.initModality(Modality.APPLICATION_MODAL);
+        stage.initStyle(StageStyle.TRANSPARENT);
+
+        Label heading = new Label(type == Alert.AlertType.ERROR ? "Action failed" : "Done");
+        heading.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: 800;");
+        Label body = new Label(message);
+        body.setWrapText(true);
+        body.setStyle("-fx-text-fill: rgba(255,255,255,0.78); -fx-font-size: 13px;");
+
+        Button ok = new Button("OK");
+        ok.setStyle(fancyAvatarPrimaryButtonStyle());
+        ok.setOnAction(e -> stage.close());
+
+        VBox content = new VBox(10, heading, body, ok);
+        content.setStyle("-fx-padding: 14; -fx-background-color: linear-gradient(to bottom right, #11131a, #171a24); -fx-background-radius: 18; -fx-border-radius: 18; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+
+        Scene scene = new Scene(content);
+        scene.setFill(Color.TRANSPARENT);
+        stage.setScene(scene);
+        stage.showAndWait();
+    }
+
+    private Dialog<ButtonType> styledAvatarDialog(String title) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle(title);
+        dialog.setHeaderText(null);
+        if (root.getScene() != null && root.getScene().getWindow() != null) {
+            dialog.initOwner(root.getScene().getWindow());
+        }
+
+        DialogPane pane = dialog.getDialogPane();
+        pane.setStyle(
+            "-fx-background-color: linear-gradient(to bottom right, #11131a, #171a24);" +
+            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-width: 1;" +
+            "-fx-background-radius: 22;" +
+            "-fx-border-radius: 22;" +
+            "-fx-padding: 18;"
+        );
+        return dialog;
+    }
+
+    private String fancyAvatarPrimaryButtonStyle() {
+        return "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+            "-fx-text-fill: white;" +
+            "-fx-font-weight: 800;" +
+            "-fx-background-radius: 999px;" +
+            "-fx-padding: 10 18 10 18;";
+    }
+
+    private String fancyAvatarSecondaryButtonStyle() {
+        return "-fx-background-color: rgba(255,255,255,0.08);" +
+            "-fx-text-fill: rgba(255,255,255,0.92);" +
+            "-fx-font-weight: 700;" +
+            "-fx-background-radius: 999px;" +
+            "-fx-padding: 10 18 10 18;";
+    }
+
+    private String fancyAvatarGhostButtonStyle() {
+        return "-fx-background-color: transparent;" +
+            "-fx-text-fill: rgba(255,255,255,0.60);" +
+            "-fx-font-weight: 700;" +
+            "-fx-background-radius: 999px;" +
+            "-fx-padding: 10 18 10 18;";
+    }
+
+    private String safePrompt(String text) {
+        return text == null ? "" : text.trim();
     }
 
     private boolean matchesPassword(String raw, String stored) {
@@ -1812,9 +2086,17 @@ public class ProfileView implements ViewInterface {
                 "-fx-background-radius: 10; -fx-cursor: hand;"
             );
             removeBtn.setOnAction(e -> {
-                twoFactorService.disableTotpForUser();
-                showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP disabled successfully.");
-                content.getParent().getScene().getWindow().hide();
+                try {
+                    twoFactorService.disableTotpForUser();
+                    showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP disabled successfully.");
+                    // Refresh the panel to show updated state
+                    content.getChildren().clear();
+                    buildTwoFactorPanel(content);
+                } catch (Exception ex) {
+                    System.out.println("Error disabling TOTP: " + ex.getMessage());
+                    ex.printStackTrace();
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Failed to disable TOTP: " + ex.getMessage());
+                }
             });
             
             statusBox.getChildren().addAll(statusIcon, statusInfo, removeBtn);
@@ -1859,18 +2141,52 @@ public class ProfileView implements ViewInterface {
             qrPane.setStyle("-fx-background-color: white; -fx-background-radius: 8;");
             qrPane.getChildren().add(text("QR Code", 10, false, "black"));
             
-            javafx.scene.control.TextField secretField = new javafx.scene.control.TextField();
-            secretField.setEditable(false);
-            secretField.setPromptText("Secret key will appear here");
-            secretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
-            
+            javafx.scene.control.PasswordField maskedSecretField = new javafx.scene.control.PasswordField();
+            maskedSecretField.setEditable(false);
+            maskedSecretField.setPromptText("Secret key will appear here");
+            maskedSecretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+
+            javafx.scene.control.TextField visibleSecretField = new javafx.scene.control.TextField();
+            visibleSecretField.setEditable(false);
+            visibleSecretField.setPromptText("Secret key will appear here");
+            visibleSecretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            visibleSecretField.setVisible(false);
+            visibleSecretField.setManaged(false);
+
+            javafx.scene.control.Button toggleSecretBtn = new javafx.scene.control.Button("Show");
+            toggleSecretBtn.setStyle("-fx-padding: 6 10 6 10; -fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.85); -fx-border-color: rgba(255,255,255,0.06); -fx-border-radius: 6; -fx-background-radius: 6;");
+            HBox secretRow = new HBox(8, maskedSecretField, visibleSecretField, toggleSecretBtn);
+            secretRow.setAlignment(Pos.CENTER);
+            HBox.setHgrow(maskedSecretField, Priority.ALWAYS);
+            HBox.setHgrow(visibleSecretField, Priority.ALWAYS);
+
+            toggleSecretBtn.setOnAction(evt -> {
+                boolean showing = visibleSecretField.isVisible();
+                if (showing) {
+                    // switch to masked
+                    visibleSecretField.setVisible(false);
+                    visibleSecretField.setManaged(false);
+                    maskedSecretField.setVisible(true);
+                    maskedSecretField.setManaged(true);
+                    maskedSecretField.setText(visibleSecretField.getText());
+                    toggleSecretBtn.setText("Show");
+                } else {
+                    visibleSecretField.setText(maskedSecretField.getText());
+                    visibleSecretField.setVisible(true);
+                    visibleSecretField.setManaged(true);
+                    maskedSecretField.setVisible(false);
+                    maskedSecretField.setManaged(false);
+                    toggleSecretBtn.setText("Hide");
+                }
+            });
+
             content.getChildren().add(setupBox);
             VBox qrSection = new VBox(8);
             qrSection.setAlignment(Pos.CENTER);
             qrSection.getChildren().add(text("Step 2: Scan QR Code", 12, true, "rgba(255,255,255,0.88)"));
             qrSection.getChildren().add(qrPane);
             qrSection.getChildren().add(text("Or enter this code manually:", 11, false, textMuted()));
-            qrSection.getChildren().add(secretField);
+            qrSection.getChildren().add(secretRow);
             setupBox.getChildren().add(qrSection);
             
             setupBox.getChildren().add(text(" ", 8, false, "transparent"));
@@ -1895,11 +2211,26 @@ public class ProfileView implements ViewInterface {
                 String secret = twoFactorService.generateTotpSecret();
                 String email = user != null ? user.getEmailUser() : "user@syndicati.tn";
                 String qrDataUrl = twoFactorService.generateQRCodeDataUrl(secret, email, "Syndicati");
-                
-                secretField.setText(secret);
-                // Note: In a real app, you'd display the actual QR code image from the data URL
+
+                // set secret into both masked and visible fields
+                maskedSecretField.setText(secret);
+                visibleSecretField.setText(secret);
+                visibleSecretField.setVisible(false);
+                visibleSecretField.setManaged(false);
+                maskedSecretField.setVisible(true);
+                maskedSecretField.setManaged(true);
+
                 qrPane.getChildren().clear();
-                qrPane.getChildren().add(text("QR Generated", 10, true, "black"));
+                if (qrDataUrl != null && qrDataUrl.startsWith("data:image/png;base64,")) {
+                    javafx.scene.image.Image qrImage = new javafx.scene.image.Image(qrDataUrl);
+                    javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(qrImage);
+                    iv.setFitWidth(140);
+                    iv.setFitHeight(140);
+                    iv.setPreserveRatio(true);
+                    qrPane.getChildren().add(iv);
+                } else {
+                    qrPane.getChildren().add(text("QR Generated", 10, true, "black"));
+                }
                 
                 setupBox.setVisible(true);
                 setupBox.setManaged(true);
@@ -1914,7 +2245,7 @@ public class ProfileView implements ViewInterface {
                     return;
                 }
                 
-                String secret = secretField.getText();
+                String secret = maskedSecretField.isVisible() ? maskedSecretField.getText() : visibleSecretField.getText();
                 if (secret == null || secret.isEmpty()) {
                     showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Please generate a secret first.");
                     return;
@@ -1926,9 +2257,17 @@ public class ProfileView implements ViewInterface {
                     return;
                 }
                 
-                twoFactorService.enableTotpForUser(secret);
-                showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP activated successfully! Your account is now protected.");
-                content.getParent().getScene().getWindow().hide();
+                try {
+                    twoFactorService.enableTotpForUser(secret);
+                    showAvatarAlert(Alert.AlertType.INFORMATION, "2FA", "TOTP activated successfully! Your account is now protected.");
+                    // Refresh the panel to show updated state
+                    content.getChildren().clear();
+                    buildTwoFactorPanel(content);
+                } catch (Exception ex) {
+                    System.out.println("Error enabling TOTP: " + ex.getMessage());
+                    ex.printStackTrace();
+                    showAvatarAlert(Alert.AlertType.ERROR, "2FA", "Failed to enable TOTP: " + ex.getMessage());
+                }
             });
         }
     }
@@ -2033,6 +2372,7 @@ public class ProfileView implements ViewInterface {
     private void buildFaceIDPanel(VBox content) {
         User user = SessionManager.getInstance().getCurrentUser();
         FaceIDService faceIDService = new FaceIDService();
+        CameraController cameraController = new CameraController();
         
         content.getChildren().add(text("Face ID Authentication", 13, true, textSoft()));
         content.getChildren().add(text("Enroll your face for secure, local biometric authentication.", 11, false, textMuted()));
@@ -2064,7 +2404,8 @@ public class ProfileView implements ViewInterface {
             removeBtn.setOnAction(e -> {
                 faceIDService.removeFaceIDEnrollment();
                 showAvatarAlert(Alert.AlertType.INFORMATION, "Face ID", "Face ID enrollment removed.");
-                content.getParent().getScene().getWindow().hide();
+                content.getChildren().clear();
+                buildFaceIDPanel(content);
             });
             
             statusBox.getChildren().addAll(statusIcon, statusInfo, removeBtn);
@@ -2109,10 +2450,13 @@ public class ProfileView implements ViewInterface {
             enrollmentBox.setManaged(false);
             
             // Enrollment video preview area
-            StackPane videoPreview = new StackPane();
-            videoPreview.setMinSize(280, 210);
-            videoPreview.setStyle("-fx-background-color: #1a1a1a; -fx-background-radius: 12;");
-            videoPreview.getChildren().add(text("📷 Video Preview\n(Simulated)", 13, false, "rgba(255,255,255,0.50)"));
+            javafx.scene.image.ImageView videoPreview = new javafx.scene.image.ImageView();
+            videoPreview.setFitWidth(280);
+            videoPreview.setFitHeight(210);
+            videoPreview.setPreserveRatio(true);
+            StackPane videoPreviewPane = new StackPane(videoPreview);
+            videoPreviewPane.setMinSize(280, 210);
+            videoPreviewPane.setStyle("-fx-background-color: #1a1a1a; -fx-background-radius: 12;");
             
             // Progress bar
             javafx.scene.control.ProgressBar progressBar = new javafx.scene.control.ProgressBar(0);
@@ -2121,9 +2465,9 @@ public class ProfileView implements ViewInterface {
             // Enrollment hint
             Text enrollmentHint = text("Position your face in the frame and look directly at the camera.", 11, false, textMuted());
             
-            // Simulate enrollment frames
-            javafx.scene.control.Button captureFramesBtn = new javafx.scene.control.Button("Simulate Capture (20 frames)");
-            captureFramesBtn.setStyle("-fx-padding: 8 12 8 12; -fx-background-color: rgba(255,255,255,0.10); -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            // Start camera capture button
+            javafx.scene.control.Button startCaptureBtn = new javafx.scene.control.Button("Start Camera");
+            startCaptureBtn.setStyle("-fx-padding: 8 12 8 12; -fx-background-color: rgba(255,255,255,0.10); -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
             
             javafx.scene.control.Button completeEnrollBtn = new javafx.scene.control.Button("Complete Enrollment");
             completeEnrollBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
@@ -2131,10 +2475,10 @@ public class ProfileView implements ViewInterface {
             
             enrollmentBox.getChildren().addAll(
                 text("Step 2: Capture Face Frames", 12, true, "rgba(255,255,255,0.88)"),
-                videoPreview,
+                videoPreviewPane,
                 enrollmentHint,
                 progressBar,
-                captureFramesBtn
+                startCaptureBtn
             );
             
             content.getChildren().add(startEnrollBtn);
@@ -2155,26 +2499,122 @@ public class ProfileView implements ViewInterface {
                 pinField.setDisable(true);
             });
             
-            // Capture frames simulation
-            captureFramesBtn.setOnAction(e -> {
-                // Simulate adding 20 frames
-                for (int i = 0; i < 20; i++) {
-                    double[] mockEmbedding = new double[128];
-                    for (int j = 0; j < 128; j++) {
-                        mockEmbedding[j] = Math.random() * 2 - 1; // Range -1 to 1
+            // Start camera capture
+            startCaptureBtn.setOnAction(e -> {
+                startCaptureBtn.setDisable(true);
+                startCaptureBtn.setText("📷 Capturing...");
+                
+                Thread.ofVirtual().name("ProfileFaceID-Camera").start(() -> {
+                    try {
+                        RealCameraService cameraService = cameraController.getOrCreate(null);
+                        if (!cameraController.initializeDefaultCamera(cameraService)) {
+                            Platform.runLater(() -> {
+                                showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "Failed to access camera. Check console for details.");
+                                startCaptureBtn.setDisable(false);
+                                startCaptureBtn.setText("Start Camera");
+                            });
+                            return;
+                        }
+                        
+                        cameraService.startCapture();
+                        Thread.sleep(1500);
+                        
+                        // Verify camera is working
+                        javafx.scene.image.Image testFrame = cameraService.getCurrentFrameWithDetection();
+                        if (testFrame == null) {
+                            Platform.runLater(() -> {
+                                showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "Camera not responding. Try reconnecting.");
+                                startCaptureBtn.setDisable(false);
+                                startCaptureBtn.setText("Start Camera");
+                            });
+                            return;
+                        }
+                        
+                        // Start preview animation
+                        javafx.animation.AnimationTimer previewTimer = new javafx.animation.AnimationTimer() {
+                            @Override
+                            public void handle(long now) {
+                                javafx.scene.image.Image frame = cameraService.getCurrentFrameWithDetection();
+                                if (frame != null) {
+                                    videoPreview.setImage(frame);
+                                }
+                            }
+                        };
+                        previewTimer.start();
+                        
+                        Platform.runLater(() -> {
+                            enrollmentHint.setText("Position your face in the frame...");
+                        });
+                        
+                        // Capture frames
+                        final int[] framesCaptured = {0};
+                        final int targetFrames = 20;
+                        long startTime = System.currentTimeMillis();
+                        long timeout = 20000;
+                        
+                        faceIDService.clearFrameHistory();
+                        
+                        while (framesCaptured[0] < targetFrames && (System.currentTimeMillis() - startTime) < timeout) {
+                            RealCameraService.FaceQuality quality = cameraService.assessFrameQuality();
+                            
+                            final int currentCount = framesCaptured[0];
+                            Platform.runLater(() -> {
+                                enrollmentHint.setText(quality.message + " (" + currentCount + "/" + targetFrames + ")");
+                                progressBar.setProgress((double) currentCount / targetFrames);
+                            });
+                            
+                            if (quality.isGood) {
+                                RealCameraService.FaceFrameData frameData = cameraService.captureFrame();
+                                if (frameData != null) {
+                                    // Get real embedding from InsightFace via FaceIDService
+                                    InsightFaceService.FaceMesh mesh = insightFaceService.processFaceFrame(frameData.frameImage, true);
+                                    if (mesh != null && mesh.detected && mesh.embedding != null) {
+                                        faceIDService.addFrameEmbedding(mesh.embedding);
+                                        framesCaptured[0]++;
+                                    } else {
+                                        // If InsightFace fails, we can't enroll a valid face
+                                        // But we'll try again in the next frame
+                                    }
+                                }
+                            }
+                            
+                            Thread.sleep(150);
+                        }
+                        
+                        cameraService.stopCapture();
+                        previewTimer.stop();
+                        
+                        if (framesCaptured[0] < targetFrames) {
+                            Platform.runLater(() -> {
+                                showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "Not enough frames captured. Try again.");
+                                startCaptureBtn.setDisable(false);
+                                startCaptureBtn.setText("Start Camera");
+                            });
+                            return;
+                        }
+                        
+                        Platform.runLater(() -> {
+                            enrollmentHint.setText("Face capture complete! " + framesCaptured[0] + " frames captured.");
+                            progressBar.setProgress(1.0);
+                            startCaptureBtn.setDisable(true);
+                            startCaptureBtn.setText("✓ Frames Captured");
+                            
+                            if (!enrollmentBox.getChildren().contains(completeEnrollBtn)) {
+                                enrollmentBox.getChildren().add(completeEnrollBtn);
+                            }
+                            completeEnrollBtn.setDisable(false);
+                        });
+                        
+                    } catch (Exception ex) {
+                        System.err.println("Face ID enrollment camera error: " + ex.getMessage());
+                        ex.printStackTrace();
+                        Platform.runLater(() -> {
+                            showAvatarAlert(Alert.AlertType.ERROR, "Face ID", "Camera error: " + ex.getMessage());
+                            startCaptureBtn.setDisable(false);
+                            startCaptureBtn.setText("Start Camera");
+                        });
                     }
-                    faceIDService.addFrameEmbedding(mockEmbedding);
-                }
-                
-                progressBar.setProgress(1.0);
-                enrollmentHint.setText("Face captured successfully! " + faceIDService.getEnrollmentProgress() * 100 + "% complete.");
-                captureFramesBtn.setDisable(true);
-                
-                // Add complete button
-                if (enrollmentBox.getChildren().size() < 6) {
-                    enrollmentBox.getChildren().add(completeEnrollBtn);
-                }
-                completeEnrollBtn.setDisable(false);
+                });
             });
             
             // Complete enrollment action
@@ -2187,7 +2627,8 @@ public class ProfileView implements ViewInterface {
                 }
                 
                 showAvatarAlert(Alert.AlertType.INFORMATION, "Face ID", "Face ID enrollment completed successfully!");
-                content.getParent().getScene().getWindow().hide();
+                content.getChildren().clear();
+                buildFaceIDPanel(content);
             });
         }
     }

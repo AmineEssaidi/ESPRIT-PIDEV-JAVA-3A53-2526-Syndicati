@@ -21,6 +21,8 @@ sys.stderr = open(sys.stderr.fileno(), mode='w', buffering=1)
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml')
 eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
 
+DEBUG = True
+
 def detect_faces(frame_b64):
     """
     Detect faces in a base64-encoded image frame
@@ -71,6 +73,9 @@ def detect_faces(frame_b64):
         # Simple liveness/spoofing check based on face characteristics
         spoofing_result = analyze_liveness(frame, gray, x, y, w, h)
         
+        # Generate deterministic embedding from landmarks (for consistency)
+        embedding = generate_embedding(landmarks)
+        
         # Confidence based on detection score
         confidence = 0.85
         
@@ -79,6 +84,7 @@ def detect_faces(frame_b64):
             "confidence": confidence,
             "num_landmarks": len(landmarks),
             "landmarks": landmarks,
+            "embedding": embedding,
             "spoofing": spoofing_result
         }
         
@@ -155,62 +161,148 @@ def generate_landmarks(gray, x, y, w, h):
     
     return landmarks
 
+def generate_embedding(landmarks):
+    """
+    Generate a deterministic 128-dimensional embedding from landmarks
+    This is a proxy for a real model (ArcFace/FaceNet) when dependencies are missing.
+    It uses landmark geometry to create a stable face signature.
+    """
+    embedding = np.zeros(128, dtype=float)
+    
+    if not landmarks:
+        return embedding.tolist()
+        
+    # Use relative distances between key landmarks to build the signature
+    # 1. Normalized eye distance
+    # 2. Eye-to-nose ratios
+    # 3. Face aspect ratio
+    # 4. Landmark distribution
+    
+    points = np.array([[l['x'], l['y']] for l in landmarks])
+    
+    # Simple hash-like expansion to 128 dimensions
+    for i in range(128):
+        # Combine points with different weights for each dimension
+        # This makes the "face print" unique to the landmark configuration
+        idx = i % len(points)
+        weight = np.sin(i * 0.5) + 1.1
+        embedding[i] = (points[idx, 0] * weight + points[(idx+1)%len(points), 1] * (2-weight))
+        
+    # Normalize the vector (like real embedding models do)
+    norm = np.linalg.norm(embedding)
+    if norm > 0:
+        embedding = embedding / norm
+        
+    return embedding.tolist()
+
 def analyze_liveness(frame, gray, x, y, w, h):
-    """Simple liveness check for spoofing detection"""
+    """
+    Enhanced liveness check for spoofing detection.
+    Detects digital screens (Moire patterns) and printed photos.
+    """
     try:
         # Extract face region
         face_region = frame[y:y+h, x:x+w]
         face_gray = gray[y:y+h, x:x+w]
         
-        # Calculate texture variance (spoof detection metric)
+        if face_region.size == 0:
+            return {"is_spoof": False, "spoofing_score": 0.2, "indicators": []}
+
+        # 1. Texture Variance (Laplacian)
+        # Real faces have natural skin texture. Screens/Prints can be too blurry or too sharp.
         laplacian = cv2.Laplacian(face_gray, cv2.CV_64F)
         texture_variance = laplacian.var()
         
-        # Calculate eye blinking indicator (presence of dark pixels)
-        # Real faces have more contrast in eyes than printed photos
-        hist = cv2.calcHist([face_gray], [0], None, [256], [0, 256])
+        # 2. FFT Moire Pattern Detection (Frequency Domain)
+        # Digital screens create high-frequency periodic patterns.
+        rows, cols = face_gray.shape
+        crow, ccol = rows//2, cols//2
+        f = np.fft.fft2(face_gray)
+        fshift = np.fft.fftshift(f)
+        magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
         
-        # Calculate depth cues (color variation)
+        # Check high frequency energy (outside the central DC component)
+        mask = np.ones((rows, cols), np.uint8)
+        r = min(rows, cols) // 10
+        mask[crow-r:crow+r, ccol-r:ccol+r] = 0
+        high_freq_energy = np.mean(magnitude_spectrum * mask)
+        
+        # 3. YCrCb Skin Color Analysis
+        # Real skin has a specific distribution in Cr and Cb channels.
+        ycrcb = cv2.cvtColor(face_region, cv2.COLOR_BGR2YCrCb)
+        cr_channel = ycrcb[:, :, 1]
+        cb_channel = ycrcb[:, :, 2]
+        
+        # Real skin: Cr [133, 173], Cb [77, 127]
+        skin_mask = cv2.inRange(ycrcb, (0, 133, 77), (255, 173, 127))
+        skin_ratio = np.sum(skin_mask > 0) / (rows * cols)
+        
+        # 4. Color Saturation Variance
         hsv = cv2.cvtColor(face_region, cv2.COLOR_BGR2HSV)
-        h_variance = hsv[:, :, 0].var()
         s_variance = hsv[:, :, 1].var()
+        v_variance = hsv[:, :, 2].var()
         
-        # Simple spoofing score
-        # Real faces have good texture, color variation, and depth
+        # Simple spoofing score calculation
         spoofing_score = 0.0
+        indicators = []
         
-        # Low texture variation suggests print/screen
-        if texture_variance < 100:
+        if DEBUG:
+            print(f"[face_detect] Liveness Debug: Texture={texture_variance:.1f}, FFT={high_freq_energy:.1f}, Skin={skin_ratio:.3f}, S_Var={s_variance:.1f}", file=sys.stderr)
+        
+        # 1. Digital Screen Signature (Moire/High Freq)
+        # Increased to 140 - Real faces in high res can reach 130
+        if high_freq_energy > 140: 
+            spoofing_score += 0.5
+            indicators.append("Digital Screen Signature (Moire)")
+            
+        # 2. Skin Color Distribution
+        # Real faces in logs showed ~0.25-0.3. Spoofs showed 0.007.
+        if skin_ratio < 0.15:
+            spoofing_score += 0.4
+            indicators.append("Invalid Skin Color Distribution")
+            
+        # 3. Excessive Saturation
+        s_mean = hsv[:, :, 1].mean()
+        if s_mean > 130: # Increased from 110
             spoofing_score += 0.3
-        
-        # Low color saturation variation suggests print
+            indicators.append("Excessive Color Saturation (Screen)")
+
+        # 4. Texture Analysis
+        if texture_variance < 40: # Loosened for low light
+            spoofing_score += 0.5
+            indicators.append("Low Texture Detail (Print)")
+        elif texture_variance > 1000: # Strong indicator for digital screens
+            spoofing_score += 0.45
+            indicators.append("Abnormal Edge Sharpness (Digital)")
+
+        # 5. Flat Profile (Low saturation variance)
         if s_variance < 10:
-            spoofing_score += 0.2
-        
+            spoofing_score += 0.3
+            indicators.append("Flat Color Profile (Photo)")
+            
         # Clamp score to [0, 1]
         spoofing_score = min(1.0, spoofing_score)
-        
-        is_spoof = spoofing_score > 0.5
+        is_spoof = spoofing_score >= 0.5
         
         return {
             "is_spoof": is_spoof,
             "spoofing_score": float(spoofing_score),
-            "depth_variance": float(h_variance),
+            "depth_variance": float(v_variance),
             "blur_variance": float(texture_variance),
             "eye_visibility": 0.9,
-            "texture_uniformity": float(1.0 - min(1.0, texture_variance / 500)),
-            "indicators": []
+            "texture_uniformity": float(skin_ratio),
+            "indicators": indicators
         }
     except Exception as e:
         print(f"[face_detect] Liveness analysis error: {e}", file=sys.stderr)
         return {
-            "is_spoof": False,
-            "spoofing_score": 0.2,
+            "is_spoof": True,  # Fail secure
+            "spoofing_score": 1.0,
             "depth_variance": 0,
             "blur_variance": 0,
-            "eye_visibility": 0.5,
-            "texture_uniformity": 0.5,
-            "indicators": ["error_in_analysis"]
+            "eye_visibility": 0.0,
+            "texture_uniformity": 0.0,
+            "indicators": ["Analysis Failed - Secure Lock"]
         }
 
 def main():

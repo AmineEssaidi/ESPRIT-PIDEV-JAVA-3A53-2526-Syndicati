@@ -18,6 +18,7 @@ public class InsightFaceService {
     private static final String TAG = "InsightFaceService";
     private static final boolean DEBUG = true;
     
+    private static InsightFaceService instance;
     private Process pythonProcess;
     private BufferedWriter processInput;
     private BufferedReader processOutput;
@@ -26,12 +27,25 @@ public class InsightFaceService {
     private boolean isInitialized = false;
     private boolean suppressLogging = false;  // Suppress repeated errors after first failure
     
+    public static synchronized InsightFaceService getInstance() {
+        if (instance == null) {
+            instance = new InsightFaceService();
+        }
+        return instance;
+    }
+
+    private InsightFaceService() {
+        // Private constructor for singleton
+    }
+
     public static class FaceMesh {
         public boolean detected;
         public int numLandmarks;
         public double confidence;
         public List<Landmark3D> landmarks;
+        public double[] embedding;
         public SpoofingAnalysis spoofing;
+
         
         public static class Landmark3D {
             public double x;  // 0-1 (normalized to image width)
@@ -583,7 +597,16 @@ public class InsightFaceService {
                     mesh.landmarks.add(landmark);
                 }
                 
+                if (obj.has("embedding") && obj.get("embedding").isJsonArray()) {
+                    JsonArray embedArray = obj.getAsJsonArray("embedding");
+                    mesh.embedding = new double[embedArray.size()];
+                    for (int i = 0; i < embedArray.size(); i++) {
+                        mesh.embedding[i] = embedArray.get(i).getAsDouble();
+                    }
+                }
+                
                 if (obj.has("spoofing") && !obj.get("spoofing").isJsonNull()) {
+
                     JsonObject spoofObj = obj.getAsJsonObject("spoofing");
                     mesh.spoofing = new SpoofingAnalysis();
                     mesh.spoofing.isSpoof = spoofObj.get("is_spoof").getAsBoolean();

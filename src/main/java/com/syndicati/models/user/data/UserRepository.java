@@ -109,6 +109,29 @@ public class UserRepository {
         return Optional.empty();
     }
 
+    public Optional<User> findOneByGoogleId(String googleId) {
+        String sql = "SELECT * FROM user WHERE google_id = ? LIMIT 1";
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) {
+                return Optional.empty();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, googleId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return Optional.of(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("UserRepository.findOneByGoogleId error: " + e.getMessage());
+        }
+
+        return Optional.empty();
+    }
+
     public Optional<User> findOneByEmailOrPhone(String recovery) {
         String sql = "SELECT * FROM user WHERE LOWER(email_user) = LOWER(?) OR phone = ? LIMIT 1";
 

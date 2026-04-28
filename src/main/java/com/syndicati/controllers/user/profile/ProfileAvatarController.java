@@ -33,6 +33,27 @@ public class ProfileAvatarController {
         return AvatarUpdateResult.success(newImagePath);
     }
 
+    public AvatarUpdateResult generateAvatar(Profile profile, String prompt) {
+        if (profile == null) {
+            return AvatarUpdateResult.failure("No profile loaded");
+        }
+
+        String newImagePath = ProfileImageService.saveGeneratedAvatarImage(prompt, profile.getIdProfile());
+        if (newImagePath == null) {
+            String serviceMsg = ProfileImageService.getLastErrorMessage();
+            String message = (serviceMsg == null || serviceMsg.isBlank()) ? "Failed to generate image" : serviceMsg;
+            return AvatarUpdateResult.failure(message);
+        }
+
+        profile.setAvatar(newImagePath);
+        boolean updated = profileController.updateProfile(profile);
+        if (!updated) {
+            return AvatarUpdateResult.failure("Failed to update profile");
+        }
+
+        return AvatarUpdateResult.success(newImagePath);
+    }
+
     public static class AvatarUpdateResult {
         private final boolean success;
         private final String imagePath;

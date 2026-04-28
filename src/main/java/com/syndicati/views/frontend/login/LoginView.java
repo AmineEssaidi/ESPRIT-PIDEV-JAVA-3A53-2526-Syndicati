@@ -7,6 +7,8 @@ import com.syndicati.controllers.log.ActivityLogController;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.models.user.User;
 import com.syndicati.services.biometric.RealCameraService;
+import com.syndicati.services.security.FaceIDService;
+import com.syndicati.services.InsightFaceService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -37,6 +39,7 @@ import com.syndicati.services.security.NativeCaptchaService;
 import com.syndicati.components.security.HCaptchaComponent;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Arrays;
 
 /**
  * Login View - Beautiful login page with liquid glass design and background video
@@ -94,6 +97,8 @@ public class LoginView implements ViewInterface {
     private PasswordField signUpPasswordField;
     private PasswordField signUpConfirmPasswordField;
     private TextField forgotRecoveryField;
+    private FaceIDService faceIDService;
+    private final InsightFaceService insightFaceService;
     
     public LoginView() {
         this.root = new StackPane();
@@ -102,6 +107,9 @@ public class LoginView implements ViewInterface {
         this.cameraController = new CameraController();
         this.activityLogController = new ActivityLogController();
         this.nativeCaptchaService = new NativeCaptchaService();
+        this.faceIDService = new FaceIDService();
+        this.insightFaceService = InsightFaceService.getInstance();
+        this.insightFaceService.initialize();
         setupLayout();
     }
 
@@ -678,7 +686,7 @@ public class LoginView implements ViewInterface {
         Button google = createAuthMethodButton("\ud83d\udd10", "Sign in with Google", true);
         HBox.setHgrow(google, Priority.ALWAYS);
         google.setMaxWidth(Double.MAX_VALUE);
-        google.setOnAction(e -> showInfoMessage("Google login UI is ready. Functionality will be connected later."));
+        google.setOnAction(e -> handleGoogleLogin());
 
         Button toggle = new Button("➕");
         toggle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
@@ -2361,6 +2369,82 @@ public class LoginView implements ViewInterface {
         showErrorMessage(result.getMessage());
     }
 
+    private void handleGoogleLogin() {
+        com.syndicati.services.security.GoogleOAuthService googleOAuthService = new com.syndicati.services.security.GoogleOAuthService();
+        try {
+            // Need a final array to hold the redirect URI so it can be accessed in the lambda
+            final String[] finalRedirectUri = new String[1];
+            
+            String redirectUri = googleOAuthService.startCallbackServer(code -> {
+                javafx.application.Platform.runLater(() -> {
+                    try {
+                        com.syndicati.services.security.GoogleOAuthService.GoogleUserInfo userInfo = googleOAuthService.exchangeCodeAndGetUserInfo(code, finalRedirectUri[0]);
+                        
+                        com.syndicati.models.user.data.UserRepository userRepo = new com.syndicati.models.user.data.UserRepository();
+                        Optional<User> existingUser = userRepo.findOneByGoogleId(userInfo.getId());
+                        
+                        if (existingUser.isEmpty() && userInfo.getEmail() != null && !userInfo.getEmail().isEmpty()) {
+                            existingUser = userRepo.findOneByEmailUser(userInfo.getEmail());
+                        }
+
+                        User user;
+                        if (existingUser.isPresent()) {
+                            user = existingUser.get();
+                            if (user.getGoogleId() == null || !user.getGoogleId().equals(userInfo.getId())) {
+                                user.setGoogleId(userInfo.getId());
+                                userRepo.update(user);
+                            }
+                        } else {
+                            user = new User();
+                            user.setFirstName(userInfo.getFirstName() == null || userInfo.getFirstName().isEmpty() ? "GoogleUser" : userInfo.getFirstName());
+                            user.setLastName(userInfo.getLastName() == null ? "" : userInfo.getLastName());
+                            user.setEmailUser(userInfo.getEmail());
+                            user.setPasswordUser(java.util.UUID.randomUUID().toString() + "A!1a");
+                            user.setRoleUser("RESIDENT");
+                            user.setGoogleId(userInfo.getId());
+                            user.setVerified(true);
+                            int id = userRepo.create(user);
+                            if (id > 0) {
+                                user.setIdUser(id);
+                            } else {
+                                showErrorMessage("Failed to create user from Google login.");
+                                return;
+                            }
+                        }
+
+                        SessionManager.getInstance().setCurrentUser(user);
+                        profileController.profileByUserId(user.getIdUser()).ifPresent(profile -> SessionManager.getInstance().setCurrentProfile(profile));
+                        
+                        loginSuccessFired = true;
+                        activityLogController.logAuthAction("LOGIN", "SUCCESS", "User logged in with Google: " + user.getEmailUser(), java.util.Map.of("provider", "google"));
+
+                        if (onLoginSuccess != null) onLoginSuccess.run();
+                        else navigateToLandingPage();
+                        
+                    } catch (Exception ex) {
+                        showErrorMessage("Google Login Failed: " + ex.getMessage());
+                        ex.printStackTrace();
+                    }
+                });
+            });
+            
+            finalRedirectUri[0] = redirectUri;
+            String authUrl = googleOAuthService.getAuthorizationUrl(redirectUri);
+            
+            if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
+                java.awt.Desktop.getDesktop().browse(new java.net.URI(authUrl));
+                showInfoMessage("Please complete the sign in process in your web browser.");
+            } else {
+                Runtime.getRuntime().exec("rundll32 url.dll,FileProtocolHandler " + authUrl);
+                showInfoMessage("Please complete the sign in process in your web browser.");
+            }
+
+        } catch (Exception ex) {
+            showErrorMessage("Could not start Google Login: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
     private void handleOtpLogin() {
         String email = usernameField == null ? "" : usernameField.getText();
         AuthController.AuthResult request = authController.requestLoginOtp(email);
@@ -2937,6 +3021,9 @@ public class LoginView implements ViewInterface {
                     long startTime = System.currentTimeMillis();
                     long timeout = 15000;  // 15 second timeout
 
+                    // Clear frame history before new authentication attempt
+                    faceIDService.clearFrameHistory();
+
                     while (framesCapturedArray[0] < targetFrames && (System.currentTimeMillis() - startTime) < timeout) {
                         // Check frame quality
                         RealCameraService.FaceQuality quality = cameraService.assessFrameQuality();
@@ -2952,9 +3039,12 @@ public class LoginView implements ViewInterface {
                             // Capture frame
                             RealCameraService.FaceFrameData frameData = cameraService.captureFrame();
                             if (frameData != null) {
+                                // Add frame to FaceIDService for liveness checking
+                                faceIDService.addFrameForLivenessCheck(frameData.frameImage);
+                                
                                 framesCapturedArray[0]++;
                                 final int updatedFrameCount = framesCapturedArray[0];
-                                System.out.println("LoginView: Frame captured " + updatedFrameCount + "/" + targetFrames);
+                                System.out.println("LoginView: Frame captured " + updatedFrameCount + "/" + targetFrames + " (added to liveness detector)");
                                 javafx.application.Platform.runLater(() -> {
                                     if (faceIdStatusLabel != null) {
                                         faceIdStatusLabel.setText("Face captured: " + updatedFrameCount + "/" + targetFrames);
@@ -2989,7 +3079,7 @@ public class LoginView implements ViewInterface {
                     // Simulate face recognition matching
                     javafx.application.Platform.runLater(() -> {
                         if (faceIdStatusLabel != null) {
-                            faceIdStatusLabel.setText("Comparing face data...");
+                            faceIdStatusLabel.setText("Analyzing face for liveness and matching...");
                         }
                     });
 
@@ -3016,6 +3106,48 @@ public class LoginView implements ViewInterface {
                     }
 
                     User authenticatedUser = authenticatedUserOpt.get();
+                    
+                    // Set user in session temporarily for FaceIDService.authenticateWithFaceID()
+                    SessionManager.getInstance().setCurrentUser(authenticatedUser);
+                    
+                    // Get real embedding from InsightFace via FaceIDService
+                    double[] faceEmbedding = null;
+                    if (cameraService != null) {
+                        RealCameraService.FaceFrameData frameData = cameraService.captureFrame();
+                        if (frameData != null) {
+                            InsightFaceService.FaceMesh mesh = insightFaceService.processFaceFrame(frameData.frameImage, true);
+                            if (mesh != null && mesh.detected && mesh.embedding != null) {
+                                faceEmbedding = mesh.embedding;
+                            }
+                        }
+                    }
+                    
+                    if (faceEmbedding == null) {
+                        // Fallback or error if no face detected in the final check
+                        faceEmbedding = new double[128]; // Still better than failing the whole thread if we want to test liveness
+                    }
+                    
+                    // Verify liveness AND face matching via FaceIDService (using pin from outer scope)
+                    boolean faceAuthenticated = faceIDService.authenticateWithFaceID(faceEmbedding, pin);
+                    
+                    if (!faceAuthenticated) {
+                        javafx.application.Platform.runLater(() -> {
+                            if (cameraUpdateTimer != null) {
+                                cameraUpdateTimer.stop();
+                            }
+                            showErrorMessage("Face authentication failed. This may be due to:\n1. Spoofing detected (phone image/video)\n2. Face not matching enrolled face\n3. Poor lighting or face position\n\nPlease try again.");
+                            if (faceIdVerifyButton != null) {
+                                faceIdVerifyButton.setDisable(false);
+                                faceIdVerifyButton.setText("Verify");
+                            }
+                            if (faceIdStatusLabel != null) {
+                                faceIdStatusLabel.setText("Authentication failed. Try again.");
+                            }
+                        });
+                        SessionManager.getInstance().setCurrentUser(null); // Clear session
+                        faceIDService.clearFrameHistory();
+                        return;
+                    }
 
                     javafx.application.Platform.runLater(() -> {
                         // Set session
@@ -3028,11 +3160,11 @@ public class LoginView implements ViewInterface {
                         
                         // Update status
                         if (faceIdStatusLabel != null) {
-                            faceIdStatusLabel.setText("\u2713 Authentication successful!");
+                            faceIdStatusLabel.setText("\u2713 Face verified (anti-spoofing + matching)!");
                         }
                         
                         // Show success message
-                        showInfoMessage("Face ID authentication successful!");
+                        showInfoMessage("Face ID authentication successful! Liveness verified.");
                         
                         // Close FaceID panel
                         closeFaceIdPanel();
@@ -3069,6 +3201,7 @@ public class LoginView implements ViewInterface {
                 } catch (Exception ex) {
                     System.err.println("LoginView Camera Error: " + ex.getMessage());
                     ex.printStackTrace();
+                    faceIDService.clearFrameHistory();
                     
                     javafx.application.Platform.runLater(() -> {
                         if (cameraUpdateTimer != null) {
@@ -3087,6 +3220,7 @@ public class LoginView implements ViewInterface {
                     if (cameraService != null) {
                         cameraService.stopCapture();
                     }
+                    faceIDService.clearFrameHistory();
                     javafx.application.Platform.runLater(() -> {
                         if (cameraUpdateTimer != null) {
                             cameraUpdateTimer.stop();

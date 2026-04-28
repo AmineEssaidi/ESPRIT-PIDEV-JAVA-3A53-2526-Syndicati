@@ -78,7 +78,7 @@ public class RealCameraService {
         
         CompletableFuture.runAsync(() -> {
             System.out.println("RealCameraService: Initializing InsightFace service...");
-            insightFaceService = new InsightFaceService();
+            insightFaceService = InsightFaceService.getInstance();
             boolean started = insightFaceService.initialize();
             
             if (started) {

@@ -9,6 +9,20 @@ import java.time.Instant;
 import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import javax.imageio.ImageIO;
+
+import org.apache.commons.codec.binary.Base32;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.WriterException;
+import com.google.zxing.client.j2se.MatrixToImageConfig;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.common.BitMatrix;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Two-Factor Authentication Service
@@ -32,7 +46,8 @@ public class TwoFactorService {
         SecureRandom random = new SecureRandom();
         byte[] bytes = new byte[20];
         random.nextBytes(bytes);
-        return Base64.getEncoder().encodeToString(bytes);
+        Base32 base32 = new Base32();
+        return base32.encodeToString(bytes).replace("=", "");
     }
     
     /**
@@ -41,25 +56,34 @@ public class TwoFactorService {
     public String generateQRCodeDataUrl(String secret, String email, String issuer) {
         try {
             String label = issuer + ":" + email;
-            String otpAuthUrl = String.format("otpauth://totp/%s?secret=%s&issuer=%s", 
+            String otpAuthUrl = String.format("otpauth://totp/%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30", 
                 label, secret, issuer);
-            
-            // Use a simple QR code generation approach (base64 encoded SVG or use external service)
-            return generateSimpleQRCode(otpAuthUrl);
+            return generatePngDataUrlFromText(otpAuthUrl, 300, 300);
         } catch (Exception e) {
             System.err.println("Error generating QR code: " + e.getMessage());
             return null;
         }
     }
-    
-    /**
-     * Generate a simple QR code using data URL (in production, use a library like zxing)
-     */
-    private String generateSimpleQRCode(String data) {
-        // For desktop app, we can use a simple approach:
-        // Return a placeholder or use a local QR generation library
-        // This is a simplified version - in production use zxing or similar
-        return "data:text/plain;base64," + Base64.getEncoder().encodeToString(data.getBytes());
+    private String generatePngDataUrlFromText(String data, int width, int height) throws WriterException {
+        try {
+            QRCodeWriter qrWriter = new QRCodeWriter();
+            Map<EncodeHintType, Object> hints = new HashMap<>();
+            hints.put(EncodeHintType.MARGIN, 1);
+            BitMatrix matrix = qrWriter.encode(data, BarcodeFormat.QR_CODE, width, height, hints);
+            MatrixToImageConfig config = new MatrixToImageConfig(MatrixToImageConfig.BLACK, MatrixToImageConfig.WHITE);
+            BufferedImage img = MatrixToImageWriter.toBufferedImage(matrix, config);
+
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                ImageIO.write(img, "png", baos);
+                String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                return "data:image/png;base64," + base64;
+            }
+        } catch (WriterException we) {
+            throw we;
+        } catch (Exception e) {
+            System.err.println("QR generation failed: " + e.getMessage());
+            return null;
+        }
     }
     
     /**
@@ -86,7 +110,8 @@ public class TwoFactorService {
      * Generate TOTP code for a specific time window
      */
     private String generateTotpCode(String secret, long timeWindow) throws Exception {
-        byte[] decodedSecret = Base64.getDecoder().decode(secret);
+        Base32 base32 = new Base32();
+        byte[] decodedSecret = base32.decode(secret);
         byte[] timeBytes = new byte[8];
         
         for (int i = 7; i >= 0; i--) {
