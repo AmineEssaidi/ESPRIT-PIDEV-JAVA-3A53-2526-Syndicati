@@ -41,6 +41,9 @@ public class MainApplication extends Application {
     
     @Override
     public void start(Stage primaryStage) {
+        System.err.println("==========================================");
+        System.err.println("!!! SYNDICATI APPLICATION STARTING !!!");
+        System.err.println("==========================================");
         instance = this;
         this.primaryStage = primaryStage;
         

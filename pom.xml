@@ -99,6 +99,20 @@
             <version>4.12.0</version>
         </dependency>
 
+        <!-- ONNX Runtime for native captcha scoring -->
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+            <version>1.18.0</version>
+        </dependency>
+
+        <!-- Skija for modern captcha image generation (HumbleUI version) -->
+        <dependency>
+            <groupId>io.github.humbleui</groupId>
+            <artifactId>skija-windows-x64</artifactId>
+            <version>0.116.1</version>
+        </dependency>
+
         <!-- Password hashing/verification (compatible with Symfony bcrypt hashes) -->
         <dependency>
             <groupId>org.mindrot</groupId>
@@ -189,7 +203,7 @@
                     <mainClass>com.syndicati.Launcher</mainClass>
                     <options>
                         <option>--enable-native-access=ALL-UNNAMED</option>
-                        <option>--enable-native-access=javafx.graphics,javafx.media</option>
+                        <option>--enable-native-access=javafx.graphics,javafx.media,javafx.web</option>
                         <!-- Suppress sun.misc.Unsafe deprecation warnings from Guice 5.1.0 -->
                         <option>--sun-misc-unsafe-memory-access=allow</option>
                     </options>

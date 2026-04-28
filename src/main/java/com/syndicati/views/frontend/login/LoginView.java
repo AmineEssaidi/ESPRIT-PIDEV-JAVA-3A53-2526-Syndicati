@@ -26,10 +26,16 @@ import javafx.scene.Node;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.animation.AnimationTimer;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
+import java.io.ByteArrayOutputStream;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.components.shared.ImageBackground;
 import com.syndicati.components.shared.ConnectionStatusPill;
+import com.syndicati.services.security.NativeCaptchaService;
+import com.syndicati.components.security.HCaptchaComponent;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -62,6 +68,21 @@ public class LoginView implements ViewInterface {
     private ImageView faceIdVideoView;
     private AnimationTimer cameraUpdateTimer;
     private final ActivityLogController activityLogController;
+    private final NativeCaptchaService nativeCaptchaService;
+    private NativeCaptchaService.NativeChallenge nativeCaptchaChallenge;
+    private boolean captchaVerified = false;
+    private HCaptchaComponent hcaptchaComponent;
+    private boolean useHCaptcha = true;
+    private boolean hCaptchaAvailable = false;
+    private Label challengeQuestionLabel;
+    private Label challengeStatusLabel;
+    private Label challengeBadgeLabel;
+    private Label challengeScoreLabel;
+    private ImageView captchaImageView;
+    private TextField challengeAnswerField;
+    private Button challengeRefreshButton;
+    private ProgressBar challengeProgressBar;
+    private StackPane challengeCard;
     
     // FaceID panel controls (for authentication)
     private PasswordField faceIdPinInput;
@@ -80,6 +101,7 @@ public class LoginView implements ViewInterface {
         this.profileController = new ProfileController();
         this.cameraController = new CameraController();
         this.activityLogController = new ActivityLogController();
+        this.nativeCaptchaService = new NativeCaptchaService();
         setupLayout();
     }
 
@@ -223,11 +245,15 @@ public class LoginView implements ViewInterface {
         
         VBox passwordContainer = createInputField("", "Password");
         passwordField = (PasswordField) passwordContainer.getChildren().get(1);
+        attachNativeTelemetry("email", usernameField);
+        attachNativeTelemetry("password", passwordField);
 
         HBox row = createFormRow(usernameContainer, passwordContainer);
         
         // Create button container for side-by-side buttons
         HBox buttonContainer = createButtonContainer();
+
+        VBox captchaContainer = createCaptchaContainer();
         
         // Forgot password link
         Hyperlink forgotPassword = new Hyperlink("Forgot Password?");
@@ -244,6 +270,7 @@ public class LoginView implements ViewInterface {
             headerWrap,
             row,
             buttonContainer,
+            captchaContainer,
             forgotPassword,
             socialDivider,
             authMethodsBlock
@@ -263,6 +290,328 @@ public class LoginView implements ViewInterface {
         container.getChildren().add(loginAuthFlexContainer);
         
         return container;
+    }
+
+    private VBox createCaptchaContainer() {
+        VBox wrap = new VBox(8);
+        wrap.setAlignment(Pos.CENTER);
+        wrap.setMaxWidth(Double.MAX_VALUE);
+
+        ThemeManager themeManager = ThemeManager.getInstance();
+
+        HBox header = new HBox(8);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Label title = new Label("Security Verification");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
+        title.setTextFill(Color.web(themeManager.getTextColor()));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        challengeRefreshButton = new Button("Refresh");
+        challengeRefreshButton.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        challengeRefreshButton.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.08);" +
+            "-fx-background-radius: 10px;" +
+            "-fx-border-color: rgba(255,255,255,0.12);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 10px;" +
+            "-fx-text-fill: " + themeManager.getTextColor() + ";" +
+            "-fx-cursor: hand;"
+        );
+
+        header.getChildren().addAll(title, spacer, challengeRefreshButton);
+
+        // Try hCaptcha first as primary
+        hcaptchaComponent = new HCaptchaComponent();
+        
+        if (!hcaptchaComponent.hasLoadFailed()) {
+            hCaptchaAvailable = true;
+            useHCaptcha = true;
+            
+            // Setup fallback callback
+            hcaptchaComponent.setOnLoadFail(() -> {
+                System.out.println("[LoginView] hCaptcha load failed, falling back to Skija");
+                switchToNativeCaptcha(wrap, header);
+            });
+            
+            hcaptchaComponent.setOnVerified(() -> {
+                if (loginButton != null) {
+                    loginButton.setDisable(false);
+                    loginButton.setText("Sign In");
+                }
+            });
+            
+            VBox hcaptchaContainer = new VBox(8);
+            hcaptchaContainer.setAlignment(Pos.CENTER);
+            hcaptchaContainer.getChildren().addAll(header, hcaptchaComponent.getContainer());
+            wrap.getChildren().add(hcaptchaContainer);
+            
+            System.out.println("[LoginView] Initialized hCaptcha (primary)");
+        } else {
+            // hCaptcha not enabled or failed immediately
+            useHCaptcha = false;
+            hCaptchaAvailable = false;
+            setupNativeCaptchaUI(wrap, header);
+            System.out.println("[LoginView] hCaptcha disabled/failed, using Skija fallback");
+        }
+        
+        return wrap;
+    }
+
+    private void setupNativeCaptchaUI(VBox wrap, HBox header) {
+        ThemeManager themeManager = ThemeManager.getInstance();
+        
+        challengeRefreshButton.setOnAction(e -> refreshNativeChallenge());
+
+        challengeBadgeLabel = new Label();
+        challengeBadgeLabel.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 10));
+        challengeBadgeLabel.setTextFill(Color.web("#ffffff"));
+        challengeBadgeLabel.setStyle(
+            "-fx-background-color: linear-gradient(to right, rgba(190,18,60,0.95), rgba(244,63,94,0.95));" +
+            "-fx-background-radius: 999px;" +
+            "-fx-padding: 4px 10px;" +
+            "-fx-letter-spacing: 0.8px;"
+        );
+
+        challengeScoreLabel = new Label("skija rendering");
+        challengeScoreLabel.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 10));
+        challengeScoreLabel.setTextFill(Color.web(themeManager.isDarkMode() ? "rgba(255,255,255,0.58)" : "rgba(15,23,42,0.60)"));
+
+        HBox badgeRow = new HBox(8, challengeBadgeLabel, challengeScoreLabel);
+        badgeRow.setAlignment(Pos.CENTER_LEFT);
+
+        captchaImageView = new ImageView();
+        captchaImageView.setFitWidth(360);
+        captchaImageView.setFitHeight(140);
+        captchaImageView.setStyle("-fx-border-radius: 12px;");
+        captchaImageView.setPreserveRatio(false);
+
+        challengeQuestionLabel = new Label();
+        challengeQuestionLabel.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
+        challengeQuestionLabel.setTextFill(Color.web(themeManager.getTextColor()));
+        challengeQuestionLabel.setWrapText(true);
+        challengeQuestionLabel.setMaxWidth(360);
+        challengeQuestionLabel.setStyle("-fx-letter-spacing: 0.8px;");
+
+        challengeAnswerField = new TextField();
+        challengeAnswerField.setPromptText("Answer");
+        challengeAnswerField.setAlignment(Pos.CENTER);
+        challengeAnswerField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
+        challengeAnswerField.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.05);" +
+            "-fx-border-color: rgba(255,255,255,0.16);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 10px;" +
+            "-fx-background-radius: 10px;" +
+            "-fx-text-fill: " + themeManager.getTextColor() + ";" +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.45);" +
+            "-fx-padding: 10px 12px;"
+        );
+        challengeAnswerField.setPrefWidth(360);
+        attachNativeTelemetry("challenge", challengeAnswerField);
+        challengeAnswerField.setOnAction(e -> handleLogin());
+        
+        // Real-time captcha validation as user types
+        challengeAnswerField.textProperty().addListener((obs, oldVal, newVal) -> validateCaptchaRealTime());
+
+        challengeProgressBar = new ProgressBar(0.0);
+        challengeProgressBar.setMaxWidth(Double.MAX_VALUE);
+        challengeProgressBar.setPrefHeight(4);
+        challengeProgressBar.setStyle("-fx-accent: #f43f5e;");
+
+        challengeStatusLabel = new Label("Solve the challenge to unlock sign in.");
+        challengeStatusLabel.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        challengeStatusLabel.setTextFill(Color.web(themeManager.isDarkMode() ? "rgba(255,255,255,0.62)" : "rgba(15,23,42,0.68)"));
+
+        VBox challengeBody = new VBox(10, badgeRow, captchaImageView, challengeQuestionLabel, challengeAnswerField, challengeProgressBar, challengeStatusLabel);
+        challengeBody.setAlignment(Pos.CENTER_LEFT);
+        challengeBody.setPadding(new Insets(16, 16, 16, 16));
+        challengeBody.setStyle(
+            "-fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.08), rgba(255,255,255,0.03));" +
+            "-fx-background-radius: 18px;" +
+            "-fx-border-color: rgba(255,255,255,0.12);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 18px;"
+        );
+
+        challengeCard = new StackPane(challengeBody);
+        challengeCard.setMaxWidth(Double.MAX_VALUE);
+        challengeCard.setStyle(
+            "-fx-background-radius: 20px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.22), 22, 0.15, 0, 6);"
+        );
+
+        wrap.getChildren().addAll(header, challengeCard);
+        refreshNativeChallenge();
+    }
+
+    private void switchToNativeCaptcha(VBox wrap, HBox header) {
+        useHCaptcha = false;
+        wrap.getChildren().clear();
+        setupNativeCaptchaUI(wrap, header);
+        System.out.println("[LoginView] Switched to native Skija captcha after hCaptcha failed");
+    }
+
+
+    private void refreshNativeChallenge() {
+        nativeCaptchaChallenge = nativeCaptchaService.beginChallenge();
+        captchaVerified = false;
+        if (loginButton != null) loginButton.setDisable(true);
+
+        if (challengeQuestionLabel != null) {
+            challengeQuestionLabel.setText(nativeCaptchaChallenge.prompt());
+        }
+        if (challengeBadgeLabel != null) {
+            challengeBadgeLabel.setText("NATIVE " + nativeCaptchaChallenge.mode().toUpperCase(Locale.ROOT));
+        }
+        if (challengeScoreLabel != null) {
+            challengeScoreLabel.setText(nativeCaptchaService.getModelStatus());
+        }
+        if (captchaImageView != null && nativeCaptchaChallenge.captchaImage() != null) {
+            captchaImageView.setImage(nativeCaptchaChallenge.captchaImage());
+        }
+        if (challengeAnswerField != null) {
+            challengeAnswerField.clear();
+        }
+        if (challengeProgressBar != null) {
+            challengeProgressBar.setProgress(0.08);
+        }
+        if (challengeStatusLabel != null) {
+            challengeStatusLabel.setText("Solve the challenge to unlock sign in. " + nativeCaptchaService.getModelStatus());
+            challengeStatusLabel.setTextFill(Color.web(ThemeManager.getInstance().isDarkMode() ? "rgba(255,255,255,0.62)" : "rgba(15,23,42,0.68)"));
+        }
+
+        if (challengeCard != null) {
+            challengeCard.setScaleX(0.985);
+            challengeCard.setScaleY(0.985);
+            javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(220), challengeCard);
+            fadeIn.setFromValue(0.72);
+            fadeIn.setToValue(1.0);
+
+            javafx.animation.ScaleTransition scaleIn = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(220), challengeCard);
+            scaleIn.setFromX(0.985);
+            scaleIn.setFromY(0.985);
+            scaleIn.setToX(1.0);
+            scaleIn.setToY(1.0);
+
+            new javafx.animation.ParallelTransition(fadeIn, scaleIn).play();
+        }
+    }
+
+    private boolean isNativeChallengeSolved() {
+        if (challengeAnswerField == null || nativeCaptchaChallenge == null) {
+            return false;
+        }
+
+        String submitted = challengeAnswerField.getText() == null ? "" : challengeAnswerField.getText().trim();
+        NativeCaptchaService.NativeCaptchaVerdict verdict = nativeCaptchaService.verify(nativeCaptchaChallenge.challengeId(), submitted);
+        if (challengeProgressBar != null) {
+            challengeProgressBar.setProgress(Math.max(0.08, 1.0 - verdict.score()));
+        }
+        if (!verdict.passed()) {
+            setNativeChallengeStatus(verdict.message() + String.format(Locale.ROOT, " [score %.2f]", verdict.score()), false);
+            nativeCaptchaService.reset(nativeCaptchaChallenge.challengeId());
+            nativeCaptchaChallenge = null;
+            pulseChallengeCard(false);
+        } else {
+            setNativeChallengeStatus(verdict.message() + String.format(Locale.ROOT, " [score %.2f]", verdict.score()), true);
+            pulseChallengeCard(true);
+        }
+        return verdict.passed();
+    }
+
+    private void setNativeChallengeStatus(String message, boolean ok) {
+        if (challengeStatusLabel != null) {
+            challengeStatusLabel.setText(message);
+            challengeStatusLabel.setTextFill(Color.web(ok ? "rgba(52, 211, 153, 0.95)" : "rgba(248, 113, 113, 0.98)"));
+        }
+    }
+
+    private void validateCaptchaRealTime() {
+        if (challengeAnswerField == null || nativeCaptchaChallenge == null || nativeCaptchaService == null) {
+            return;
+        }
+        
+        String submitted = challengeAnswerField.getText() == null ? "" : challengeAnswerField.getText().trim();
+        boolean isCorrect = nativeCaptchaService.checkAnswerMatch(nativeCaptchaChallenge.challengeId(), submitted);
+        
+        if (isCorrect) {
+            captchaVerified = true;
+            if (loginButton != null) {
+                loginButton.setDisable(false);
+            }
+            setNativeChallengeStatus("Code verified! Ready to sign in.", true);
+            pulseChallengeCard(true);
+        } else {
+            captchaVerified = false;
+            if (loginButton != null) {
+                loginButton.setDisable(true);
+            }
+            // Only show error message if they've typed something
+            if (!submitted.isEmpty()) {
+                setNativeChallengeStatus("Incorrect code. Try again.", false);
+            } else {
+                setNativeChallengeStatus("Type the code to unlock sign in.", false);
+            }
+        }
+    }
+
+    private void pulseChallengeCard(boolean success) {
+        if (challengeCard == null) {
+            return;
+        }
+
+        challengeCard.setStyle(
+            "-fx-background-radius: 20px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(" + (success ? "16,185,129" : "244,63,94") + ",0.34), 26, 0.18, 0, 8);"
+        );
+
+        javafx.animation.ScaleTransition scaleUp = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(110), challengeCard);
+        scaleUp.setToX(1.02);
+        scaleUp.setToY(1.02);
+
+        javafx.animation.ScaleTransition scaleDown = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(160), challengeCard);
+        scaleDown.setToX(1.0);
+        scaleDown.setToY(1.0);
+
+        javafx.animation.FadeTransition statusFlash = new javafx.animation.FadeTransition(javafx.util.Duration.millis(120), challengeStatusLabel);
+        statusFlash.setFromValue(0.62);
+        statusFlash.setToValue(1.0);
+
+        new javafx.animation.SequentialTransition(scaleUp, new javafx.animation.PauseTransition(javafx.util.Duration.millis(40)), scaleDown, statusFlash).play();
+    }
+
+
+    private void attachNativeTelemetry(String fieldName, TextInputControl control) {
+        if (control == null) {
+            return;
+        }
+
+        control.focusedProperty().addListener((obs, oldFocused, focused) -> {
+            if (focused && nativeCaptchaChallenge != null) {
+                nativeCaptchaService.noteFocus(nativeCaptchaChallenge.challengeId(), fieldName);
+            }
+        });
+
+        control.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+            if (nativeCaptchaChallenge != null) {
+                nativeCaptchaService.noteKey(nativeCaptchaChallenge.challengeId(), fieldName, control.getText(), event.isShortcutDown());
+            }
+        });
+
+        control.addEventFilter(MouseEvent.MOUSE_MOVED, event -> {
+            if (nativeCaptchaChallenge != null) {
+                nativeCaptchaService.noteMouse(nativeCaptchaChallenge.challengeId(), event.getSceneX(), event.getSceneY());
+            }
+        });
+
+        control.addEventFilter(MouseEvent.MOUSE_DRAGGED, event -> {
+            if (nativeCaptchaChallenge != null) {
+                nativeCaptchaService.noteMouse(nativeCaptchaChallenge.challengeId(), event.getSceneX(), event.getSceneY());
+            }
+        });
     }
     
     private HBox createButtonContainer() {
@@ -1233,6 +1582,7 @@ public class LoginView implements ViewInterface {
         Button button = new Button("Sign In");
         button.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 16));
         button.setPrefHeight(50);
+        button.setDisable(true);
         
         // Apply liquid glass styling
         ThemeManager themeManager = ThemeManager.getInstance();
@@ -1262,7 +1612,7 @@ public class LoginView implements ViewInterface {
         
         // Add click handler
         button.setOnAction(e -> handleLogin());
-        
+
         return button;
     }
     
@@ -1944,6 +2294,23 @@ public class LoginView implements ViewInterface {
     private void handleLogin() {
         String username = usernameField.getText();
         String password = passwordField.getText();
+
+        // Security check
+        boolean passedSecurity = false;
+        if (useHCaptcha && hcaptchaComponent != null) {
+            passedSecurity = hcaptchaComponent.isVerified();
+        } else {
+            // Fallback to Native Skija Captcha
+            passedSecurity = captchaVerified || isNativeChallengeSolved();
+        }
+
+        if (!passedSecurity) {
+            if (!useHCaptcha) {
+                setNativeChallengeStatus("Incorrect answer. Try the challenge again.", false);
+            }
+            showErrorMessage("Please solve the security verification before signing in.");
+            return;
+        }
         
         // Keep admin/admin shortcut for local dev convenience.
         if ("admin".equals(username) && "admin".equals(password)) {
@@ -1980,6 +2347,7 @@ public class LoginView implements ViewInterface {
                 
                 activityLogController.logAuthAction("LOGIN", "SUCCESS", "User logged in: " + result.getUser().getEmailUser(), java.util.Map.of());
             }
+            refreshNativeChallenge();
             if (onLoginSuccess != null) {
                 onLoginSuccess.run();
             } else {
@@ -1988,6 +2356,7 @@ public class LoginView implements ViewInterface {
             return;
         }
 
+        refreshNativeChallenge();
         activityLogController.logAuthAction("LOGIN", "FAILURE", "Failed login attempt for: " + username, java.util.Map.of("username", username));
         showErrorMessage(result.getMessage());
     }
@@ -2258,10 +2627,7 @@ public class LoginView implements ViewInterface {
             javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
             stage.setMaximized(!stage.isMaximized());
         });
-        btnClose.setOnAction(e -> {
-            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            stage.close();
-        });
+        btnClose.setOnAction(e -> System.exit(0));
 
         final double[] dragOffset = new double[2];
         dragRegion.setMouseTransparent(false);
@@ -2381,6 +2747,11 @@ public class LoginView implements ViewInterface {
             root.getChildren().remove(imageBackground.getRoot());
             imageBackground = null;
         }
+        // Clean up hCaptcha
+        if (hcaptchaComponent != null) {
+            hcaptchaComponent.cleanup();
+        }
+        
         // Clear all children from root to ensure no lingering backgrounds
         root.getChildren().clear();
         root.setStyle("-fx-background-color: transparent;" + ThemeManager.getInstance().getScrollbarVariableStyle());
