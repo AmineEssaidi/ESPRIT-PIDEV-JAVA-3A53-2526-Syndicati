@@ -104,9 +104,9 @@ public class DashboardView implements ViewInterface {
     String accentGradient() { return theme().getEffectiveAccentGradient(); }
     String accentRgba(double alpha) { return theme().toRgba(accentHex(), alpha); }
     boolean isDark() { return theme().isDarkMode(); }
-    private Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
-    private Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
-    private Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
+    Color textPrimaryColor() { return isDark() ? Color.web("#f8fafc") : Color.web("#111827"); }
+    Color textSecondaryColor() { return isDark() ? Color.web("rgba(255,255,255,0.78)") : Color.web("rgba(17,24,39,0.82)"); }
+    Color textMutedColor() { return isDark() ? Color.web("rgba(255,255,255,0.55)") : Color.web("rgba(30,41,59,0.64)"); }
 
     String currentDisplayName() {
         User user = SessionManager.getInstance().getCurrentUser();
@@ -2037,7 +2037,7 @@ public class DashboardView implements ViewInterface {
         );
     }
 
-    private VBox sectionCard() {
+    VBox sectionCard() {
         return glassCard();
     }
 
@@ -2070,10 +2070,20 @@ public class DashboardView implements ViewInterface {
         return row;
     }
 
-    private Region barR(int h, String color) {
+    Region barR(int h, String color) {
         Region r = new Region(); r.setPrefWidth(12); r.setPrefHeight(h);
         r.setStyle("-fx-background-color:"+color+";-fx-background-radius:4 4 0 0;");
         return r;
+    }
+
+    VBox buildEmptyState(String message) {
+        VBox empty = new VBox(10);
+        empty.setAlignment(Pos.CENTER);
+        empty.setPadding(new Insets(30, 0, 30, 0));
+        Text msg = t(message, lightFont(), FontWeight.NORMAL, 14);
+        msg.setFill(textMutedColor());
+        empty.getChildren().add(msg);
+        return empty;
     }
 
     Text t(String s, String family, FontWeight w, double size) {

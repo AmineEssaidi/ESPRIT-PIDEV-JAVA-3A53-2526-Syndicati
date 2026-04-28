@@ -10,6 +10,7 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
+import com.syndicati.services.forum.OpenAIModerationService;
 import com.syndicati.services.forum.ReactionService.ReactionActionResult;
 import com.syndicati.services.forum.ReactionService.ReactionPayload;
 import com.syndicati.services.forum.ReactionService.ReactionStatus;
@@ -91,6 +92,7 @@ public class ForumPageView implements ViewInterface {
     private final CommentaireController comments = new CommentaireController();
     private final ReactionController reactions = new ReactionController();
     private final ProfileController profiles = new ProfileController();
+    private final OpenAIModerationService moderationService = new OpenAIModerationService();
 
     private final VBox listBox = new VBox(10);
     private final StackPane faceStack = new StackPane();
@@ -1260,6 +1262,13 @@ public class ForumPageView implements ViewInterface {
 
         String title = safe(createTitle.getText());
         String description = safe(createDescription.getText());
+
+        List<String> flaggedCategories = moderationService.checkContent(title + " " + description);
+        if (!flaggedCategories.isEmpty()) {
+            showInfo("Moderation Alert", "Votre publication a été bloquée pour contenu inapproprié.\nCatégories détectées : " + String.join(", ", flaggedCategories));
+            return;
+        }
+
         String category = forceAnnouncementCreate ? "Announcement" : createCategory.getValue();
 
         List<String> createErrors = buildPublicationDraft(title, description, category).validateForCreate();
@@ -1297,6 +1306,13 @@ public class ForumPageView implements ViewInterface {
 
         String title = safe(editTitle.getText());
         String description = safe(editDescription.getText());
+
+        List<String> flaggedCategories = moderationService.checkContent(title + " " + description);
+        if (!flaggedCategories.isEmpty()) {
+            showInfo("Moderation Alert", "Votre publication a été bloquée pour contenu inapproprié.\nCatégories détectées : " + String.join(", ", flaggedCategories));
+            return;
+        }
+
         String category = editCategory.getValue();
 
         List<String> editErrors = buildPublicationDraft(title, description, category).validateForCreate();
@@ -2721,14 +2737,60 @@ public class ForumPageView implements ViewInterface {
     }
 
     private void showInfo(String title, String content) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION, content, ButtonType.OK);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-
+        javafx.stage.Stage stage = new javafx.stage.Stage();
+        stage.initStyle(javafx.stage.StageStyle.TRANSPARENT);
         if (root.getScene() != null && root.getScene().getWindow() != null) {
-            alert.initOwner(root.getScene().getWindow());
+            stage.initOwner(root.getScene().getWindow());
+            stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
         }
-        alert.showAndWait();
+
+        javafx.scene.layout.VBox container = new javafx.scene.layout.VBox(15);
+        container.setPadding(new javafx.geometry.Insets(25));
+        container.setStyle(
+            "-fx-background-color: rgba(17, 24, 39, 0.95);" +
+            "-fx-background-radius: 16px;" +
+            "-fx-border-color: rgba(236, 72, 153, 0.4);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 16px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 20, 0, 0, 10);"
+        );
+
+        javafx.scene.text.Text titleText = new javafx.scene.text.Text(title);
+        titleText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 22));
+        titleText.setFill(javafx.scene.paint.Color.web("#ec4899"));
+
+        javafx.scene.text.Text contentText = new javafx.scene.text.Text(content);
+        contentText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 15));
+        contentText.setFill(javafx.scene.paint.Color.web("rgba(255, 255, 255, 0.85)"));
+        contentText.setWrappingWidth(350);
+
+        javafx.scene.control.Button btn = new javafx.scene.control.Button("OK");
+        btn.setStyle(
+            "-fx-background-color: linear-gradient(to right, #ec4899, #8b5cf6);" +
+            "-fx-text-fill: white;" +
+            "-fx-font-weight: bold;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-padding: 8px 24px;" +
+            "-fx-cursor: hand;"
+        );
+        btn.setOnAction(e -> stage.close());
+
+        javafx.scene.layout.HBox btnBox = new javafx.scene.layout.HBox(btn);
+        btnBox.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+
+        container.getChildren().addAll(titleText, contentText, btnBox);
+
+        javafx.scene.Scene scene = new javafx.scene.Scene(container);
+        scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
+        stage.setScene(scene);
+        
+        if (root.getScene() != null && root.getScene().getWindow() != null) {
+            javafx.stage.Window owner = root.getScene().getWindow();
+            stage.setX(owner.getX() + (owner.getWidth() - 400) / 2);
+            stage.setY(owner.getY() + (owner.getHeight() - 200) / 2);
+        }
+        
+        stage.showAndWait();
     }
 
     private void showNotification(String message, boolean success) {

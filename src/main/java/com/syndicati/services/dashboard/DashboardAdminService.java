@@ -1095,4 +1095,35 @@ public class DashboardAdminService {
         String normalized = safe(value);
         return "-".equals(normalized) ? null : normalized;
     }
+
+    public List<com.syndicati.models.log.AppEventLog> recentActivityLogs(int limit) {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> topPages() {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> topClicks() {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> deviceBreakdown() {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> outcomeBreakdown() {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> levelBreakdown() {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> riskSignals(int limit) {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> interactionTrends() {
+        return new java.util.ArrayList<>();
+    }
+    public List<String[]> topUsers() {
+        return new java.util.ArrayList<>();
+    }
+    public Map<String, Integer> activityHeartbeat() {
+        return new java.util.HashMap<>();
+    }
 }
