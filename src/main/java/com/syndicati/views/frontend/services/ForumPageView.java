@@ -1151,7 +1151,8 @@ public class ForumPageView implements ViewInterface {
         emoji.setOnAction(e -> toggleCommentEmojiPanel(comment));
         report.setOnAction(e -> toggleCommentReportPanel(comment));
 
-        bar.getChildren().addAll(likeWrap, dislikeWrap, ratioWrap, emoji, report);
+        Button feeling = ghostButton("Feeling", () -> showCommentSentimentAnalysis(comment));
+        bar.getChildren().addAll(likeWrap, dislikeWrap, ratioWrap, emoji, report, feeling);
 
         if (canManageComment(comment)) {
             Button edit = ghostButton("Edit", () -> toggleCommentEditPanel(comment));
@@ -2992,5 +2993,23 @@ public class ForumPageView implements ViewInterface {
         }
         
         stage.show();
+    }
+
+    private void showCommentSentimentAnalysis(Commentaire comment) {
+        if (comment == null) return;
+
+        String textToAnalyze = comment.getDescriptionCommentaire();
+        
+        showNotification("Analyzing comment feeling...", true);
+
+        sentimentService.analyzeContent(textToAnalyze).thenAccept(result -> {
+            javafx.application.Platform.runLater(() -> {
+                if (!result.success) {
+                    showInfo("Sentiment Analysis", result.explanation);
+                    return;
+                }
+                showSentimentPopup(result);
+            });
+        });
     }
 }

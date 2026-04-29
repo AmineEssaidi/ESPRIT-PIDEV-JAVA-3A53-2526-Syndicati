@@ -12,7 +12,7 @@ import java.util.concurrent.CompletableFuture;
  * Service to interact with the Python sentiment analysis microservice.
  */
 public class SentimentAnalysisService {
-    private static final String API_URL = "http://localhost:5000/api/full-analysis";
+    private static final String API_URL = "http://127.0.0.1:5000/api/full-analysis";
     private final HttpClient httpClient;
 
     public SentimentAnalysisService() {
@@ -48,7 +48,7 @@ public class SentimentAnalysisService {
                         return new SentimentResult("Error", "0", "API returned status: " + response.statusCode(), "Unknown", false);
                     }
                 })
-                .exceptionally(ex -> new SentimentResult("Offline", "0", "Sentiment API not running on localhost:5000", "Unknown", false));
+                .exceptionally(ex -> new SentimentResult("Offline", "0", "Sentiment API Error: " + ex.getMessage(), "Unknown", false));
     }
 
     private SentimentResult parseResults(String sentimentRaw, String emotionsRaw) {
