@@ -32,17 +32,25 @@ public class SentimentAnalysisService {
                 pb.inheritIO();
                 pythonProcess = pb.start();
                 
-                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                    if (pythonProcess != null && pythonProcess.isAlive()) {
-                        pythonProcess.destroy();
-                        System.out.println("🛑 Sentiment AI Microservice stopped.");
-                    }
-                }));
+                Runtime.getRuntime().addShutdownHook(new Thread(SentimentAnalysisService::stopMicroservice));
             } catch (Exception e) {
                 System.err.println("⚠️ Could not start Sentiment AI Microservice automatically: " + e.getMessage());
                 System.err.println("Make sure 'python' is in your PATH and dependencies are installed.");
             }
         }).start();
+    }
+
+    public static void stopMicroservice() {
+        if (pythonProcess != null && pythonProcess.isAlive()) {
+            System.out.println("🛑 Stopping Sentiment AI Microservice...");
+            pythonProcess.destroyForcibly();
+            try {
+                pythonProcess.waitFor();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            System.out.println("✅ Sentiment AI Microservice stopped.");
+        }
     }
 
     public CompletableFuture<SentimentResult> analyzeContent(String text) {

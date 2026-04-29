@@ -89,6 +89,7 @@ public class MainApplication extends Application {
                 .unstarted(() -> {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
+                    com.syndicati.services.forum.SentimentAnalysisService.stopMicroservice();
                     connectionManager.shutdown();
                     langfuseRuntimeService.stop();
                     anomalyScoringScheduler.stop();
@@ -101,6 +102,7 @@ public class MainApplication extends Application {
 
         // Ensure the application exits completely when the window is closed
         primaryStage.setOnCloseRequest(event -> {
+            com.syndicati.services.forum.SentimentAnalysisService.stopMicroservice();
             javafx.application.Platform.exit();
             System.exit(0);
         });
