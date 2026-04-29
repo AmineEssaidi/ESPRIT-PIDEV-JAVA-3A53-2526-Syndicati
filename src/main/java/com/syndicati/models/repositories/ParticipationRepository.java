@@ -45,6 +45,31 @@ public class ParticipationRepository {
         return participations;
     }
 
+    public List<Participation> findWaitingListByEventId(int eventId) {
+        String sql = "SELECT p.*, u.first_name, u.last_name, u.email_user FROM participation p " +
+                     "JOIN user u ON p.user_id = u.id_user " +
+                     "WHERE p.event_id = ? AND p.statut_participation = 'waiting' " +
+                     "ORDER BY p.created_at ASC";
+        List<Participation> participations = new ArrayList<>();
+
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return participations;
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, eventId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        participations.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("ParticipationRepository.findWaitingListByEventId error: " + e.getMessage());
+        }
+
+        return participations;
+    }
+
     public List<Participation> findAllByUserId(int userId) {
         String sql = "SELECT p.*, e.titre_event, e.date_event, e.lieu_event FROM participation p " +
                      "JOIN evenement e ON p.event_id = e.id_event WHERE p.user_id = ?";
@@ -68,37 +93,37 @@ public class ParticipationRepository {
         return participations;
     }
 
+    public static String lastError = "";
+
     public int create(Participation p) {
+        lastError = "";
         String sql = "INSERT INTO participation (event_id, user_id, date_participation, statut_participation, nb_accompagnants, commentaire_participation, formulaire_data, created_at, edited_at) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DatabaseService.getInstance().getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            
+            pstmt.setInt(1, p.getEvenement().getIdEvent());
+            pstmt.setInt(2, p.getUser().getIdUser());
+            pstmt.setTimestamp(3, Timestamp.valueOf(p.getDateParticipation()));
+            pstmt.setString(4, p.getStatutParticipation());
+            pstmt.setInt(5, p.getNbAccompagnants());
+            pstmt.setString(6, p.getCommentaireParticipation());
+            pstmt.setString(7, p.getFormulaireData());
+            pstmt.setTimestamp(8, Timestamp.valueOf(LocalDateTime.now()));
+            pstmt.setTimestamp(9, Timestamp.valueOf(LocalDateTime.now()));
 
-        try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) return -1;
-
-            try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                ps.setInt(1, p.getEvenement().getIdEvent());
-                ps.setInt(2, p.getUser().getIdUser());
-                ps.setTimestamp(3, Timestamp.valueOf(p.getDateParticipation() != null ? p.getDateParticipation() : LocalDateTime.now()));
-                ps.setString(4, p.getStatutParticipation());
-                ps.setInt(5, p.getNbAccompagnants());
-                ps.setString(6, p.getCommentaireParticipation());
-                ps.setString(7, p.getFormulaireData());
-                ps.setTimestamp(8, Timestamp.valueOf(LocalDateTime.now()));
-                ps.setTimestamp(9, Timestamp.valueOf(LocalDateTime.now()));
-
-                int affected = ps.executeUpdate();
-                if (affected == 0) return -1;
-
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    if (keys.next()) {
-                        return keys.getInt(1);
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows > 0) {
+                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        return generatedKeys.getInt(1);
                     }
                 }
             }
         } catch (SQLException e) {
+            lastError = e.getMessage();
             System.out.println("ParticipationRepository.create error: " + e.getMessage());
         }
-
         return -1;
     }
 

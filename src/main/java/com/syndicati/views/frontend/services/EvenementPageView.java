@@ -8,6 +8,7 @@ import com.syndicati.models.services.ParticipationService;
 import com.syndicati.models.weather.WeatherData;
 import com.syndicati.services.WeatherService;
 import java.util.List;
+import java.util.Optional;
 import javafx.application.Platform;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
@@ -705,12 +706,28 @@ public class EvenementPageView implements ViewInterface {
         // Check if already joined
         com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
         if (sm.isLoggedIn()) {
-            boolean joined = participationService.getParticipationsByUser(sm.getCurrentUser().getIdUser())
-                    .stream().anyMatch(p -> p.getEvenement().getIdEvent() == e.getIdEvent());
-            if (joined) {
-                joinBtn.setText("Already Joined");
+            Optional<com.syndicati.models.entities.Participation> existingP = participationService.getParticipationsByUser(sm.getCurrentUser().getIdUser())
+                    .stream().filter(p -> p.getEvenement().getIdEvent() == e.getIdEvent()).findFirst();
+            
+            if (existingP.isPresent()) {
+                if (com.syndicati.models.entities.Participation.STATUS_WAITING_LIST.equals(existingP.get().getStatutParticipation())) {
+                    joinBtn.setText("On Waitlist");
+                } else {
+                    joinBtn.setText("Already Joined");
+                }
                 joinBtn.setDisable(true);
                 joinBtn.setStyle(joinBtn.getStyle() + "-fx-opacity: 0.7;");
+                
+                // ADDED: Leave Event button for testing/UX
+                Button leaveBtn = new Button("Leave Event");
+                leaveBtn.setStyle("-fx-background-color: rgba(255,75,92,0.1); -fx-text-fill: #ff4b5c; -fx-border-color: #ff4b5c; -fx-border-radius: 12px; -fx-background-radius: 12px; -fx-padding: 8 16; -fx-font-weight: bold;");
+                leaveBtn.setOnAction(lev -> {
+                    if (participationService.cancelParticipation(existingP.get().getIdParticipation())) {
+                        showSuccessAlert("Left Event", "You have successfully left the event. The waitlist has been updated.");
+                        refreshContent();
+                    }
+                });
+                detailsFace.getChildren().add(leaveBtn);
             }
         }
 
@@ -721,8 +738,8 @@ public class EvenementPageView implements ViewInterface {
             }
 
             if (e.getNbRestants() <= 0) {
-                showErrorAlert("No Places Left", "This event is currently full. Please check back later.");
-                return;
+                // Now allowed via waiting list
+                System.out.println("DEBUG: Event full, opening waiting list form.");
             }
 
             showParticipationForm(e, joinBtn);
@@ -1138,8 +1155,9 @@ public class EvenementPageView implements ViewInterface {
             "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 30, 0, 0, 10);"
         );
 
-        Text titleText = text("Join Event: " + e.getTitreEvent(), 26, true, tm.getAccentHex());
-        Text subText = text("Confirm your participation and add companions if any.", 14, false, textMuted());
+        boolean isFull = e.getNbRestants() <= 0;
+        Text titleText = text((isFull ? "Join Waiting List: " : "Join Event: ") + e.getTitreEvent(), 26, true, tm.getAccentHex());
+        Text subText = text(isFull ? "This event is currently full. Join the waiting list to be notified if spots open up." : "Confirm your participation and add companions if any.", 14, false, textMuted());
         subText.setWrappingWidth(400);
         subText.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
@@ -1159,6 +1177,23 @@ public class EvenementPageView implements ViewInterface {
         Button confirm = gradientButton("Confirm Registration", 13, new Insets(10, 24, 10, 24));
 
         actions.getChildren().addAll(cancel, confirm);
+        if (isFull) {
+            confirm.setText("Join Waiting List");
+            companionsBox.setDisable(true);
+            companionsField.setText("0");
+        }
+
+        // Update button text if companions exceed available spots
+        companionsField.textProperty().addListener((obs, oldVal, newVal) -> {
+            try {
+                int nb = newVal.isEmpty() ? 0 : Integer.parseInt(newVal);
+                if (1 + nb > e.getNbRestants()) {
+                    confirm.setText("Join Waiting List");
+                } else if (!isFull) {
+                    confirm.setText("Confirm Registration");
+                }
+            } catch (Exception ex) {}
+        });
 
         form.getChildren().addAll(titleText, subText, companionsBox, commentBox, actions);
         overlay.getChildren().add(form);
@@ -1186,10 +1221,7 @@ public class EvenementPageView implements ViewInterface {
                 if (nb < 0) throw new NumberFormatException();
                 
                 int totalNeeded = 1 + nb;
-                if (totalNeeded > e.getNbRestants()) {
-                    showErrorAlert("Not Enough Places", "Only " + e.getNbRestants() + " places left, but you requested " + totalNeeded + ".");
-                    return;
-                }
+                boolean isWaitlistJoin = e.getNbRestants() <= 0 || totalNeeded > e.getNbRestants();
 
                 com.syndicati.models.entities.User user = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
                 com.syndicati.models.entities.Participation p = new com.syndicati.models.entities.Participation();
@@ -1212,38 +1244,39 @@ public class EvenementPageView implements ViewInterface {
 
                 boolean ok = participationService.registerParticipation(p);
                 if (ok) {
-                    // Send confirmation email (Async)
                     EventMailingService.getInstance().sendParticipationConfirmation(p);
-                    
-                    // Immediate visual feedback on the card
-                    e.setNbRestants(e.getNbRestants() - totalNeeded);
-                    joinBtn.setText("Registered!");
+                    if (!isWaitlistJoin) {
+                        e.setNbRestants(e.getNbRestants() - totalNeeded);
+                        joinBtn.setText("Registered!");
+                    } else {
+                        joinBtn.setText("On Waitlist");
+                    }
                     joinBtn.setDisable(true);
                     joinBtn.setStyle(joinBtn.getStyle() + "-fx-opacity: 0.7;");
                     
-                    showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. Your ticket is ready!");
-                    
-                    // Offer to download ticket
-                    Button downloadBtn = gradientButton("📥 Download My Ticket (PDF)", 13, new Insets(10, 20, 10, 20));
-                    downloadBtn.setOnAction(dev -> {
-                        try {
-                            String path = ticketService.generateTicketPDF(p);
-                            ticketService.openTicket(path);
-                        } catch (Exception ex) {
-                            showErrorAlert("Export Error", "Could not generate PDF: " + ex.getMessage());
+                    if (isWaitlistJoin) {
+                        showSuccessAlert("Waitlist Joined", "You have been added to the waiting list for '" + e.getTitreEvent() + "'. We'll notify you if a spot opens up!");
+                    } else {
+                        showSuccessAlert("Registration Successful", "You have joined '" + e.getTitreEvent() + "'. Your ticket is ready!");
+                        
+                        // Offer to download ticket
+                        Button downloadBtn = gradientButton("📥 Download My Ticket (PDF)", 13, new Insets(10, 20, 10, 20));
+                        downloadBtn.setOnAction(dev -> {
+                            try {
+                                String path = ticketService.generateTicketPDF(p);
+                                ticketService.openTicket(path);
+                            } catch (Exception ex) {
+                                showErrorAlert("Export Error", "Could not generate PDF: " + ex.getMessage());
+                            }
+                        });
+                        if (overlay.getChildren().get(0) instanceof VBox) {
+                            ((VBox) overlay.getChildren().get(0)).getChildren().add(downloadBtn);
                         }
-                    });
-                    
-                    if (overlay.getChildren().get(0) instanceof VBox) {
-                        VBox v = (VBox) overlay.getChildren().get(0);
-                        v.getChildren().add(downloadBtn);
-                        // Optional: remove the previous form fields to clean up
                     }
-
-                    // Refresh after a small delay to let user see the change
-                    javafx.application.Platform.runLater(() -> refreshContent());
+                    refreshContent();
                 } else {
-                    showErrorAlert("Registration Failed", "An error occurred while saving your participation. Please try again later.");
+                    String sqlError = com.syndicati.models.repositories.ParticipationRepository.lastError;
+                    showErrorAlert("Registration Failed", "Technical Error: " + (sqlError.isEmpty() ? "Database connection issue" : sqlError));
                 }
             } catch (NumberFormatException nfe) {
                 showErrorAlert("Invalid Input", "Please enter a valid positive number for companions.");

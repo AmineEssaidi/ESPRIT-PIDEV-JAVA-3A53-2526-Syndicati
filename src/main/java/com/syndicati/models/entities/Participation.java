@@ -6,11 +6,15 @@ import java.time.LocalDateTime;
  * Participation entity aligned with the web project's participation table.
  */
 public class Participation {
+    public static final String STATUS_CONFIRMED = "en_attente";
+    public static final String STATUS_WAITING_LIST = "waiting";
+    public static final String STATUS_CANCELLED = "annule";
+
     private Integer idParticipation;
     private Evenement evenement;
     private User user;
     private LocalDateTime dateParticipation;
-    private String statutParticipation = "en_attente";
+    private String statutParticipation = STATUS_WAITING_LIST; // Default to waiting list if not specified
     private Integer nbAccompagnants = 0;
     private String commentaireParticipation;
     private String formulaireData; // Stored as JSON string

@@ -38,17 +38,25 @@ import java.util.Optional;
             int totalNeeded = 1 + p.getNbAccompagnants();
             
             if (event.getNbRestants() >= totalNeeded) {
+                p.setStatutParticipation(Participation.STATUS_CONFIRMED);
                 int id = repository.create(p);
                 if (id > 0) {
                     p.setIdParticipation(id);
                     if (es.decrementPlaces(event.getIdEvent(), totalNeeded)) {
-                        // Send confirmation email
                         sendConfirmationEmail(p);
                         return true;
                     }
                 }
             } else {
-                System.err.println("Not enough places: requested " + totalNeeded + ", available " + event.getNbRestants());
+                // Not enough places, put on waiting list
+                p.setStatutParticipation(Participation.STATUS_WAITING_LIST);
+                int id = repository.create(p);
+                if (id > 0) {
+                    p.setIdParticipation(id);
+                    sendWaitingListEmail(p);
+                    System.out.println("User " + p.getUser().getIdUser() + " added to waiting list for event " + event.getIdEvent());
+                    return true;
+                }
             }
         }
         return false;
@@ -94,13 +102,47 @@ import java.util.Optional;
         Optional<Participation> pOpt = repository.findById(id);
         if (pOpt.isPresent()) {
             Participation p = pOpt.get();
+            String oldStatus = p.getStatutParticipation();
+            int eventId = p.getEvenement().getIdEvent();
+            
             if (repository.delete(id)) {
-                EvenementService es = new EvenementService();
-                int totalToRestore = 1 + p.getNbAccompagnants();
-                return es.incrementPlaces(p.getEvenement().getIdEvent(), totalToRestore);
+                if (Participation.STATUS_CONFIRMED.equals(oldStatus)) {
+                    EvenementService es = new EvenementService();
+                    int totalToRestore = 1 + p.getNbAccompagnants();
+                    es.incrementPlaces(eventId, totalToRestore);
+                    
+                    // Promotion logic
+                    processWaitingList(eventId);
+                }
+                return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Checks the waiting list for an event and promotes users if spots are available.
+     */
+    private void processWaitingList(int eventId) {
+        List<Participation> waitingList = repository.findWaitingListByEventId(eventId);
+        if (waitingList.isEmpty()) return;
+
+        EvenementService es = new EvenementService();
+        for (Participation p : waitingList) {
+            Optional<com.syndicati.models.entities.Evenement> eOpt = es.getEventById(eventId);
+            if (eOpt.isPresent()) {
+                com.syndicati.models.entities.Evenement event = eOpt.get();
+                int totalNeeded = 1 + p.getNbAccompagnants();
+                
+                if (event.getNbRestants() >= totalNeeded) {
+                    if (repository.updateStatus(p.getIdParticipation(), Participation.STATUS_CONFIRMED)) {
+                        es.decrementPlaces(eventId, totalNeeded);
+                        sendPromotionEmail(p);
+                        System.out.println("Promoted user " + p.getUser().getIdUser() + " to confirmed for event " + eventId);
+                    }
+                }
+            }
+        }
     }
 
     private void sendConfirmationEmail(Participation p) {
@@ -113,9 +155,34 @@ import java.util.Optional;
                 p.getDateParticipation().toString()
             );
             mailer.sendHtmlAsync(p.getUser().getEmailUser(), "Participation Confirmed: " + p.getEvenement().getTitreEvent(), html);
-            System.out.println("Queued confirmation email to " + p.getUser().getEmailUser());
         } catch (Exception e) {
             System.err.println("Failed to send confirmation email: " + e.getMessage());
+        }
+    }
+
+    private void sendWaitingListEmail(Participation p) {
+        try {
+            com.syndicati.services.mail.AsyncMailerService mailer = com.syndicati.services.mail.AsyncMailerService.getInstance();
+            String html = com.syndicati.services.mail.SyndicatiEmailComposer.waitingListAdded(
+                p.getUser().getFirstName(),
+                p.getEvenement().getTitreEvent()
+            );
+            mailer.sendHtmlAsync(p.getUser().getEmailUser(), "Waitlist: " + p.getEvenement().getTitreEvent(), html);
+        } catch (Exception e) {
+            System.err.println("Failed to send waiting list email: " + e.getMessage());
+        }
+    }
+
+    private void sendPromotionEmail(Participation p) {
+        try {
+            com.syndicati.services.mail.AsyncMailerService mailer = com.syndicati.services.mail.AsyncMailerService.getInstance();
+            String html = com.syndicati.services.mail.SyndicatiEmailComposer.waitingListPromotion(
+                p.getUser().getFirstName(),
+                p.getEvenement().getTitreEvent()
+            );
+            mailer.sendHtmlAsync(p.getUser().getEmailUser(), "You're In! " + p.getEvenement().getTitreEvent(), html);
+        } catch (Exception e) {
+            System.err.println("Failed to send promotion email: " + e.getMessage());
         }
     }
 }

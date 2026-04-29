@@ -90,6 +90,37 @@ public final class SyndicatiEmailComposer {
         return wrap(body, footerExtra);
     }
 
+    public static String waitingListAdded(String firstName, String eventTitle) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Waiting List: Join Request</h2>" +
+            "<p>Hello " + esc(nameOrFallback(firstName)) + ",</p>" +
+            "<p>The event <strong>" + esc(eventTitle) + "</strong> is currently full. We have added you to the <strong>Waiting List</strong>.</p>" +
+            "<div style='background:rgba(255,255,255,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,255,255,0.1);margin:35px 0;'>" +
+            "<p style='margin:0;color:rgba(255,255,255,0.7);'>We will automatically promote you to a confirmed participant if spots become available due to cancellations. You will receive another notification if this happens.</p>" +
+            "</div>" +
+            "<p>Thank you for your patience.</p>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Events • Waitlist Management</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: EVT-WLT-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " • Waitlist Protocol Active</p>";
+        return wrap(body, footerExtra);
+    }
+
+    public static String waitingListPromotion(String firstName, String eventTitle) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Good News: Participation Confirmed</h2>" +
+            "<p>Hello " + esc(nameOrFallback(firstName)) + ",</p>" +
+            "<p>Great news! A spot has become available for <strong>" + esc(eventTitle) + "</strong>, and you have been promoted from the waiting list to a <strong>Confirmed Participant</strong>.</p>" +
+            "<div style='background:rgba(255,75,92,0.1);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.3);margin:35px 0;text-align:center;'>" +
+            "<p style='margin:0;font-size:18px;color:#ffffff;font-weight:700;'>Your status is now CONFIRMED</p>" +
+            "</div>" +
+            "<p>We look forward to seeing you at the event!</p>" +
+            "<div class='button-container'><a href='#' class='button'>View Ticket</a></div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Events • Community Engagement Unit</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: EVT-PRM-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " • Promotion Verified</p>";
+        return wrap(body, footerExtra);
+    }
+
     private static String wrap(String body, String footerExtra) {
         return "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><style>"
             + BASE_CSS
