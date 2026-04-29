@@ -376,9 +376,14 @@ public class DashboardView implements ViewInterface {
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scroll.setStyle("-fx-background-color:transparent;-fx-background:transparent;");
-        VBox.setVgrow(scroll, Priority.ALWAYS);
+        
+        StackPane floatingWrap = new StackPane(scroll);
+        VBox.setVgrow(floatingWrap, Priority.ALWAYS);
+        
+        // Attach floating action buttons (Agent/Chatbot & Messaging)
+        // Global Agent buttons are now handled in MainApplication
 
-        area.getChildren().addAll(DashboardShell.buildHeader(this), scroll);
+        area.getChildren().addAll(DashboardShell.buildHeader(this), floatingWrap);
         return area;
     }
 

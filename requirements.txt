@@ -1,3 +1,10 @@
-mediapipe==0.10.11
-opencv-python==4.9.0.80
-numpy==1.26.4
+mediapipe
+opencv-python
+numpy
+fastapi
+uvicorn
+pydantic
+langchain-groq
+langgraph
+playwright
+langchain-core

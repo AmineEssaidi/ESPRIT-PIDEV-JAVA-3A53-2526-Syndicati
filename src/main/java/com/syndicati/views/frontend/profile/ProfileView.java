@@ -540,18 +540,24 @@ public class ProfileView implements ViewInterface {
         HBox xpTop = new HBox();
         xpTop.setAlignment(Pos.CENTER_LEFT);
         Text left = text("XP TOWARDS LEVEL " + (levelValue + 1), 11, true, textMuted());
-        Text right = text(currentXp + "/100", 11, true, "#ffffff");
-        HBox.setHgrow(left, Priority.ALWAYS);
-        xpTop.getChildren().addAll(left, right);
+        Text right = text(currentXp + " / 100", 11, true, tm.getTextColor());
+        
+        javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        xpTop.getChildren().addAll(left, spacer, right);
 
         StackPane progressTrack = new StackPane();
         progressTrack.setAlignment(Pos.CENTER_LEFT);
         progressTrack.setMinHeight(8);
         progressTrack.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 999px;");
         StackPane fill = new StackPane();
-        fill.setPrefWidth(currentXp * 1.8);
         fill.setMinHeight(8);
         fill.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-background-radius: 999px;");
+        
+        // Use binding to ensure the fill takes up exactly the right percentage
+        fill.prefWidthProperty().bind(progressTrack.widthProperty().multiply(currentXp / 100.0));
+        
         progressTrack.getChildren().add(fill);
 
         xp.getChildren().addAll(xpTop, progressTrack);

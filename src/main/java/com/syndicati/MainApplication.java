@@ -3,6 +3,7 @@ package com.syndicati;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
@@ -88,6 +89,7 @@ public class MainApplication extends Application {
                 .name("Syndicati-ShutdownHook")
                 .unstarted(() -> {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
+                    com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
                     connectionManager.shutdown();
                     langfuseRuntimeService.stop();
@@ -126,7 +128,7 @@ public class MainApplication extends Application {
             activityLogController.logPageView("app_shutdown", "Application Shutdown", java.util.Map.of(
                 "source", "close_request"
             ));
-            // Shutdown email service thread pool first
+            com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             // Then shutdown database monitoring
             connectionManager.shutdown();
@@ -296,12 +298,15 @@ public class MainApplication extends Application {
         NavigationManager navigationManager = NavigationManager.getInstance();
         navigationManager.setViews(landingPageView);
 
-        Scene scene = new Scene(landingPageView.getRoot());
+        StackPane globalRoot = new StackPane(landingPageView.getRoot());
+        Scene scene = new Scene(globalRoot);
+        com.syndicati.components.shared.FloatingActionButtons.attachTo(globalRoot);
+        
         scene.setFill(Color.BLACK); // Keep non-transparent app background
         scene.getStylesheets().clear(); // Clear any inherited styles
         applyGlobalStyles(scene);
-        if (scene.getRoot() != null) {
-            appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
+        if (landingPageView.getRoot() != null) {
+            appendRootStyle(landingPageView.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
         }
 
         primaryStage.setMinWidth(1500);

@@ -157,6 +157,9 @@ public class LandingPageView implements ViewInterface {
         root.getChildren().add(windowBar);
         StackPane.setAlignment(windowBar, Pos.TOP_LEFT);
 
+        // Attach floating action buttons (Agent/Chatbot & Messaging)
+        // Global Agent buttons are now attached in MainApplication
+
         root.addEventFilter(ActionEvent.ACTION, e -> NavigationManager.getInstance().awardInteractionXp(1));
     }
     

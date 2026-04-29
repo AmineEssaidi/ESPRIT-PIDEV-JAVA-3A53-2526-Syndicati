@@ -201,8 +201,9 @@ public class LoginView implements ViewInterface {
         root.getChildren().add(topRightControls);
         StackPane.setAlignment(topRightControls, Pos.TOP_RIGHT);
         StackPane.setMargin(topRightControls, new Insets(52, 20, 0, 0)); // Top margin 52px to go below window bar
-        // Keep login UI on top of overlays
-        loginContainer.toFront();
+        // Keep UI controls on top
+        windowBar.toFront();
+        topRightControls.toFront();
         
         // Apply theme styling
         applyThemeStyling();
@@ -2134,23 +2135,136 @@ public class LoginView implements ViewInterface {
         showInfoMessage(requestResult.getMessage());
         activityLogController.logAuthAction("PASSWORD_RESET_REQUEST", "SUCCESS", "Password reset requested for: " + recovery, java.util.Map.of("identifier", recovery));
 
-        TextInputDialog codeDialog = new TextInputDialog();
-        codeDialog.setTitle("Verify Code");
-        codeDialog.setHeaderText("Enter the 6-digit code sent to your email");
-        codeDialog.setContentText("Auth code:");
-        java.util.Optional<String> entered = codeDialog.showAndWait();
-        if (entered.isEmpty() || entered.get().isBlank()) {
-            return;
-        }
+        showForgotPasswordModal(recovery);
+    }
+    
+    private void showForgotPasswordModal(String recovery) {
+        ThemeManager tm = ThemeManager.getInstance();
 
-        AuthController.AuthResult verifyResult = authController.verifyPasswordReset(recovery, entered.get().trim());
-        if (!verifyResult.isSuccess()) {
-            showErrorMessage(verifyResult.getMessage());
-            return;
-        }
+        StackPane overlay = new StackPane();
+        overlay.setPickOnBounds(true);
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.52);");
 
-        showInfoMessage(verifyResult.getMessage());
-        switchToLogin();
+        VBox card = new VBox(12);
+        card.setAlignment(Pos.TOP_CENTER);
+        card.setMaxWidth(420);
+        card.setMaxHeight(280);
+        card.setPadding(new Insets(18, 20, 18, 20));
+        card.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(14,14,14,0.95)" : "rgba(245,245,245,0.97)") + ";" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.38) + ";" +
+            "-fx-border-width: 1.2px;" +
+            "-fx-border-radius: 20px;"
+        );
+
+        Text title = new Text("Password Reset");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
+        title.setFill(createAccentGradientPaint());
+
+        Text sub = new Text("Enter the 6-digit code sent to " + recovery);
+        sub.setWrappingWidth(380);
+        sub.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        sub.setFill(tm.isDarkMode() ? Color.web("rgba(255,255,255,0.72)") : Color.web("rgba(30,41,59,0.72)"));
+
+        TextField codeField = new TextField();
+        codeField.setPromptText("000000");
+        codeField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
+        codeField.setAlignment(Pos.CENTER);
+        codeField.setPrefHeight(48);
+        codeField.setMaxWidth(320);
+        codeField.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(20,20,20,0.92)" : "rgba(255,255,255,0.92)") + ";" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.44) + ";" +
+            "-fx-border-width: 1.4px;" +
+            "-fx-border-radius: 14px;" +
+            "-fx-background-radius: 14px;" +
+            "-fx-text-fill: " + tm.getTextColor() + ";" +
+            "-fx-prompt-text-fill: " + (tm.isDarkMode() ? "rgba(255,255,255,0.35)" : "rgba(30,41,59,0.35)") + ";"
+        );
+        codeField.textProperty().addListener((obs, oldVal, newVal) -> {
+            String digits = newVal == null ? "" : newVal.replaceAll("\\D", "");
+            if (digits.length() > 6) {
+                digits = digits.substring(0, 6);
+            }
+            if (!digits.equals(newVal)) {
+                codeField.setText(digits);
+            }
+        });
+
+        Label hint = new Label("Code expires in 15 minutes");
+        hint.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        hint.setTextFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.95)));
+        hint.setAlignment(Pos.CENTER);
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        cancelBtn.setStyle(secondaryButtonStyle(tm));
+        cancelBtn.setPrefWidth(90);
+
+        Button verifyBtn = new Button("Verify");
+        verifyBtn.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        verifyBtn.setStyle(primaryButtonStyle(tm));
+        verifyBtn.setPrefWidth(110);
+
+        HBox actions = new HBox(10, cancelBtn, verifyBtn);
+        actions.setAlignment(Pos.CENTER);
+
+        Runnable close = () -> {
+            root.getChildren().remove(overlay);
+            forgotPasswordContainer.toFront();
+        };
+
+        cancelBtn.setOnAction(e -> close.run());
+        overlay.setOnMouseClicked(e -> {
+            if (e.getTarget() == overlay) {
+                close.run();
+            }
+        });
+
+        Runnable verifyAction = () -> {
+            String code = codeField.getText() == null ? "" : codeField.getText().trim();
+            if (code.length() != 6) {
+                hint.setText("Please enter a valid 6-digit code");
+                hint.setTextFill(Color.web("#f87171"));
+                return;
+            }
+
+            AuthController.AuthResult verifyResult = authController.verifyPasswordReset(recovery, code);
+            if (!verifyResult.isSuccess()) {
+                hint.setText(verifyResult.getMessage());
+                hint.setTextFill(Color.web("#f87171"));
+                return;
+            }
+
+            close.run();
+            showInfoMessage(verifyResult.getMessage());
+            switchToLogin();
+        };
+
+        verifyBtn.setOnAction(e -> verifyAction.run());
+        codeField.setOnAction(e -> verifyAction.run());
+
+        card.getChildren().addAll(title, sub, codeField, hint, actions);
+        overlay.getChildren().add(card);
+        StackPane.setAlignment(card, Pos.CENTER);
+
+        card.setOpacity(0);
+        card.setScaleX(0.96);
+        card.setScaleY(0.96);
+        javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(160), card);
+        fadeIn.setFromValue(0);
+        fadeIn.setToValue(1);
+        javafx.animation.ScaleTransition scaleIn = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(180), card);
+        scaleIn.setFromX(0.96);
+        scaleIn.setFromY(0.96);
+        scaleIn.setToX(1.0);
+        scaleIn.setToY(1.0);
+        new javafx.animation.ParallelTransition(fadeIn, scaleIn).play();
+
+        root.getChildren().add(overlay);
+        overlay.toFront();
+        javafx.application.Platform.runLater(codeField::requestFocus);
     }
     
     private StackPane createTopRightControls() {
@@ -2711,7 +2825,10 @@ public class LoginView implements ViewInterface {
             javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
             stage.setMaximized(!stage.isMaximized());
         });
-        btnClose.setOnAction(e -> System.exit(0));
+        btnClose.setOnAction(e -> {
+            com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
+            System.exit(0);
+        });
 
         final double[] dragOffset = new double[2];
         dragRegion.setMouseTransparent(false);
@@ -2851,80 +2968,164 @@ public class LoginView implements ViewInterface {
      * Handle Passkey (WebAuthn) login
      */
     private void handlePasskeyLogin() {
-        try {
-            if (usernameField == null || usernameField.getText().trim().isEmpty()) {
-                showErrorMessage("Please enter your email first.");
+        if (usernameField == null || usernameField.getText().trim().isEmpty()) {
+            showErrorMessage("Please enter your email first to use 2FA/Passkey.");
+            return;
+        }
+
+        String email = usernameField.getText().trim().toLowerCase();
+        java.util.Optional<User> userOpt = authController.findUserByEmail(email);
+        
+        if (userOpt.isEmpty()) {
+            showErrorMessage("User not found.");
+            return;
+        }
+        
+        User user = userOpt.get();
+        if (!user.isTwoFactorEnabled()) {
+            showErrorMessage("2FA is not enabled for this account. Please login using your password.");
+            return;
+        }
+
+        showPasskey2FAModal(user);
+    }
+
+    private void showPasskey2FAModal(User user) {
+        ThemeManager tm = ThemeManager.getInstance();
+
+        StackPane overlay = new StackPane();
+        overlay.setPickOnBounds(true);
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.52);");
+
+        VBox card = new VBox(12);
+        card.setAlignment(Pos.TOP_CENTER);
+        card.setMaxWidth(420);
+        card.setMaxHeight(280);
+        card.setPadding(new Insets(18, 20, 18, 20));
+        card.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(14,14,14,0.95)" : "rgba(245,245,245,0.97)") + ";" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.38) + ";" +
+            "-fx-border-width: 1.2px;" +
+            "-fx-border-radius: 20px;"
+        );
+
+        Text title = new Text("Two-Factor Authentication");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
+        title.setFill(createAccentGradientPaint());
+
+        Text sub = new Text("Enter the 6-digit code from your authenticator app.");
+        sub.setWrappingWidth(380);
+        sub.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        sub.setFill(tm.isDarkMode() ? Color.web("rgba(255,255,255,0.72)") : Color.web("rgba(30,41,59,0.72)"));
+
+        TextField codeField = new TextField();
+        codeField.setPromptText("000000");
+        codeField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
+        codeField.setAlignment(Pos.CENTER);
+        codeField.setPrefHeight(48);
+        codeField.setMaxWidth(320);
+        codeField.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(20,20,20,0.92)" : "rgba(255,255,255,0.92)") + ";" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.44) + ";" +
+            "-fx-border-width: 1.4px;" +
+            "-fx-border-radius: 14px;" +
+            "-fx-background-radius: 14px;" +
+            "-fx-text-fill: " + tm.getTextColor() + ";" +
+            "-fx-prompt-text-fill: " + (tm.isDarkMode() ? "rgba(255,255,255,0.35)" : "rgba(30,41,59,0.35)") + ";"
+        );
+        codeField.textProperty().addListener((obs, oldVal, newVal) -> {
+            String digits = newVal == null ? "" : newVal.replaceAll("\\D", "");
+            if (digits.length() > 6) {
+                digits = digits.substring(0, 6);
+            }
+            if (!digits.equals(newVal)) {
+                codeField.setText(digits);
+            }
+        });
+
+        Label hint = new Label("Authenticator App Code");
+        hint.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
+        hint.setTextFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.95)));
+        hint.setAlignment(Pos.CENTER);
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        cancelBtn.setStyle(secondaryButtonStyle(tm));
+        cancelBtn.setPrefWidth(90);
+
+        Button verifyBtn = new Button("Verify 2FA");
+        verifyBtn.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        verifyBtn.setStyle(primaryButtonStyle(tm));
+        verifyBtn.setPrefWidth(110);
+
+        HBox actions = new HBox(10, cancelBtn, verifyBtn);
+        actions.setAlignment(Pos.CENTER);
+
+        Runnable close = () -> {
+            root.getChildren().remove(overlay);
+            loginContainer.toFront();
+        };
+
+        cancelBtn.setOnAction(e -> close.run());
+        overlay.setOnMouseClicked(e -> {
+            if (e.getTarget() == overlay) {
+                close.run();
+            }
+        });
+
+        Runnable verifyAction = () -> {
+            String code = codeField.getText() == null ? "" : codeField.getText().trim();
+            if (code.length() != 6) {
+                hint.setText("Please enter a valid 6-digit code");
+                hint.setTextFill(Color.web("#f87171"));
                 return;
             }
 
-            String email = usernameField.getText().trim().toLowerCase();
-            
-            // Disable button during authentication
-            Button passkeyBtn = null;
-            for (javafx.scene.Node node : ((HBox) usernameField.getParent().getParent().getParent().getParent().lookup(".biometric-row")).getChildren()) {
-                if (node instanceof Button && ((Button)node).getText().contains("Passkey")) {
-                    passkeyBtn = (Button) node;
-                    break;
-                }
-            }
-            
-            final Button finalPasskeyBtn = passkeyBtn;
-            
-            if (finalPasskeyBtn != null) {
-                finalPasskeyBtn.setDisable(true);
-                 finalPasskeyBtn.setText("\ud83d\udd10 Authenticating...");
+            AuthController.AuthResult verifyResult = authController.verifyTOTPCode(user, code);
+            if (!verifyResult.isSuccess()) {
+                hint.setText(verifyResult.getMessage());
+                hint.setTextFill(Color.web("#f87171"));
+                return;
             }
 
-            // Simulate WebAuthn authentication flow
-            Thread.ofVirtual().name("LoginView-Passkey-Auth").start(() -> {
-                try {
-                    // In production, would call:
-                    // 1. POST /webauthn/login/options with email
-                    // 2. Get challenge from server
-                    // 3. Trigger platform authenticator (Windows Hello, etc.)
-                    // 4. POST /webauthn/login/verify with assertion
+            SessionManager.getInstance().setCurrentUser(user);
+            profileController.profileByUserId(user.getIdUser()).ifPresent(profile ->
+                SessionManager.getInstance().setCurrentProfile(profile)
+            );
 
-                    Thread.sleep(1500);  // Simulate device verification
+            close.run();
+            loginSuccessFired = true;
+            if (onLoginSuccess != null) {
+                onLoginSuccess.run();
+            } else {
+                navigateToLandingPage();
+            }
+        };
 
-                    // Create mock user session (in production: from actual authentication)
-                    User authenticatedUser = new User();
-                    authenticatedUser.setEmailUser(email);
-                    authenticatedUser.setFirstName("User");
-                    authenticatedUser.setLastName("Authenticated");
+        verifyBtn.setOnAction(e -> verifyAction.run());
+        codeField.setOnAction(e -> verifyAction.run());
 
-                    javafx.application.Platform.runLater(() -> {
-                        // Set session
-                        SessionManager.getInstance().setCurrentUser(authenticatedUser);
-                        
-                        // Show success message
-                        showInfoMessage("Passkey authentication successful!");
-                        
-                        // Navigate to dashboard
-                        if (onLoginSuccess != null) {
-                            onLoginSuccess.run();
-                        }
-                        
-                        // Re-enable button
-                        if (finalPasskeyBtn != null) {
-                            finalPasskeyBtn.setDisable(false);
-                               finalPasskeyBtn.setText("\ud83d\udd10 Passkey");
-                        }
-                    });
-                    
-                } catch (Exception ex) {
-                    javafx.application.Platform.runLater(() -> {
-                        showErrorMessage("Passkey authentication failed: " + ex.getMessage());
-                        if (finalPasskeyBtn != null) {
-                            finalPasskeyBtn.setDisable(false);
-                                finalPasskeyBtn.setText("\ud83d\udd10 Passkey");
-                        }
-                    });
-                }
-            });
-            
-        } catch (Exception ex) {
-            showErrorMessage("Passkey login error: " + ex.getMessage());
-        }
+        card.getChildren().addAll(title, sub, codeField, hint, actions);
+        overlay.getChildren().add(card);
+        StackPane.setAlignment(card, Pos.CENTER);
+
+        card.setOpacity(0);
+        card.setScaleX(0.96);
+        card.setScaleY(0.96);
+        javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(160), card);
+        fadeIn.setFromValue(0);
+        fadeIn.setToValue(1);
+        javafx.animation.ScaleTransition scaleIn = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(180), card);
+        scaleIn.setFromX(0.96);
+        scaleIn.setFromY(0.96);
+        scaleIn.setToX(1.0);
+        scaleIn.setToY(1.0);
+        new javafx.animation.ParallelTransition(fadeIn, scaleIn).play();
+
+        root.getChildren().add(overlay);
+        overlay.toFront();
+        javafx.application.Platform.runLater(codeField::requestFocus);
     }
 
     /**

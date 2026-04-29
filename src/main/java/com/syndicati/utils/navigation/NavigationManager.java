@@ -127,9 +127,18 @@ public class NavigationManager {
     }
     
     public Pane getPage(String pageName) {
-        switch (pageName.toLowerCase()) {
+        String normalized = pageName == null ? "home" : pageName.toLowerCase().trim();
+        
+        // Handle service aliases
+        if (normalized.equals("residence")) normalized = "services/residence";
+        if (normalized.equals("forum")) normalized = "services/forum";
+        if (normalized.equals("syndicat")) normalized = "services/syndicat";
+        if (normalized.equals("evenement")) normalized = "services/evenement";
+
+        switch (normalized) {
             case "home":
-                return landingPageView.getRoot();
+                // Return a fresh HomeContent root instead of the LandingPageView root (prevents cycle)
+                return new com.syndicati.components.home.HomeContent().getRoot();
             case "services":
                 return servicesView().getRoot();
             case "about":
@@ -154,7 +163,7 @@ public class NavigationManager {
             case "services/evenement":
                 return evenementView().getRoot();
             default:
-                return landingPageView.getRoot();
+                return new com.syndicati.components.home.HomeContent().getRoot();
         }
     }
     
@@ -177,7 +186,7 @@ public class NavigationManager {
         }
 
         if (landingPageView != null) {
-            if ("home".equals(pageName)) {
+            if ("home".equals(normalizedPage)) {
                 landingPageView.navigateToHome();
             } else {
                 landingPageView.navigateToPage(pageName);
