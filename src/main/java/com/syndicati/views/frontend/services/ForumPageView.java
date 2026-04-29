@@ -13,6 +13,7 @@ import com.syndicati.models.user.User;
 import com.syndicati.services.forum.OpenAIModerationService;
 import com.syndicati.services.forum.SentimentAnalysisService;
 import com.syndicati.services.forum.SentimentAnalysisService.SentimentResult;
+import com.syndicati.services.forum.DiscordWebhookService;
 import com.syndicati.services.forum.ReactionService.ReactionActionResult;
 import com.syndicati.services.forum.ReactionService.ReactionPayload;
 import com.syndicati.services.forum.ReactionService.ReactionStatus;
@@ -96,6 +97,7 @@ public class ForumPageView implements ViewInterface {
     private final ProfileController profiles = new ProfileController();
     private final OpenAIModerationService moderationService = new OpenAIModerationService();
     private final SentimentAnalysisService sentimentService = new SentimentAnalysisService();
+    private final DiscordWebhookService discordService = new DiscordWebhookService();
 
     private final VBox listBox = new VBox(10);
     private final StackPane faceStack = new StackPane();
@@ -1307,6 +1309,10 @@ public class ForumPageView implements ViewInterface {
             forceAnnouncementCreate = false;
             showFace(readFace);
             showNotification("Publication added successfully!", true);
+
+            if ("Jeux Video".equals(category)) {
+                discordService.sendAnnouncement(title, description, author(user), image, false);
+            }
         } else {
             showInfo("Error", "Unable to create publication.");
         }
@@ -1350,6 +1356,10 @@ public class ForumPageView implements ViewInterface {
             publications.publicationById(current.getIdPublication()).ifPresent(this::selectPublication);
             showFace(readFace);
             showNotification("Publication updated successfully!", true);
+
+            if ("Jeux Video".equals(category)) {
+                discordService.sendAnnouncement(title, description, author(session.getCurrentUser()), image, true);
+            }
         } else {
             showInfo("Error", "Unable to update publication.");
         }
