@@ -679,6 +679,7 @@ public class DashboardView implements ViewInterface {
         pager.setPadding(new Insets(8, 0, 0, 0));
 
         for (int c = 0; c < cols.length; c++) {
+            if (cols[c].startsWith("[H]")) continue;
             Text col = t(cols[c].toUpperCase(), boldFont(), FontWeight.BOLD, 12);
             col.setFill(textMutedColor());
             HBox cell = new HBox(col);
@@ -728,8 +729,16 @@ public class DashboardView implements ViewInterface {
             for (int r = fromIndex; r < toIndex; r++) {
                 String bg = (((r - fromIndex) & 1) == 0) ? "transparent" : "rgba(255,255,255,0.01)";
                 String[] rowData = workingRows.get(r);
-                for (int c = 0; c < rowData.length; c++) {
-                    Text tx = t(rowData[c], lightFont(), FontWeight.NORMAL, 14);
+                // Only show the primary columns in the main table to avoid clutter
+                for (int c = 0; c < cols.length; c++) {
+                    if (cols[c].startsWith("[H]")) continue;
+                    String displayValue = rowData[c];
+                    // If it's an image column, show a clean icon in the table instead of the long filename
+                    if (isImageFieldLabel(cols[c]) && displayValue != null && !displayValue.equals("-")) {
+                        displayValue = "🖼️ View Image";
+                    }
+                    
+                    Text tx = t(displayValue, lightFont(), FontWeight.NORMAL, 14);
                     tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
                     HBox cb = new HBox(tx);
                     cb.setPadding(new Insets(10,12,10,12));
@@ -1041,13 +1050,19 @@ public class DashboardView implements ViewInterface {
             "Create New Record"
         ));
         if ("view".equals(mode)) {
-            fields.getChildren().add(metaStrip(rowData));
+            // Meta strip (ID, Ref, Audit) removed for a cleaner UI
+            // fields.getChildren().add(metaStrip(rowData));
         }
 
-        for (int i = 0; i < cols.length; i++) {
+        // Show all available data in the detail view, even if hidden from the table
+        int dataCount = (rowData != null) ? rowData.length : cols.length;
+        for (int i = 0; i < dataCount; i++) {
+            String label = i < cols.length ? cols[i] : "Additional Data " + (i - cols.length + 1);
+            if (label.startsWith("[H]")) label = label.substring(3);
+            
             String val = (rowData != null && i < rowData.length) ? rowData[i] : "";
-            boolean editable = "edit".equals(mode) || "add".equals(mode);
-            fields.getChildren().add(fieldRow(entityLabel, mode, cols[i], val, editable));
+            boolean editable = ("edit".equals(mode) || "add".equals(mode)) && i < cols.length;
+            fields.getChildren().add(fieldRow(entityLabel, mode, label, val, editable));
         }
 
         if ("edit".equals(mode) || "add".equals(mode)) {
@@ -1331,9 +1346,56 @@ public class DashboardView implements ViewInterface {
             installLiveValidation(input, liveHint, entityLabel, label);
             row.getChildren().addAll(lbl, input, liveHint);
         } else {
-            Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
-            val.setFill(textSecondaryColor());
-            VBox box = new VBox(val);
+            if (isImageFieldLabel(label) && value != null && !value.equals("-")) {
+                VBox imageDisplayBox = new VBox(8);
+                imageDisplayBox.setPadding(new Insets(10, 12, 10, 12));
+                imageDisplayBox.setStyle("-fx-background-color:rgba(255,255,255,0.03);-fx-border-color:rgba(255,255,255,0.08);-fx-border-width:1;-fx-background-radius:10px;-fx-border-radius:10px;");
+                
+                String fullPath = value.trim();
+                if (!fullPath.startsWith("uploads/") && !fullPath.startsWith("uploads\\")) {
+                    fullPath = "uploads/" + fullPath;
+                }
+                
+                Image img = ImageLoaderUtil.loadImage(fullPath);
+                if (img != null) {
+                    javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
+                    iv.setFitWidth(300);
+                    iv.setPreserveRatio(true);
+                    iv.setSmooth(true);
+                    
+                    // Add a nice border/shadow to the image
+                    StackPane imgContainer = new StackPane(iv);
+                    imgContainer.setStyle("-fx-border-color:rgba(255,255,255,0.1);-fx-border-width:1;-fx-border-radius:8px;-fx-background-radius:8px;");
+                    
+                    Text pathText = t(value, lightFont(), FontWeight.NORMAL, 10);
+                    pathText.setFill(textMutedColor());
+                    
+                    imageDisplayBox.getChildren().addAll(imgContainer, pathText);
+                } else {
+                    Text errorText = t("⚠️ Image not found: " + value, lightFont(), FontWeight.NORMAL, 13);
+                    errorText.setFill(Color.web("#ff3b30"));
+                    imageDisplayBox.getChildren().add(errorText);
+                }
+                row.getChildren().addAll(lbl, imageDisplayBox);
+                return row;
+            }
+
+            VBox contentBox = new VBox(4);
+            if (value != null && value.contains("\n")) {
+                String[] lines = value.split("\n");
+                for (String line : lines) {
+                    if (line.trim().isEmpty()) continue;
+                    Text lineText = t("• " + line.trim(), lightFont(), FontWeight.NORMAL, 14);
+                    lineText.setFill(textSecondaryColor());
+                    contentBox.getChildren().add(lineText);
+                }
+            } else {
+                Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
+                val.setFill(textSecondaryColor());
+                contentBox.getChildren().add(val);
+            }
+
+            VBox box = new VBox(contentBox);
             box.setPadding(new Insets(8, 10, 8, 10));
             box.setStyle(
                 "-fx-background-color:rgba(255,255,255,0.03);" +

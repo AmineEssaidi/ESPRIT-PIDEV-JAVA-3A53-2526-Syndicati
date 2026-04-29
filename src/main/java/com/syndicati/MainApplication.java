@@ -98,6 +98,12 @@ public class MainApplication extends Application {
         
         // Configure the stage. Use solid black scene fill to avoid desktop bleed-through.
         primaryStage.setTitle("Syndicati - Login");
+
+        // Ensure the application exits completely when the window is closed
+        primaryStage.setOnCloseRequest(event -> {
+            javafx.application.Platform.exit();
+            System.exit(0);
+        });
         scene.setFill(Color.BLACK);
         primaryStage.initStyle(StageStyle.TRANSPARENT);
         primaryStage.setScene(scene);

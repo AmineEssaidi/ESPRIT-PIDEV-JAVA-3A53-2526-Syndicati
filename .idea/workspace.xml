@@ -7,7 +7,8 @@
     <list default="true" id="c6b87a8d-8efa-4a60-acc9-8c473dca5fba" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/MainApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/MainApplication.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/services/forum/SentimentAnalysisService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/services/forum/SentimentAnalysisService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/backend/dashboard/DashboardForumSection.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/backend/dashboard/DashboardForumSection.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/syndicati/views/backend/dashboard/DashboardView.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/syndicati/views/backend/dashboard/DashboardView.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

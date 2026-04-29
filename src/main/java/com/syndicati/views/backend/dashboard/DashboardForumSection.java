@@ -13,6 +13,10 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import com.syndicati.services.forum.SentimentAnalysisService;
+import java.util.concurrent.CompletableFuture;
+import java.util.HashMap;
+import java.util.Map;
 
 @SuppressWarnings("SpellCheckingInspection")
 final class DashboardForumSection {
@@ -34,21 +38,48 @@ final class DashboardForumSection {
     private static VBox publicationsPane(DashboardView view) {
         VBox wrap = new VBox(14);
         List<Publication> publications = view.dashboardAdminService().publications();
+        List<Reaction> allReactions = view.dashboardAdminService().reactions();
+
+        // Index reactions by publication ID for fast lookup O(1)
+        java.util.Map<Integer, List<Reaction>> pubReactions = allReactions.stream()
+            .filter(r -> r.getPublication() != null)
+            .collect(java.util.stream.Collectors.groupingBy(r -> r.getPublication().getIdPublication()));
 
         List<String[]> baseRows = new ArrayList<>();
         for (Publication pub : publications) {
             String title = view.safe(pub.getTitrePub());
             String category = view.safe(pub.getCategoriePub());
             String description = view.safe(pub.getDescriptionPub());
+            if (description.length() > 50) description = description.substring(0, 47) + "...";
+            
+            List<Reaction> reactions = pubReactions.getOrDefault(pub.getIdPublication(), java.util.Collections.emptyList());
+            
+            long likes = reactions.stream().filter(r -> "Like".equalsIgnoreCase(r.getKind())).count();
+            long dislikes = reactions.stream().filter(r -> "Dislike".equalsIgnoreCase(r.getKind())).count();
+            long bookmarks = reactions.stream().filter(r -> "Bookmark".equalsIgnoreCase(r.getKind())).count();
+            long reports = reactions.stream().filter(r -> "Report".equalsIgnoreCase(r.getKind())).count();
+            
+            java.util.Map<String, Long> emojiCounts = reactions.stream()
+                .filter(r -> "Emoji".equalsIgnoreCase(r.getKind()) && r.getEmoji() != null)
+                .collect(java.util.stream.Collectors.groupingBy(Reaction::getEmoji, java.util.stream.Collectors.counting()));
+            
+            StringBuilder emojiSummary = new StringBuilder();
+            emojiCounts.forEach((emoji, count) -> emojiSummary.append(emoji).append(": ").append(count).append("  "));
+            if (emojiSummary.length() == 0) emojiSummary.append("-");
+
+            String reportReasons = reactions.stream()
+                .filter(r -> "Report".equalsIgnoreCase(r.getKind()) && r.getReportReason() != null)
+                .map(Reaction::getReportReason)
+                .collect(java.util.stream.Collectors.joining("\n"));
+            if (reportReasons.isEmpty()) reportReasons = "-";
+
             String image = view.safe(pub.getImagePub());
             String date = pub.getDateCreationPub() != null ? pub.getDateCreationPub().toLocalDate().toString() : "";
 
             baseRows.add(new String[]{
-                title,
-                category,
-                description,
-                image,
-                date
+                title, category, description, image, date,
+                String.valueOf(likes), String.valueOf(dislikes), emojiSummary.toString(),
+                String.valueOf(reports), reportReasons, String.valueOf(bookmarks)
             });
         }
 
@@ -72,7 +103,7 @@ final class DashboardForumSection {
             button.setOnAction(e -> {
                 queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
-                renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date"}, "No publications found");
+                renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons", "[H]Bookmarks"}, "No publications found");
             });
             filterRow.getChildren().add(button);
         }
@@ -80,12 +111,12 @@ final class DashboardForumSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date"}, "No publications found");
+            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons", "[H]Bookmarks"}, "No publications found");
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date"}, "No publications found");
+            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons", "[H]Bookmarks"}, "No publications found");
         });
 
         filterRow.getChildren().forEach(node -> {
@@ -94,7 +125,7 @@ final class DashboardForumSection {
             }
         });
 
-        renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date"}, "No publications found");
+        renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons", "[H]Bookmarks"}, "No publications found");
 
         wrap.getChildren().addAll(headerControls, tableHost);
         return wrap;
@@ -103,21 +134,47 @@ final class DashboardForumSection {
     private static VBox commentsPane(DashboardView view) {
         VBox wrap = new VBox(14);
         List<Commentaire> commentaires = view.dashboardAdminService().commentaires();
+        List<Reaction> allReactions = view.dashboardAdminService().reactions();
+
+        // Index reactions by comment ID for fast lookup O(1)
+        java.util.Map<Integer, List<Reaction>> commReactions = allReactions.stream()
+            .filter(r -> r.getCommentaire() != null)
+            .collect(java.util.stream.Collectors.groupingBy(r -> r.getCommentaire().getIdCommentaire()));
 
         List<String[]> baseRows = new ArrayList<>();
         for (Commentaire comment : commentaires) {
             String publication = comment.getPublication() != null ? view.safe(comment.getPublication().getTitrePub()) : "Unknown";
             String author = comment.getUser() != null ? view.safe(comment.getUser().getFirstName()) + " " + view.safe(comment.getUser().getLastName()) : "Anonymous";
             String description = view.safe(comment.getDescriptionCommentaire());
+            if (description.length() > 50) description = description.substring(0, 47) + "...";
+            
+            List<Reaction> reactions = commReactions.getOrDefault(comment.getIdCommentaire(), java.util.Collections.emptyList());
+            
+            long likes = reactions.stream().filter(r -> "Like".equalsIgnoreCase(r.getKind())).count();
+            long dislikes = reactions.stream().filter(r -> "Dislike".equalsIgnoreCase(r.getKind())).count();
+            long reports = reactions.stream().filter(r -> "Report".equalsIgnoreCase(r.getKind())).count();
+            
+            java.util.Map<String, Long> emojiCounts = reactions.stream()
+                .filter(r -> "Emoji".equalsIgnoreCase(r.getKind()) && r.getEmoji() != null)
+                .collect(java.util.stream.Collectors.groupingBy(Reaction::getEmoji, java.util.stream.Collectors.counting()));
+            
+            StringBuilder emojiSummary = new StringBuilder();
+            emojiCounts.forEach((emoji, count) -> emojiSummary.append(emoji).append(": ").append(count).append("  "));
+            if (emojiSummary.length() == 0) emojiSummary.append("-");
+
+            String reportReasons = reactions.stream()
+                .filter(r -> "Report".equalsIgnoreCase(r.getKind()) && r.getReportReason() != null)
+                .map(Reaction::getReportReason)
+                .collect(java.util.stream.Collectors.joining("\n"));
+            if (reportReasons.isEmpty()) reportReasons = "-";
+
             String image = view.safe(comment.getImageCommentaire());
             String date = comment.getCreatedAt() != null ? comment.getCreatedAt().toLocalDate().toString() : "";
 
             baseRows.add(new String[]{
-                publication,
-                author.trim(),
-                description,
-                image,
-                date
+                publication, author.trim(), description, image, date,
+                String.valueOf(likes), String.valueOf(dislikes), emojiSummary.toString(),
+                String.valueOf(reports), reportReasons
             });
         }
 
@@ -141,7 +198,7 @@ final class DashboardForumSection {
             button.setOnAction(e -> {
                 queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
-                renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date"}, "No comments found");
+                renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons"}, "No comments found");
             });
             filterRow.getChildren().add(button);
         }
@@ -149,12 +206,12 @@ final class DashboardForumSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date"}, "No comments found");
+            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons"}, "No comments found");
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date"}, "No comments found");
+            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons"}, "No comments found");
         });
 
         filterRow.getChildren().forEach(node -> {
@@ -163,7 +220,7 @@ final class DashboardForumSection {
             }
         });
 
-        renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date"}, "No comments found");
+        renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date", "[H]Likes", "[H]Dislikes", "[H]Emojis", "[H]Reports", "[H]Reasons"}, "No comments found");
 
         wrap.getChildren().addAll(headerControls, tableHost);
         return wrap;
@@ -190,13 +247,14 @@ final class DashboardForumSection {
             }
             
             String kind = view.safe(reaction.getKind());
+            String reason = "Report".equalsIgnoreCase(kind) ? view.safe(reaction.getReportReason()) : "-";
             String date = reaction.getUpdatedAt() != null ? reaction.getUpdatedAt().format(dateFormat) : "N/A";
 
             baseRows.add(new String[]{
                 user,
                 target,
                 kind,
-                "1",
+                reason,
                 date
             });
         }
@@ -222,7 +280,7 @@ final class DashboardForumSection {
             button.setOnAction(e -> {
                 queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
-                renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Count", "Updated"}, "No reactions found");
+                renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Reason", "Updated"}, "No reactions found");
             });
             filterRow.getChildren().add(button);
         }
@@ -230,12 +288,12 @@ final class DashboardForumSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Count", "Updated"}, "No reactions found");
+            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Reason", "Updated"}, "No reactions found");
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Count", "Updated"}, "No reactions found");
+            renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Reason", "Updated"}, "No reactions found");
         });
 
         filterRow.getChildren().forEach(node -> {
@@ -244,7 +302,7 @@ final class DashboardForumSection {
             }
         });
 
-        renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Count", "Updated"}, "No reactions found");
+        renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Reason", "Updated"}, "No reactions found");
 
         wrap.getChildren().addAll(headerControls, tableHost);
         return wrap;
