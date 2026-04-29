@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -13,12 +14,35 @@ import java.util.concurrent.CompletableFuture;
  */
 public class SentimentAnalysisService {
     private static final String API_URL = "http://127.0.0.1:5000/api/full-analysis";
+    private static Process pythonProcess;
     private final HttpClient httpClient;
 
     public SentimentAnalysisService() {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
+    }
+
+    public static void startMicroservice() {
+        new Thread(() -> {
+            try {
+                System.out.println("🚀 Starting Sentiment AI Microservice...");
+                ProcessBuilder pb = new ProcessBuilder("python", "sentiment_analysis_api/app.py");
+                pb.directory(new File(System.getProperty("user.dir")));
+                pb.inheritIO();
+                pythonProcess = pb.start();
+                
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    if (pythonProcess != null && pythonProcess.isAlive()) {
+                        pythonProcess.destroy();
+                        System.out.println("🛑 Sentiment AI Microservice stopped.");
+                    }
+                }));
+            } catch (Exception e) {
+                System.err.println("⚠️ Could not start Sentiment AI Microservice automatically: " + e.getMessage());
+                System.err.println("Make sure 'python' is in your PATH and dependencies are installed.");
+            }
+        }).start();
     }
 
     public CompletableFuture<SentimentResult> analyzeContent(String text) {

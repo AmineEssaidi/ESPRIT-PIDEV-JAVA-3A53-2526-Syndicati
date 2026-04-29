@@ -46,6 +46,9 @@ public class MainApplication extends Application {
         
         // Load custom fonts once (will be cached by JavaFX)
         loadCustomFonts();
+
+        // Start the Sentiment AI Microservice in the background
+        com.syndicati.services.forum.SentimentAnalysisService.startMicroservice();
         
         // Create the login view first
         loginView = new LoginView();
