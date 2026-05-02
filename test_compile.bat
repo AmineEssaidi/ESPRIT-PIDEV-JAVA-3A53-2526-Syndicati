@@ -5,4 +5,4 @@ set PATH=c:\Users\amine\OneDrive\Desktop\ESPRIT-PIDEV-JAVA-3A53-2526-Syndicati\t
 echo JAVA_HOME=%JAVA_HOME%
 echo PATH=%PATH%
 java -version
-mvn -q -DskipTests compile
+mvn -q -DskipTests clean compile -U

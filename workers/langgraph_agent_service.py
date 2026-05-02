@@ -35,6 +35,7 @@ class AgentState(TypedDict):
     actions: List[dict]
     reply: Optional[str]
     mode: str
+    success: bool
 
 # --- TOOLS ---
 class Navigate(BaseModel):
@@ -113,6 +114,14 @@ def create_graph():
 
         actions = []
         reply_text = response.content
+        if isinstance(reply_text, list):
+            texts = []
+            for block in reply_text:
+                if isinstance(block, dict) and block.get('type') == 'text':
+                    texts.append(block.get('text', ''))
+                elif isinstance(block, str):
+                    texts.append(block)
+            reply_text = "\n".join(texts)
         if mode == "takeover" and response.tool_calls:
             for tc in response.tool_calls:
                 t_name = tc['name'].upper()

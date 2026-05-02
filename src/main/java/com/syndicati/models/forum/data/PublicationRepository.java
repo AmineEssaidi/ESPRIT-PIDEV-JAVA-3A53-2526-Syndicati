@@ -121,6 +121,10 @@ public class PublicationRepository {
     }
 
     public List<Publication> findByCategory(String category) {
+        String cacheKey = "forum_cat_" + (category == null ? "all" : category);
+        List<Publication> cached = databaseService.getCache(cacheKey);
+        if (cached != null) return cached;
+
         List<Publication> publications = new ArrayList<>();
         String sql;
 
@@ -135,9 +139,7 @@ public class PublicationRepository {
         }
 
         try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) {
-                return publications;
-            }
+            if (conn == null) return publications;
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, "General".equals(category) ? "Announcement" : category);
@@ -147,6 +149,7 @@ public class PublicationRepository {
                     }
                 }
             }
+            databaseService.putCache(cacheKey, publications);
         } catch (SQLException e) {
             System.out.println("PublicationRepository.findByCategory error: " + e.getMessage());
         }

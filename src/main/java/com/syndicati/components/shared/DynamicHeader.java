@@ -734,7 +734,7 @@ public class DynamicHeader {
             "-fx-border-color: " + dropdownBorder + ";" +
             "-fx-border-radius: 30px;" +
             "-fx-border-width: 1;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 28, 0.28, 0, 8);";
+            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.55), 28, 0.2, 0, 8);";
     }
 
     private void refreshProfileTriggerAvatar() {
@@ -777,23 +777,8 @@ public class DynamicHeader {
     }
 
     private Profile currentProfile() {
-        SessionManager session = SessionManager.getInstance();
-        Profile profile = session.getCurrentProfile();
-        if (profile != null) {
-            return profile;
-        }
-
-        User user = session.getCurrentUser();
-        if (user == null || user.getIdUser() == null) {
-            return null;
-        }
-
-        ProfileService profileService = new ProfileService();
-        profile = profileService.findOneByUserId(user.getIdUser()).orElse(null);
-        if (profile != null) {
-            session.setCurrentProfile(profile);
-        }
-        return profile;
+        return SessionManager.getInstance().getCurrentProfile();
+        // Removed blocking ProfileService lookup from UI thread
     }
 
     private boolean applyAvatarFill(Circle avatarCircle) {

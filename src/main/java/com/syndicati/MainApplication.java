@@ -19,6 +19,10 @@ import com.syndicati.services.analytics.AnomalyScoringScheduler;
 import com.syndicati.services.observability.LangfuseRuntimeService;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
+import com.syndicati.services.DiscordRPCService;
+import com.syndicati.services.observability.LogAIWorkerService;
+import com.syndicati.services.user.messaging.socket.MessagingSocketServer;
+import com.syndicati.services.InsightFaceService;
 
 /**
  * Main JavaFX Application - Syndicati desktop client
@@ -70,11 +74,20 @@ public class MainApplication extends Application {
         installWindowChromeListener();
         applyRoundedShape(scene);
         
-        // Start database connection monitoring
-        com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
-        connectionManager.startMonitoring();
-        langfuseRuntimeService.start();
-        anomalyScoringScheduler.start();
+        // Start background services in parallel to keep UI responsive
+        Thread.startVirtualThread(() -> {
+            com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
+            connectionManager.startMonitoring();
+            langfuseRuntimeService.start();
+            anomalyScoringScheduler.start();
+            LogAIWorkerService.getInstance(); // Start Python worker on port 8001
+            InsightFaceService.getInstance().initialize(); // Move into background thread
+            DiscordRPCService.getInstance().initialize();
+            DiscordRPCService.getInstance().updatePresence("Authentication", "Signing into Syndicati");
+            
+            // Start messaging socket server
+            MessagingSocketServer.getInstance().start();
+        });
 
         // Log application startup event - first record anchors the Langfuse session.
         activityLogController.logPageView("app_startup", "Application Startup", java.util.Map.of(
@@ -89,12 +102,14 @@ public class MainApplication extends Application {
                 .name("Syndicati-ShutdownHook")
                 .unstarted(() -> {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
+                    LogAIWorkerService.getInstance().stopWorker();
                     com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
-                    connectionManager.shutdown();
-                    langfuseRuntimeService.stop();
-                    anomalyScoringScheduler.stop();
-                    System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
+            com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
+            langfuseRuntimeService.stop();
+            anomalyScoringScheduler.stop();
+            DiscordRPCService.getInstance().shutdown();
+            System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
                 })
         );
         
@@ -128,12 +143,14 @@ public class MainApplication extends Application {
             activityLogController.logPageView("app_shutdown", "Application Shutdown", java.util.Map.of(
                 "source", "close_request"
             ));
+            LogAIWorkerService.getInstance().stopWorker();
             com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             // Then shutdown database monitoring
-            connectionManager.shutdown();
+            com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
             langfuseRuntimeService.stop();
             anomalyScoringScheduler.stop();
+            DiscordRPCService.getInstance().shutdown();
             System.out.println("[SUCCESS] All services stopped");
             
             // Force exit JVM after a short delay to ensure cleanup
@@ -147,6 +164,10 @@ public class MainApplication extends Application {
                 System.exit(0);
             });
         });
+        
+        // Final UI performance hints
+        primaryStage.getScene().getRoot().setCache(true);
+        primaryStage.getScene().getRoot().setCacheHint(javafx.scene.CacheHint.SPEED);
         
         System.out.println("[SUCCESS] Syndicati started!");
         System.out.println("[INFO] Login page loaded - use admin/admin to login");
@@ -199,6 +220,7 @@ public class MainApplication extends Application {
         activityLogController.logPageView("landing_page", "Landing Page", java.util.Map.of(
             "source", "login_success"
         ));
+        DiscordRPCService.getInstance().updatePresence("Landing Page", "Main Hub");
         showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
         System.out.println("[OK] Successfully navigated to landing page.");
     }
@@ -268,6 +290,7 @@ public class MainApplication extends Application {
         activityLogController.logPageView("admin_destination_choice", "Admin Destination Choice", java.util.Map.of(
             "source", "login_success"
         ));
+        DiscordRPCService.getInstance().updatePresence("Admin Area", "Choosing Destination");
     }
 
     private void showLandingPage(
@@ -343,9 +366,12 @@ public class MainApplication extends Application {
                 primaryStage.sizeToScene();
                 if (goToDashboard) {
                     landingPageView.enterDashboardMode();
+                    DiscordRPCService.getInstance().updatePresence("Admin Dashboard", "Managing Syndicati");
                 } else {
                     landingPageView.navigateToHome();
+                    DiscordRPCService.getInstance().updatePresence("Community Portal", "Browsing Home");
                 }
+                NavigationManager.getInstance().warmup();
             });
         });
     }
@@ -519,6 +545,7 @@ public class MainApplication extends Application {
         activityLogController.logPageView("login_page", "Login Page", java.util.Map.of(
             "source", "logout"
         ));
+        DiscordRPCService.getInstance().updatePresence("Authentication", "Signing Out");
         
         // Avoid forcing additional size/layout passes here; media-backed backgrounds
         // are initialized asynchronously and can be disrupted by immediate re-scaling.

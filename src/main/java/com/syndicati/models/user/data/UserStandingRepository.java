@@ -24,25 +24,28 @@ public class UserStandingRepository {
     }
 
     public Optional<UserStanding> findByUserId(int userId) {
+        String cacheKey = "standing_user_" + userId;
+        UserStanding cached = databaseService.getCache(cacheKey);
+        if (cached != null) return Optional.of(cached);
+
         String sql = "SELECT * FROM user_standing WHERE user_id = ? LIMIT 1";
 
         try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) {
-                return Optional.empty();
-            }
+            if (conn == null) return Optional.empty();
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setInt(1, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        return Optional.of(mapRow(rs));
+                        UserStanding s = mapRow(rs);
+                        databaseService.putCache(cacheKey, s);
+                        return Optional.of(s);
                     }
                 }
             }
         } catch (SQLException e) {
             System.out.println("UserStandingRepository.findByUserId error: " + e.getMessage());
         }
-
         return Optional.empty();
     }
 

@@ -100,10 +100,15 @@ public class AgentService {
                 System.out.println("[AgentService] Chat Raw Response: " + response);
                 
                 JsonObject resJson = JsonParser.parseString(response).getAsJsonObject();
-                if (resJson.has("success") && resJson.get("success").getAsBoolean()) {
-                    JsonElement replyEl = resJson.get("reply");
-                    if (replyEl == null || replyEl.isJsonNull()) return "No response from AI.";
-                    return replyEl.getAsString();
+                
+                // If reply is present, we consider it a success even if the 'success' field is missing
+                if (resJson.has("reply") && !resJson.get("reply").isJsonNull()) {
+                    String reply = resJson.get("reply").getAsString();
+                    // Strip markdown bold markers (**) for clean display in UI
+                    return reply.replaceAll("\\*\\*", "");
+                } else if (resJson.has("success") && resJson.get("success").getAsBoolean()) {
+                    // Fallback to legacy success check
+                    return "Done.";
                 } else {
                     return "Error: " + (resJson.has("error") ? resJson.get("error").getAsString() : "Unknown");
                 }
@@ -143,7 +148,11 @@ public class AgentService {
                     }
                 }
 
-                return resJson.has("reply") ? resJson.get("reply").getAsString() : "Executing your request...";
+                if (resJson.has("reply") && !resJson.get("reply").isJsonNull()) {
+                    String reply = resJson.get("reply").getAsString();
+                    return reply.replaceAll("\\*\\*", "");
+                }
+                return "Executing your request...";
             } catch (Exception e) {
                 return "Takeover Error: " + e.getMessage();
             }

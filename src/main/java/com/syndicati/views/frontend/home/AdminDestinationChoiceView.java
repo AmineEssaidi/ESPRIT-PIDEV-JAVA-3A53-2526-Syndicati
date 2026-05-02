@@ -96,7 +96,7 @@ public class AdminDestinationChoiceView implements ViewInterface {
             "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
             "-fx-border-width: 1.2;" +
             "-fx-border-radius: 26;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.38), 36, 0.25, 0, 16);"
+            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.38), 36, 0.2, 0, 16);"
         );
 
         String name = currentDisplayName();

@@ -12,7 +12,7 @@ import java.util.Properties;
 public class LogAIConfig {
 
     private static final boolean DEFAULT_ENABLED = false;
-    private static final String DEFAULT_WORKER_URL = "http://localhost:8001";
+    private static final String DEFAULT_WORKER_URL = "http://127.0.0.1:8001";
     private static final int DEFAULT_BATCH_SIZE = 100;
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final int DEFAULT_INTERVAL_SECONDS = 300;

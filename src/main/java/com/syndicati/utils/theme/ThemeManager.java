@@ -108,11 +108,13 @@ public class ThemeManager {
     }
     
     public void setDarkMode(boolean darkMode) {
-        this.isDarkMode = darkMode;
-        this.isDarkModeProperty.set(darkMode);
-        AppPreferences.set(AppPreferences.KEY_THEME, darkMode ? "dark" : "light");
-        applyTheme();
-        notifyAccentListeners();
+        javafx.application.Platform.runLater(() -> {
+            this.isDarkMode = darkMode;
+            this.isDarkModeProperty.set(darkMode);
+            AppPreferences.set(AppPreferences.KEY_THEME, darkMode ? "dark" : "light");
+            applyTheme();
+            notifyAccentListeners();
+        });
     }
     
     public void toggleTheme() {
@@ -125,11 +127,13 @@ public class ThemeManager {
     }
 
     public void setDarkModePreference(boolean dark) {
-        this.isDarkMode = dark;
-        this.isDarkModeProperty.set(isDarkMode);
-        AppPreferences.set(AppPreferences.KEY_THEME, isDarkMode ? "dark" : "light");
-        applyTheme();
-        notifyAccentListeners();
+        javafx.application.Platform.runLater(() -> {
+            this.isDarkMode = dark;
+            this.isDarkModeProperty.set(isDarkMode);
+            AppPreferences.set(AppPreferences.KEY_THEME, isDarkMode ? "dark" : "light");
+            applyTheme();
+            notifyAccentListeners();
+        });
     }
     public String getAccentHex() {
         return accentColor;
@@ -207,13 +211,15 @@ public class ThemeManager {
     public boolean isAnimatedAccents() { return animatedAccents; }
 
     public void setAnimatedAccents(boolean value) {
-        this.animatedAccents = value;
-        AppPreferences.setBoolean(AppPreferences.KEY_ANIM_ACCENTS, value);
-        if (gradientTimeline != null) {
-            if (value) gradientTimeline.play();
-            else { gradientTimeline.stop(); gradientPhase.set(0.0); }
-        }
-        notifyAccentListeners();
+        javafx.application.Platform.runLater(() -> {
+            this.animatedAccents = value;
+            AppPreferences.setBoolean(AppPreferences.KEY_ANIM_ACCENTS, value);
+            if (gradientTimeline != null) {
+                if (value) gradientTimeline.play();
+                else { gradientTimeline.stop(); gradientPhase.set(0.0); }
+            }
+            notifyAccentListeners();
+        });
     }
 
     /** Phase property - bind a node's style to this to react to animation ticks */
@@ -229,14 +235,16 @@ public class ThemeManager {
     }
 
     private void notifyAccentListeners() {
-        List<Runnable> snapshot = new ArrayList<>(accentChangeListeners);
-        for (Runnable listener : snapshot) {
-            try {
-                listener.run();
-            } catch (Exception ex) {
-                System.err.println("ThemeManager listener error: " + ex.getMessage());
+        javafx.application.Platform.runLater(() -> {
+            List<Runnable> snapshot = new ArrayList<>(accentChangeListeners);
+            for (Runnable listener : snapshot) {
+                try {
+                    listener.run();
+                } catch (Exception ex) {
+                    System.err.println("ThemeManager listener error: " + ex.getMessage());
+                }
             }
-        }
+        });
     }
     
     public BooleanProperty isDarkModeProperty() {

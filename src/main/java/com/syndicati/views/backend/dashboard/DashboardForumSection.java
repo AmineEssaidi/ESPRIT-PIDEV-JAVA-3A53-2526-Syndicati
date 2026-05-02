@@ -32,8 +32,37 @@ final class DashboardForumSection {
     }
 
     private static VBox publicationsPane(DashboardView view) {
-        VBox wrap = new VBox(14);
+        VBox wrap = new VBox(16);
         List<Publication> publications = view.dashboardAdminService().publications();
+
+        int total = publications.size();
+        int withImages = 0;
+        int recent = 0;
+        int categories = 0;
+        java.util.Set<String> uniqueCategories = new java.util.HashSet<>();
+        java.time.LocalDate sevenDaysAgo = java.time.LocalDate.now().minusDays(7);
+
+        for (Publication pub : publications) {
+            if (pub.getImagePub() != null && !pub.getImagePub().isBlank()) {
+                withImages++;
+            }
+            if (pub.getCategoriePub() != null) {
+                uniqueCategories.add(pub.getCategoriePub());
+            }
+            if (pub.getDateCreationPub() != null && pub.getDateCreationPub().toLocalDate().isAfter(sevenDaysAgo)) {
+                recent++;
+            }
+        }
+        categories = uniqueCategories.size();
+
+        HBox stats = new HBox(16);
+        stats.setFillHeight(true);
+        view.addStatCards(stats,
+            new String[]{"TOT", "IMG", "NEW", "CAT"},
+            new String[]{"Total", "With Images", "7-Day New", "Categories"},
+            new String[]{String.valueOf(total), String.valueOf(withImages), String.valueOf(recent), String.valueOf(categories)},
+            new String[]{"#60a5fa", "#34d399", "#fbbf24", "#a78bfa"}
+        );
 
         List<String[]> baseRows = new ArrayList<>();
         for (Publication pub : publications) {
@@ -96,13 +125,42 @@ final class DashboardForumSection {
 
         renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date"}, "No publications found");
 
-        wrap.getChildren().addAll(headerControls, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
     private static VBox commentsPane(DashboardView view) {
-        VBox wrap = new VBox(14);
+        VBox wrap = new VBox(16);
         List<Commentaire> commentaires = view.dashboardAdminService().commentaires();
+
+        int total = commentaires.size();
+        int withImages = 0;
+        int recent = 0;
+        int topAuthors = 0;
+        java.util.Set<String> uniqueAuthors = new java.util.HashSet<>();
+        java.time.LocalDate sevenDaysAgo = java.time.LocalDate.now().minusDays(7);
+
+        for (Commentaire comment : commentaires) {
+            if (comment.getImageCommentaire() != null && !comment.getImageCommentaire().isBlank()) {
+                withImages++;
+            }
+            if (comment.getUser() != null) {
+                uniqueAuthors.add(comment.getUser().getIdUser() != null ? comment.getUser().getIdUser().toString() : "unknown");
+            }
+            if (comment.getCreatedAt() != null && comment.getCreatedAt().toLocalDate().isAfter(sevenDaysAgo)) {
+                recent++;
+            }
+        }
+        topAuthors = uniqueAuthors.size();
+
+        HBox stats = new HBox(16);
+        stats.setFillHeight(true);
+        view.addStatCards(stats,
+            new String[]{"TOT", "IMG", "NEW", "AUT"},
+            new String[]{"Total", "With Images", "7-Day New", "Authors"},
+            new String[]{String.valueOf(total), String.valueOf(withImages), String.valueOf(recent), String.valueOf(topAuthors)},
+            new String[]{"#60a5fa", "#34d399", "#fbbf24", "#a78bfa"}
+        );
 
         List<String[]> baseRows = new ArrayList<>();
         for (Commentaire comment : commentaires) {
@@ -165,13 +223,40 @@ final class DashboardForumSection {
 
         renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date"}, "No comments found");
 
-        wrap.getChildren().addAll(headerControls, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
     private static VBox reactionsPane(DashboardView view) {
-        VBox wrap = new VBox(14);
+        VBox wrap = new VBox(16);
         List<Reaction> reactions = view.dashboardAdminService().reactions();
+
+        int total = reactions.size();
+        int onPosts = 0;
+        int onComments = 0;
+        int topUsers = 0;
+        java.util.Set<String> uniqueUsers = new java.util.HashSet<>();
+
+        for (Reaction reaction : reactions) {
+            if (reaction.getPublication() != null) {
+                onPosts++;
+            } else if (reaction.getCommentaire() != null) {
+                onComments++;
+            }
+            if (reaction.getUser() != null) {
+                uniqueUsers.add(reaction.getUser().getIdUser() != null ? reaction.getUser().getIdUser().toString() : "unknown");
+            }
+        }
+        topUsers = uniqueUsers.size();
+
+        HBox stats = new HBox(16);
+        stats.setFillHeight(true);
+        view.addStatCards(stats,
+            new String[]{"TOT", "PUB", "CMT", "USR"},
+            new String[]{"Total", "On Posts", "On Comments", "Users"},
+            new String[]{String.valueOf(total), String.valueOf(onPosts), String.valueOf(onComments), String.valueOf(topUsers)},
+            new String[]{"#60a5fa", "#34d399", "#fbbf24", "#a78bfa"}
+        );
 
         List<String[]> baseRows = new ArrayList<>();
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("MMM dd");
@@ -246,7 +331,7 @@ final class DashboardForumSection {
 
         renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Count", "Updated"}, "No reactions found");
 
-        wrap.getChildren().addAll(headerControls, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 

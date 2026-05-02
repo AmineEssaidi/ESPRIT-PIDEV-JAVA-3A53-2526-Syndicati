@@ -110,6 +110,8 @@ final class DashboardEvenementSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
+        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
             String key = filter[0];
@@ -118,7 +120,7 @@ final class DashboardEvenementSection {
                 queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
                 filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, k.equals(queryState.filterKey)));
-                renderEventsTable(view, baseRows, queryState, tableHost, sortPill);
+                renderEventsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
             });
             filterButtons.put(key, b);
             filterRow.getChildren().add(b);
@@ -127,21 +129,18 @@ final class DashboardEvenementSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderEventsTable(view, baseRows, queryState, tableHost, sortPill);
+            renderEventsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderEventsTable(view, baseRows, queryState, tableHost, sortPill);
+            renderEventsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
-        renderEventsTable(view, baseRows, queryState, tableHost, sortPill);
+        renderEventsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        HBox controls = new HBox(8, searchField, sortPill, filterRow);
-        controls.setAlignment(Pos.CENTER_LEFT);
-
-        wrap.getChildren().addAll(stats, controls, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
@@ -150,7 +149,8 @@ final class DashboardEvenementSection {
         List<String[]> baseRows,
         DashboardTableQueryEngine.QueryState queryState,
         VBox tableHost,
-        Button sortPill
+        Button sortPill,
+        HBox headerControls
     ) {
         String scopedTerm = queryState.searchTerm.trim().toLowerCase();
         String scope = queryState.filterKey;
@@ -205,7 +205,8 @@ final class DashboardEvenementSection {
                 "Event",
                 new String[]{"Title", "Type", "Description", "Date", "Location", "Total Places", "Available Places", "Image"},
                 visibleRows,
-                true
+                true,
+                headerControls
             )
         );
     }
@@ -288,6 +289,8 @@ final class DashboardEvenementSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
+        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
             String key = filter[0];
@@ -296,7 +299,7 @@ final class DashboardEvenementSection {
                 queryState.filterKey = key.equals(queryState.filterKey) ? "" : key;
                 queryState.page = 1;
                 filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, k.equals(queryState.filterKey)));
-                renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill);
+                renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
             });
             filterButtons.put(key, b);
             filterRow.getChildren().add(b);
@@ -305,21 +308,18 @@ final class DashboardEvenementSection {
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             queryState.searchTerm = newVal == null ? "" : newVal;
             queryState.page = 1;
-            renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill);
+            renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         sortPill.setOnAction(e -> {
             queryState.ascending = !queryState.ascending;
-            renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill);
+            renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
         });
 
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
-        renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill);
+        renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        HBox controls = new HBox(8, searchField, sortPill, filterRow);
-        controls.setAlignment(Pos.CENTER_LEFT);
-
-        wrap.getChildren().addAll(stats, controls, tableHost);
+        wrap.getChildren().addAll(stats, tableHost);
         return wrap;
     }
 
@@ -328,7 +328,8 @@ final class DashboardEvenementSection {
         List<String[]> baseRows,
         DashboardTableQueryEngine.QueryState queryState,
         VBox tableHost,
-        Button sortPill
+        Button sortPill,
+        HBox headerControls
     ) {
         String scopedTerm = queryState.searchTerm.trim().toLowerCase();
         String scope = queryState.filterKey;
@@ -383,7 +384,8 @@ final class DashboardEvenementSection {
                 "Participation",
                 new String[]{"Event", "Resident", "Seats", "Checked-in", "Date"},
                 visibleRows,
-                false
+                false,
+                headerControls
             )
         );
     }

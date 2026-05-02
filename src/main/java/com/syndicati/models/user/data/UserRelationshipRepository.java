@@ -135,50 +135,56 @@ public class UserRelationshipRepository {
     }
 
     public int countFriends(int userId) {
+        String cacheKey = "rel_count_friends_" + userId;
+        Integer cached = databaseService.getCache(cacheKey);
+        if (cached != null) return cached;
+
         String sql = "SELECT COUNT(*) AS total FROM user_relationship WHERE status = 'FRIENDS' AND (user_first_id = ? OR user_second_id = ?)";
 
         try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) {
-                return 0;
-            }
+            if (conn == null) return 0;
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setInt(1, userId);
                 ps.setInt(2, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        return rs.getInt("total");
+                        int total = rs.getInt("total");
+                        databaseService.putCache(cacheKey, total);
+                        return total;
                     }
                 }
             }
         } catch (SQLException e) {
             System.out.println("UserRelationshipRepository.countFriends error: " + e.getMessage());
         }
-
         return 0;
     }
 
     public int countPendingRequests(int userId) {
+        String cacheKey = "rel_count_pending_" + userId;
+        Integer cached = databaseService.getCache(cacheKey);
+        if (cached != null) return cached;
+
         String sql = "SELECT COUNT(*) AS total FROM user_relationship WHERE (user_second_id = ? AND status = 'PENDING_FIRST_SECOND') OR (user_first_id = ? AND status = 'PENDING_SECOND_FIRST')";
 
         try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) {
-                return 0;
-            }
+            if (conn == null) return 0;
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setInt(1, userId);
                 ps.setInt(2, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        return rs.getInt("total");
+                        int total = rs.getInt("total");
+                        databaseService.putCache(cacheKey, total);
+                        return total;
                     }
                 }
             }
         } catch (SQLException e) {
             System.out.println("UserRelationshipRepository.countPendingRequests error: " + e.getMessage());
         }
-
         return 0;
     }
 

@@ -46,12 +46,12 @@ import java.util.Arrays;
  */
 public class LoginView implements ViewInterface {
     
+    private static LoginView instance;
     private final StackPane root;
-    private TextField usernameField;
-    private PasswordField passwordField;
-    private Button loginButton;
-    private Button signUpButton;
-    private Button otpLoginButton;
+
+    public static LoginView getInstance() {
+        return instance;
+    }
     private MediaPlayer mediaPlayer;
     private ImageBackground imageBackground;
     private VBox loginContainer;
@@ -59,8 +59,10 @@ public class LoginView implements ViewInterface {
     private VBox forgotPasswordContainer;
     private VBox loginFormColumn;
     private VBox faceIdPanel;
+    private VBox captchaPanel;
     private HBox loginAuthFlexContainer;
     private boolean faceIdOpen = false;
+    private boolean captchaPanelOpen = false;
     private Runnable onLoginSuccess;
     private boolean loginSuccessFired = false;
     private final AuthController authController;
@@ -75,6 +77,11 @@ public class LoginView implements ViewInterface {
     private NativeCaptchaService.NativeChallenge nativeCaptchaChallenge;
     private boolean captchaVerified = false;
     private HCaptchaComponent hcaptchaComponent;
+    private TextField usernameField;
+    private PasswordField passwordField;
+    private Button loginButton;
+    private Button signUpButton;
+    private Button otpLoginButton;
     private boolean useHCaptcha = true;
     private boolean hCaptchaAvailable = false;
     private Label challengeQuestionLabel;
@@ -101,6 +108,7 @@ public class LoginView implements ViewInterface {
     private final InsightFaceService insightFaceService;
     
     public LoginView() {
+        instance = this;
         this.root = new StackPane();
         this.authController = new AuthController();
         this.profileController = new ProfileController();
@@ -109,7 +117,6 @@ public class LoginView implements ViewInterface {
         this.nativeCaptchaService = new NativeCaptchaService();
         this.faceIDService = new FaceIDService();
         this.insightFaceService = InsightFaceService.getInstance();
-        this.insightFaceService.initialize();
         setupLayout();
     }
 
@@ -207,10 +214,34 @@ public class LoginView implements ViewInterface {
         
         // Apply theme styling
         applyThemeStyling();
+
+        // Create horizontal container for left side controls
+        HBox topLeftControls = new HBox();
+        topLeftControls.setSpacing(12);
+        topLeftControls.setAlignment(Pos.TOP_LEFT);
+        topLeftControls.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        topLeftControls.setPickOnBounds(false);
+
+        // Create hCaptcha slider toggle
+        StackPane captchaToggle = createCaptchaToggle();
+        topLeftControls.getChildren().add(captchaToggle);
+
+        // Add to root and position it
+        root.getChildren().add(topLeftControls);
+        StackPane.setAlignment(topLeftControls, Pos.TOP_LEFT);
+        StackPane.setMargin(topLeftControls, new Insets(52, 0, 0, 20)); // Below window bar, left side
+        
+        // Ensure controls are on top
+        topLeftControls.toFront();
+        topRightControls.toFront();
+        windowBar.toFront();
     }
     
     
     private VBox createLoginContainer() {
+        captchaPanel = createCaptchaPanel();
+        faceIdPanel = createFaceIdPanel();
+        
         VBox container = new VBox();
         container.setSpacing(0);
         container.setAlignment(Pos.CENTER);
@@ -221,17 +252,27 @@ public class LoginView implements ViewInterface {
         
         ThemeManager themeManager = ThemeManager.getInstance();
         container.setStyle(authSurfaceStyle(themeManager));
-        container.setOnMouseEntered(e -> container.setStyle(authSurfaceHoverStyle(themeManager)));
-        container.setOnMouseExited(e -> container.setStyle(authSurfaceStyle(themeManager)));
+        container.setOnMouseEntered(e -> {
+            container.setOpacity(0.98);
+            container.setScaleX(1.01);
+            container.setScaleY(1.01);
+        });
+        container.setOnMouseExited(e -> {
+            container.setOpacity(0.95);
+            container.setScaleX(1.0);
+            container.setScaleY(1.0);
+        });
         
-        // Add glassmorphism shadow
+        // Add glassmorphism shadow (Optimized for performance)
         DropShadow glassShadow = new DropShadow();
-        glassShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
-        glassShadow.setColor(Color.color(0, 0, 0, 0.3));
-        glassShadow.setRadius(30);
+        glassShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
+        glassShadow.setColor(Color.color(0, 0, 0, 0.2));
+        glassShadow.setRadius(15);
         glassShadow.setOffsetX(0);
-        glassShadow.setOffsetY(10);
+        glassShadow.setOffsetY(5);
         container.setEffect(glassShadow);
+        container.setCache(true);
+        container.setCacheHint(javafx.scene.CacheHint.SPEED);
         
         // App title
         Text title = new Text("Welcome Back");
@@ -289,11 +330,10 @@ public class LoginView implements ViewInterface {
         loginFormColumn.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(loginFormColumn, Priority.ALWAYS);
 
-        faceIdPanel = createFaceIdPanel();
-
-        loginAuthFlexContainer = new HBox(0, loginFormColumn, faceIdPanel);
-        loginAuthFlexContainer.setAlignment(Pos.CENTER_LEFT);
+        loginAuthFlexContainer = new HBox(0, captchaPanel, loginFormColumn, faceIdPanel);
+        loginAuthFlexContainer.setAlignment(Pos.CENTER);
         loginAuthFlexContainer.setMaxWidth(Double.MAX_VALUE);
+        VBox.setVgrow(loginAuthFlexContainer, Priority.ALWAYS);
         loginAuthFlexContainer.setStyle("-fx-background-radius: 24px;");
 
         container.getChildren().add(loginAuthFlexContainer);
@@ -340,30 +380,23 @@ public class LoginView implements ViewInterface {
             useHCaptcha = true;
             
             // Setup fallback callback
-            hcaptchaComponent.setOnLoadFail(() -> {
-                System.out.println("[LoginView] hCaptcha load failed, falling back to Skija");
-                switchToNativeCaptcha(wrap, header);
-            });
+            hcaptchaComponent.setOnLoadFail(() -> switchToNativeCaptcha(wrap, header));
             
             hcaptchaComponent.setOnVerified(() -> {
                 if (loginButton != null) {
                     loginButton.setDisable(false);
                     loginButton.setText("Sign In");
                 }
+                closeCaptchaPanel();
             });
-            
-            VBox hcaptchaContainer = new VBox(8);
-            hcaptchaContainer.setAlignment(Pos.CENTER);
-            hcaptchaContainer.getChildren().addAll(header, hcaptchaComponent.getContainer());
-            wrap.getChildren().add(hcaptchaContainer);
-            
+
+            captchaPanel.getChildren().setAll(hcaptchaComponent.getContainer());
+            captchaPanel.setPadding(new Insets(20));
+            captchaPanel.setAlignment(Pos.CENTER);
+
             System.out.println("[LoginView] Initialized hCaptcha (primary)");
         } else {
-            // hCaptcha not enabled or failed immediately
-            useHCaptcha = false;
-            hCaptchaAvailable = false;
             setupNativeCaptchaUI(wrap, header);
-            System.out.println("[LoginView] hCaptcha disabled/failed, using Skija fallback");
         }
         
         return wrap;
@@ -774,6 +807,95 @@ public class LoginView implements ViewInterface {
         return wrap;
     }
 
+    private VBox createCaptchaPanel() {
+        ThemeManager tm = ThemeManager.getInstance();
+        VBox panel = new VBox(15);
+        panel.setPadding(new Insets(10)); // Small padding for breathability
+        panel.setAlignment(Pos.CENTER);
+        panel.setManaged(false);
+        panel.setVisible(false);
+        panel.setPrefWidth(0);
+        panel.setMaxWidth(0);
+        VBox.setVgrow(panel, Priority.ALWAYS);
+        panel.setStyle(
+            "-fx-background-color: rgba(15,15,15,0.70);" +
+            "-fx-background-radius: 0 24px 24px 0;" +
+            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-width: 0 1px 0 0;"
+        );
+        return panel;
+    }
+
+    public void openCaptchaPanel() {
+        if (captchaPanelOpen || captchaPanel == null || loginContainer == null || loginFormColumn == null) return;
+        captchaPanelOpen = true;
+
+        captchaPanel.setManaged(true);
+        captchaPanel.setVisible(true);
+
+        loginFormColumn.setStyle(
+            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-width: 0 1px 0 1px;" +
+            "-fx-background-color: rgba(15,15,15,0.40);"
+        );
+
+        javafx.animation.Timeline tl = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.ZERO,
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 560),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 560),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 520),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 520),
+                new javafx.animation.KeyValue(captchaPanel.maxWidthProperty(), 0),
+                new javafx.animation.KeyValue(captchaPanel.prefWidthProperty(), 0),
+                new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 0),
+                new javafx.animation.KeyValue(captchaPanel.translateXProperty(), -24)
+            ),
+            new javafx.animation.KeyFrame(javafx.util.Duration.millis(450),
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 1080, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 1080, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 720, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 720, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.maxWidthProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.prefWidthProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 1, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.translateXProperty(), 0, javafx.animation.Interpolator.EASE_BOTH)
+            )
+        );
+        tl.play();
+    }
+
+    public void closeCaptchaPanel() {
+        if (!captchaPanelOpen || captchaPanel == null || loginContainer == null) return;
+        captchaPanelOpen = false;
+
+        javafx.animation.Timeline tl = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.ZERO,
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 1080),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 1080),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 720),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 720),
+                new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 1),
+                new javafx.animation.KeyValue(captchaPanel.translateXProperty(), 0)
+            ),
+            new javafx.animation.KeyFrame(javafx.util.Duration.millis(400),
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 560, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 560, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.maxWidthProperty(), 0, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.prefWidthProperty(), 0, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 0, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(captchaPanel.translateXProperty(), -24, javafx.animation.Interpolator.EASE_BOTH)
+            )
+        );
+        tl.setOnFinished(e -> {
+            captchaPanel.setManaged(false);
+            captchaPanel.setVisible(false);
+            loginFormColumn.setStyle("-fx-background-color: transparent; -fx-border-width: 0;");
+        });
+        tl.play();
+    }
+
     private VBox createFaceIdPanel() {
         ThemeManager tm = ThemeManager.getInstance();
         VBox panel = new VBox(10);
@@ -1044,7 +1166,7 @@ public class LoginView implements ViewInterface {
         
         // Add glassmorphism shadow
         DropShadow glassShadow = new DropShadow();
-        glassShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        glassShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         glassShadow.setColor(Color.color(0, 0, 0, 0.3));
         glassShadow.setRadius(30);
         glassShadow.setOffsetX(0);
@@ -1323,7 +1445,7 @@ public class LoginView implements ViewInterface {
         
         // Add glassmorphism shadow
         DropShadow glassShadow = new DropShadow();
-        glassShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        glassShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         glassShadow.setColor(Color.color(0, 0, 0, 0.3));
         glassShadow.setRadius(30);
         glassShadow.setOffsetX(0);
@@ -1599,7 +1721,7 @@ public class LoginView implements ViewInterface {
         
         // Add shadow effect
         DropShadow buttonShadow = new DropShadow();
-        buttonShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        buttonShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         buttonShadow.setColor(Color.color(0, 0, 0, 0.3));
         buttonShadow.setRadius(15);
         buttonShadow.setOffsetX(0);
@@ -1636,7 +1758,7 @@ public class LoginView implements ViewInterface {
         
         // Add shadow effect
         DropShadow buttonShadow = new DropShadow();
-        buttonShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        buttonShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         buttonShadow.setColor(Color.color(0, 0, 0, 0.3));
         buttonShadow.setRadius(15);
         buttonShadow.setOffsetX(0);
@@ -1671,7 +1793,7 @@ public class LoginView implements ViewInterface {
         button.setStyle(secondaryButtonStyle(themeManager));
 
         DropShadow buttonShadow = new DropShadow();
-        buttonShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        buttonShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         buttonShadow.setColor(Color.color(0, 0, 0, 0.3));
         buttonShadow.setRadius(15);
         buttonShadow.setOffsetX(0);
@@ -1707,7 +1829,7 @@ public class LoginView implements ViewInterface {
         
         // Add shadow effect
         DropShadow buttonShadow = new DropShadow();
-        buttonShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        buttonShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         buttonShadow.setColor(Color.color(0, 0, 0, 0.3));
         buttonShadow.setRadius(15);
         buttonShadow.setOffsetX(0);
@@ -1746,7 +1868,7 @@ public class LoginView implements ViewInterface {
         
         // Add shadow effect
         DropShadow buttonShadow = new DropShadow();
-        buttonShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        buttonShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         buttonShadow.setColor(Color.color(0, 0, 0, 0.3));
         buttonShadow.setRadius(15);
         buttonShadow.setOffsetX(0);
@@ -2021,7 +2143,7 @@ public class LoginView implements ViewInterface {
         
         // Add glassmorphism shadow
         DropShadow shadow = new DropShadow();
-        shadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        shadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         shadow.setColor(Color.color(0, 0, 0, 0.4));
         shadow.setRadius(20);
         shadow.setOffsetY(8);
@@ -2295,6 +2417,49 @@ public class LoginView implements ViewInterface {
         return controlsContainer;
     }
     
+
+    private StackPane createCaptchaToggle() {
+        ThemeManager tm = ThemeManager.getInstance();
+        StackPane toggle = new StackPane();
+        toggle.setPrefSize(40, 40);
+        toggle.setCursor(javafx.scene.Cursor.HAND);
+        
+        javafx.scene.shape.Circle circle = new javafx.scene.shape.Circle(18);
+        circle.setFill(Color.web(tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"));
+        circle.setStroke(Color.web(tm.isDarkMode() ? "rgba(255,255,255,0.15)" : "rgba(15,23,42,0.15)"));
+        circle.setStrokeWidth(1);
+        
+        Text icon = new Text("\ud83d\udee1"); // Shield emoji
+        icon.setFont(Font.font(16));
+        icon.setFill(Color.web(tm.getTextColor()));
+        
+        toggle.getChildren().addAll(circle, icon);
+        
+        toggle.setOnMouseEntered(e -> {
+            circle.setFill(Color.web(tm.toRgba(tm.getAccentHex(), 0.15)));
+            circle.setStroke(Color.web(tm.getAccentHex()));
+            toggle.setScaleX(1.1);
+            toggle.setScaleY(1.1);
+        });
+        
+        toggle.setOnMouseExited(e -> {
+            circle.setFill(Color.web(tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)"));
+            circle.setStroke(Color.web(tm.isDarkMode() ? "rgba(255,255,255,0.15)" : "rgba(15,23,42,0.15)"));
+            toggle.setScaleX(1.0);
+            toggle.setScaleY(1.0);
+        });
+        
+        toggle.setOnMouseClicked(e -> {
+            if (captchaPanelOpen) {
+                closeCaptchaPanel();
+            } else {
+                openCaptchaPanel();
+            }
+        });
+        
+        return toggle;
+    }
+
     private StackPane createThemeToggle() {
         StackPane toggleContainer = new StackPane();
         
@@ -2331,7 +2496,7 @@ public class LoginView implements ViewInterface {
         
         // Add shadow to thumb container
         javafx.scene.effect.DropShadow thumbShadow = new javafx.scene.effect.DropShadow();
-        thumbShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        thumbShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
         if (themeManager.isDarkMode()) {
             thumbShadow.setColor(Color.color(0, 0, 0, 0.3));
         } else {

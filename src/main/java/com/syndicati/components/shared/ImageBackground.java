@@ -9,12 +9,14 @@ import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
 import javafx.util.Duration;
+import javafx.application.Platform;
 
 /**
  * Video Background Component - Login video only with image fallback
  */
 public class ImageBackground {
-    private static final double LOGIN_VIDEO_WARMUP_SECONDS = 2.5;
+    private static final double LOGIN_VIDEO_WARMUP_SECONDS = 0.8;
+    private static final long VIDEO_TIMEOUT_MS = 1500;
     
     private final StackPane root;
     private MediaView backgroundMediaView;
@@ -28,14 +30,16 @@ public class ImageBackground {
     public ImageBackground() {
         this.root = new StackPane();
         setupLayout();
-        loadMedia();
-        updateBackground();
+        // Move to background thread to prevent UI stall
+        Thread.startVirtualThread(this::loadMedia);
     }
     
     private void setupLayout() {
         backgroundMediaView = new MediaView();
         backgroundMediaView.setPreserveRatio(false);
-        backgroundMediaView.setSmooth(true);
+        backgroundMediaView.setSmooth(false); // Optimization: Disable smoothing to reduce decoding overhead
+        backgroundMediaView.setCache(true);
+        backgroundMediaView.setCacheHint(javafx.scene.CacheHint.SPEED);
         
         backgroundImageView = new ImageView();
         backgroundImageView.setPreserveRatio(false);
@@ -44,6 +48,8 @@ public class ImageBackground {
         root.setMouseTransparent(true);
         root.setPrefSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
         root.setMaxSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        // Optimization: Set a solid background color to reduce blending overhead on transparent stages
+        root.setStyle("-fx-background-color: #000000;"); 
         
         StackPane.setAlignment(backgroundMediaView, Pos.CENTER);
         StackPane.setAlignment(backgroundImageView, Pos.CENTER);
@@ -53,6 +59,8 @@ public class ImageBackground {
         backgroundImageView.fitWidthProperty().bind(root.widthProperty());
         backgroundImageView.fitHeightProperty().bind(root.heightProperty());
         
+        backgroundImageView.setVisible(true);
+        backgroundMediaView.setVisible(false);
         root.getChildren().addAll(backgroundImageView, backgroundMediaView);
     }
     
@@ -72,27 +80,74 @@ public class ImageBackground {
     private void loadLoginVideo() {
         try {
             System.out.println("Loading login.mp4...");
-            Media loginMedia = new Media(getClass().getResource("/login.mp4").toString());
-            loginPlayer = new MediaPlayer(loginMedia);
-            loginPlayer.setCycleCount(MediaPlayer.INDEFINITE);
-            loginPlayer.setMute(true);
-            loginPlayer.setAutoPlay(false);
-            loginPlayer.setOnError(() -> {
-                System.err.println("Media error: " + loginPlayer.getError());
+            java.net.URL resource = getClass().getResource("/login.mp4");
+            if (resource == null) {
+                System.err.println("login.mp4 not found in resources!");
+                isVideoMode = false;
                 updateImageBackground();
-            });
-            loginPlayer.currentTimeProperty().addListener((obs, oldTime, newTime) -> {
-                if (newTime != null && newTime.toSeconds() >= LOGIN_VIDEO_WARMUP_SECONDS) {
-                    revealWarmedVideo();
+                return;
+            }
+
+            Media loginMedia = new Media(resource.toString());
+            Platform.runLater(() -> {
+                loginPlayer = new MediaPlayer(loginMedia);
+                
+                // Critical: Set error handler immediately
+                loginPlayer.setOnError(() -> {
+                    System.err.println("Media error detected: " + loginPlayer.getError());
+                    isVideoMode = false;
+                    updateImageBackground();
+                    if (loginPlayer != null) {
+                        loginPlayer.stop();
+                        loginPlayer.dispose();
+                        loginPlayer = null;
+                    }
+                });
+
+                loginPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+                loginPlayer.setMute(true);
+                loginPlayer.setAutoPlay(false);
+                
+                // Use a single-use listener for warmup
+                javafx.beans.value.ChangeListener<Duration> warmupListener = new javafx.beans.value.ChangeListener<>() {
+                    @Override
+                    public void changed(javafx.beans.value.ObservableValue<? extends Duration> obs, Duration oldTime, Duration newTime) {
+                        if (newTime != null && newTime.toSeconds() >= LOGIN_VIDEO_WARMUP_SECONDS) {
+                            revealWarmedVideo();
+                            loginPlayer.currentTimeProperty().removeListener(this);
+                        }
+                    }
+                };
+                loginPlayer.currentTimeProperty().addListener(warmupListener);
+                
+                backgroundMediaView.setMediaPlayer(loginPlayer);
+                loginVideoAttached = true;
+                
+                // Safety Timeout: If video doesn't play within 1.5s, force fallback
+                Thread.startVirtualThread(() -> {
+                    try {
+                        Thread.sleep(VIDEO_TIMEOUT_MS);
+                        if (!loginVideoWarmupComplete) {
+                            System.out.println("Video loading timed out, using fallback.");
+                            Platform.runLater(this::updateImageBackground);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+
+                // If setLoginMode was already called before video was ready
+                if (isVideoMode) {
+                    setLoginMode();
                 }
+                
+                System.out.println("Login video initialized successfully on UI thread");
             });
-            backgroundMediaView.setMediaPlayer(loginPlayer);
-            loginVideoAttached = true;
-            System.out.println("Login video loaded successfully");
         } catch (Exception e) {
-            System.err.println("Failed to load login.mp4: " + e.getMessage());
-            loginPlayer = null;
+            System.err.println("Permanent Fix: Failed to initialize login.mp4: " + e.getMessage());
             isVideoMode = false;
+            loginPlayer = null;
+            updateImageBackground();
         }
     }
     
@@ -196,15 +251,13 @@ public class ImageBackground {
             return;
         }
 
-        try {
+        Platform.runLater(() -> {
+            if (loginVideoWarmupComplete) return;
             backgroundMediaView.setVisible(true);
             backgroundImageView.setVisible(false);
             loginVideoWarmupComplete = true;
             System.out.println("Video playback warmed up and revealed successfully");
-        } catch (Exception ex) {
-            System.err.println("Failed to reveal warmed video: " + ex.getMessage());
-            updateImageBackground();
-        }
+        });
     }
     
     public StackPane getRoot() {

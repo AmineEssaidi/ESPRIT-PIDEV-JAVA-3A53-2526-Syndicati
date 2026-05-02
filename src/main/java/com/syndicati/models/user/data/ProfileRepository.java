@@ -74,25 +74,28 @@ public class ProfileRepository {
     }
 
     public Optional<Profile> findOneByUserId(int userId) {
+        String cacheKey = "profile_user_" + userId;
+        Profile cached = databaseService.getCache(cacheKey);
+        if (cached != null) return Optional.of(cached);
+
         String sql = "SELECT * FROM profile WHERE user_id = ? LIMIT 1";
 
         try (Connection conn = databaseService.getConnection()) {
-            if (conn == null) {
-                return Optional.empty();
-            }
+            if (conn == null) return Optional.empty();
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setInt(1, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        return Optional.of(mapRow(rs));
+                        Profile p = mapRow(rs);
+                        databaseService.putCache(cacheKey, p);
+                        return Optional.of(p);
                     }
                 }
             }
         } catch (SQLException e) {
             System.out.println("ProfileRepository.findOneByUserId error: " + e.getMessage());
         }
-
         return Optional.empty();
     }
 

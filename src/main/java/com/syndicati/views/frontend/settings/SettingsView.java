@@ -266,7 +266,7 @@ public class SettingsView implements ViewInterface {
             "-fx-cursor: hand;"
         );
         if (selected) {
-            DropShadow ds = new DropShadow(BlurType.GAUSSIAN,
+            DropShadow ds = new DropShadow(BlurType.ONE_PASS_BOX,
                 Color.web(tm.getAccentHex()).deriveColor(0,1,1.3,0.7), 18, 0.2, 0, 0);
             card.setEffect(ds);
         } else {
@@ -406,7 +406,7 @@ public class SettingsView implements ViewInterface {
             tick.setFill(Color.WHITE);
             sp.getChildren().add(tick);
             // Glow uses gradient start color approximated by just using accent
-            sp.setEffect(new DropShadow(BlurType.GAUSSIAN,
+            sp.setEffect(new DropShadow(BlurType.ONE_PASS_BOX,
                 Color.web(tm.getAccentHex()).deriveColor(0, 1, 1.3, 0.9), 14, 0.25, 0, 0));
         }
         sp.setOnMouseEntered(e -> { ScaleTransition st = new ScaleTransition(Duration.millis(140), sp); st.setToX(1.18); st.setToY(1.18); st.play(); });
@@ -499,7 +499,7 @@ public class SettingsView implements ViewInterface {
         StackPane thumb = new StackPane();
         thumb.setPrefSize(20, 20); thumb.setMinSize(20, 20); thumb.setMaxSize(20, 20);
         thumb.setStyle("-fx-background-color: white; -fx-background-radius: 10px;");
-        thumb.setEffect(new DropShadow(BlurType.GAUSSIAN, Color.color(0,0,0,0.3), 4, 0, 0, 1));
+        thumb.setEffect(new DropShadow(BlurType.ONE_PASS_BOX, Color.color(0,0,0,0.3), 4, 0, 0, 1));
 
         StackPane.setAlignment(thumb, Pos.CENTER_LEFT);
         StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 26 : 3));
@@ -557,11 +557,11 @@ public class SettingsView implements ViewInterface {
             Color base = Color.web(hex);
             // Brighter, more saturated glow
             Color glowColor = base.deriveColor(0, 1.0, 1.3, 0.75);
-            n.setEffect(new DropShadow(BlurType.GAUSSIAN, glowColor, r, 0.15, 0, 0));
+            n.setEffect(new DropShadow(BlurType.ONE_PASS_BOX, glowColor, r, 0.15, 0, 0));
         } catch (Exception ignored) {}
     }
     private void shadow(javafx.scene.Node n, double r, double op) {
-        n.setEffect(new DropShadow(BlurType.GAUSSIAN, Color.color(0,0,0,op), r, 0,0,5));
+        n.setEffect(new DropShadow(BlurType.ONE_PASS_BOX, Color.color(0,0,0,op), r, 0,0,5));
     }
     private Color safeColor(String hex) {
         try { return Color.web(hex); } catch (Exception e) { return Color.web("#6c5ce7"); }

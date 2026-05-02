@@ -97,6 +97,8 @@ public class LandingPageView implements ViewInterface {
         mainContent.setAlignment(Pos.TOP_LEFT);
         // Reserve space for the floating header so content starts below it without a dedicated header strip.
         mainContent.setPadding(new Insets(102, 10, 10, 10));
+        mainContent.setCache(true);
+        mainContent.setCacheHint(javafx.scene.CacheHint.QUALITY);
 
         // Build and show home content sections
         homeContent = new HomeContent();
@@ -236,8 +238,29 @@ public class LandingPageView implements ViewInterface {
             enterDashboardMode();
             return;
         }
-        mainContent.getChildren().clear();
-        mainContent.getChildren().add(NavigationManager.getInstance().getPage(pageName));
+        updateMainContentWithTransition(NavigationManager.getInstance().getPage(pageName));
+    }
+
+    private void updateMainContentWithTransition(javafx.scene.Node newContent) {
+        if (mainContent.getChildren().isEmpty()) {
+            mainContent.getChildren().add(newContent);
+            return;
+        }
+
+        javafx.scene.Node oldContent = mainContent.getChildren().get(0);
+        if (oldContent == newContent) return;
+
+        javafx.animation.FadeTransition fadeOut = new javafx.animation.FadeTransition(javafx.util.Duration.millis(150), mainContent);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> {
+            mainContent.getChildren().setAll(newContent);
+            javafx.animation.FadeTransition fadeIn = new javafx.animation.FadeTransition(javafx.util.Duration.millis(200), mainContent);
+            fadeIn.setFromValue(0.0);
+            fadeIn.setToValue(1.0);
+            fadeIn.play();
+        });
+        fadeOut.play();
     }
     
     private void applyThemeStyling() {

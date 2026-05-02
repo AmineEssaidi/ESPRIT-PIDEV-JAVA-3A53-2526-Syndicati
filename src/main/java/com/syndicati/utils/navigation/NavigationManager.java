@@ -52,15 +52,46 @@ public class NavigationManager {
         rebuildThemeSensitiveViews();
     }
 
+    public void warmup() {
+        // Pre-instantiate heavy views and pre-fetch data on a background thread.
+        Thread.ofVirtual().name("Syndicati-NavigationWarmup").start(() -> {
+            try {
+                // Pre-fetch critical user data into the cache
+                com.syndicati.models.user.User user = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+                if (user != null) {
+                    new com.syndicati.controllers.user.profile.ProfileController().findOneByUserId(user.getIdUser());
+                    new com.syndicati.models.user.data.UserStandingRepository().findByUserId(user.getIdUser());
+                    com.syndicati.controllers.user.relationship.UserRelationshipController rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
+                    rc.countFriends(user);
+                    rc.countPendingRequests(user);
+                }
+
+                // Short delay to let the landing page finish its first render
+                Thread.sleep(800);
+                javafx.application.Platform.runLater(() -> {
+                    if (profileView == null) getPage("profile");
+                    if (aboutView == null) getPage("about");
+                    if (residenceView == null) getPage("services/residence");
+                    if (forumView == null) getPage("services/forum");
+                });
+            } catch (Exception e) {
+                System.err.println("Warmup failed: " + e.getMessage());
+            }
+        });
+    }
+
     public void rebuildThemeSensitiveViews() {
-        // Clear cached views; they will be rebuilt lazily when first requested.
+        // Clear cached views; EXCEPT the currently active one to avoid infinite reload loops
+        // during data fetching/theme synchronization.
+        String active = landingPageView != null ? landingPageView.getCurrentPageName() : "";
+        
         this.servicesView = null;
         this.aboutView = null;
-        this.profileView = null;
+        if (!"profile".equals(active)) this.profileView = null;
         this.dashboardView = null;
         this.serviceDetailView = null;
         this.aboutDetailView = null;
-        this.settingsView = null;
+        if (!"settings".equals(active)) this.settingsView = null;
         this.residenceView = null;
         this.forumView = null;
         this.syndicatView = null;
@@ -108,7 +139,10 @@ public class NavigationManager {
     }
 
     private ForumPageView forumView() {
-        if (forumView == null) forumView = new ForumPageView();
+        if (forumView == null) {
+            forumView = new ForumPageView();
+            forumView.loadDataAsync();
+        }
         return forumView;
     }
 
@@ -144,8 +178,7 @@ public class NavigationManager {
             case "about":
                 return aboutView().getRoot();
             case "profile":
-                profileView = new ProfileView();
-                return profileView.getRoot();
+                return profileView().getRoot();
             case "dashboard":
                 return dashboardView().getRoot();
             case "service-detail":

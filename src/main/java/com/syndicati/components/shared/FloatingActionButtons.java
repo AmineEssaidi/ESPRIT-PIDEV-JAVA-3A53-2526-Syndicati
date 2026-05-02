@@ -1,5 +1,19 @@
 package com.syndicati.components.shared;
 
+import com.syndicati.services.ai.AgentService;
+import com.syndicati.services.user.messaging.MessagingService;
+import com.syndicati.services.user.relationship.UserRelationshipService;
+import com.syndicati.services.user.user.UserService;
+import com.syndicati.services.user.profile.ProfileService;
+import com.syndicati.services.user.messaging.socket.MessagingSocketClient;
+import com.syndicati.services.user.messaging.socket.SocketPayload;
+import com.syndicati.utils.session.SessionManager;
+import com.syndicati.models.user.Conversation;
+import com.syndicati.models.user.Message;
+import com.syndicati.models.user.User;
+import com.syndicati.models.user.Participant;
+import com.syndicati.models.user.Profile;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -7,8 +21,6 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import javafx.scene.effect.DropShadow;
-import com.syndicati.services.ai.AgentService;
-import javafx.application.Platform;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.Pane;
@@ -17,6 +29,13 @@ import javafx.animation.Timeline;
 import javafx.animation.KeyFrame;
 import javafx.util.Duration;
 import javafx.scene.shape.Circle;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.io.File;
 
 /**
  * Global Floating Action Buttons - Horizon Premium Styling.
@@ -324,26 +343,391 @@ public class FloatingActionButtons {
     }
 
     private static VBox createMessagePopupShell() {
-        VBox p = new VBox();
-        p.getStylesheets().add(FloatingActionButtons.class.getResource("/styles/agent-popup.css").toExternalForm());
-        p.getStyleClass().add("horizon-panel");
-        p.setPrefSize(440, 680);
-        p.setVisible(false);
-        StackPane.setAlignment(p, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(p, new Insets(0, 30, 110, 0));
+        return new MessagingHub().getPanel();
+    }
+
+    private static class MessagingHub {
+        private final VBox panel;
+        private final StackPane viewContainer;
+        private final VBox listContainer;
+        private final VBox chatContainer;
+        private final VBox selectionContainer;
+        private final Text titleText;
+        private final Button btnBack;
         
-        HBox header = new HBox();
-        header.getStyleClass().add("horizon-header");
-        Text title = new Text("💬 Messaging");
-        title.getStyleClass().add("horizon-title");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button close = new Button("×");
-        close.getStyleClass().add("horizon-close");
-        close.setOnAction(e -> p.setVisible(false));
-        header.getChildren().addAll(title, spacer, close);
+        private final MessagingService messagingService = MessagingService.getInstance();
+        private final UserRelationshipService relationshipService = new UserRelationshipService();
+        private final UserService userService = new UserService();
+        private final ProfileService profileService = new ProfileService();
+        private final User currentUser = SessionManager.getInstance().getCurrentUser();
         
-        p.getChildren().addAll(header, new Label("Messaging service is syncing...") {{ setStyle("-fx-text-fill: rgba(255,255,255,0.4); -fx-padding: 40;"); }});
-        return p;
+        private Conversation currentConversation;
+        private Integer activeRecipientId;
+        private Timeline pollTimeline;
+
+        public MessagingHub() {
+            panel = new VBox();
+            panel.getStylesheets().add(FloatingActionButtons.class.getResource("/styles/agent-popup.css").toExternalForm());
+            panel.getStyleClass().add("horizon-panel");
+            panel.setPrefSize(400, 600);
+            panel.setMaxSize(400, 600);
+            panel.setVisible(false);
+            StackPane.setAlignment(panel, Pos.BOTTOM_RIGHT);
+            StackPane.setMargin(panel, new Insets(0, 30, 110, 0));
+
+            // Header
+            HBox header = new HBox();
+            header.getStyleClass().add("horizon-header");
+            header.setAlignment(Pos.CENTER_LEFT);
+            header.setSpacing(12);
+            header.setPadding(new Insets(20, 24, 20, 24));
+            
+            btnBack = new Button("←");
+            btnBack.getStyleClass().add("horizon-close");
+            btnBack.setVisible(false);
+            btnBack.setOnAction(e -> switchView("list"));
+
+            titleText = new Text("💬 Messaging");
+            titleText.getStyleClass().add("horizon-title");
+            
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            
+            Button close = new Button("×");
+            close.getStyleClass().add("horizon-close");
+            close.setOnAction(e -> {
+                panel.setVisible(false);
+            });
+            
+            header.getChildren().addAll(btnBack, titleText, spacer, close);
+
+            viewContainer = new StackPane();
+            VBox.setVgrow(viewContainer, Priority.ALWAYS);
+
+            listContainer = createListView();
+            chatContainer = createChatView();
+            selectionContainer = createSelectionView();
+
+            viewContainer.getChildren().addAll(listContainer, chatContainer, selectionContainer);
+            panel.getChildren().addAll(header, viewContainer);
+
+            switchView("list");
+            
+            // Real-time socket integration
+            initSocket();
+        }
+
+        private void initSocket() {
+            if (currentUser == null) return;
+            
+            MessagingSocketClient client = MessagingSocketClient.getInstance();
+            if (!client.isConnected()) {
+                client.connect(currentUser.getIdUser());
+            }
+            
+            client.addMessageListener(payload -> {
+                if (payload.getType() == SocketPayload.Type.MESSAGE) {
+                    Platform.runLater(() -> {
+                        // If we are looking at the conversation list, refresh it
+                        if (listContainer.isVisible()) {
+                            loadConversations();
+                        }
+                        
+                        // If we are in the chat view and it's the current conversation, refresh messages
+                        if (chatContainer.isVisible() && currentConversation != null && 
+                            payload.getConversationId() == currentConversation.getId()) {
+                            refreshMessages();
+                        }
+                    });
+                }
+            });
+        }
+
+        public VBox getPanel() { return panel; }
+
+        private void switchView(String viewName) {
+            listContainer.setVisible("list".equals(viewName));
+            chatContainer.setVisible("chat".equals(viewName));
+            selectionContainer.setVisible("selection".equals(viewName));
+            
+            btnBack.setVisible(!"list".equals(viewName));
+            if ("list".equals(viewName)) {
+                titleText.setText("💬 Messaging");
+                loadConversations();
+            } else if ("selection".equals(viewName)) {
+                titleText.setText("👤 Select Friend");
+                loadFriends();
+            }
+        }
+
+        private VBox createListView() {
+            VBox view = new VBox(20);
+            view.setPadding(new Insets(20));
+
+            HBox actions = new HBox(10);
+            Button btnNew = new Button("👤 Message");
+            btnNew.getStyleClass().add("horizon-send");
+            btnNew.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-border-color: rgba(255,255,255,0.1); -fx-font-size: 12px; -fx-padding: 8px 12px;");
+            btnNew.setMaxWidth(Double.MAX_VALUE);
+            HBox.setHgrow(btnNew, Priority.ALWAYS);
+            btnNew.setOnAction(e -> switchView("selection"));
+
+            Button btnGroup = new Button("👥 Group");
+            btnGroup.getStyleClass().add("horizon-go-btn");
+            btnGroup.setStyle("-fx-font-size: 12px; -fx-padding: 8px 12px;");
+            btnGroup.setMaxWidth(Double.MAX_VALUE);
+            HBox.setHgrow(btnGroup, Priority.ALWAYS);
+
+            actions.getChildren().addAll(btnNew, btnGroup);
+
+            VBox scrollContent = new VBox(10);
+            ScrollPane scroll = new ScrollPane(scrollContent);
+            scroll.getStyleClass().add("horizon-scroll");
+            scroll.setFitToWidth(true);
+            VBox.setVgrow(scroll, Priority.ALWAYS);
+
+            view.getChildren().addAll(actions, scroll);
+            return view;
+        }
+
+        private void loadConversations() {
+            if (currentUser == null) return;
+            VBox scrollContent = (VBox) ((ScrollPane) listContainer.getChildren().get(1)).getContent();
+            scrollContent.getChildren().clear();
+            
+            List<Conversation> convs = messagingService.findUserConversations(currentUser.getIdUser());
+            if (convs.isEmpty()) {
+                Label empty = new Label("No active conversations.");
+                empty.getStyleClass().add("conv-last");
+                empty.setPadding(new Insets(40));
+                scrollContent.getChildren().add(empty);
+                return;
+            }
+
+            for (Conversation c : convs) {
+                HBox item = new HBox(12);
+                item.getStyleClass().add("conv-item");
+                item.setAlignment(Pos.CENTER_LEFT);
+                
+                String name = c.getName();
+                String avatarUrl = null;
+                
+                if (!c.isGroup()) {
+                    List<Participant> parts = messagingService.findConversationParticipants(c.getId());
+                    for (Participant p : parts) {
+                        if (p.getUserId() != currentUser.getIdUser()) {
+                            Optional<User> u = userService.findById(p.getUserId());
+                            if (u.isPresent()) {
+                                name = u.get().getFirstName() + " " + u.get().getLastName();
+                                avatarUrl = profileService.findOneByUserId(u.get().getIdUser()).map(Profile::getAvatar).orElse(null);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                StackPane avatarFrame = createAvatarFrame(avatarUrl, c.isGroup());
+                
+                VBox info = new VBox(2);
+                Label lblName = new Label(name);
+                lblName.getStyleClass().add("conv-name");
+                
+                Optional<Message> last = messagingService.findLastMessage(c.getId());
+                Label lblLast = new Label(last.map(m -> (m.getSenderId() == currentUser.getIdUser() ? "You: " : "") + m.getContent()).orElse("New secure channel"));
+                lblLast.getStyleClass().add("conv-last");
+                lblLast.setMaxWidth(280);
+                
+                info.getChildren().addAll(lblName, lblLast);
+                item.getChildren().addAll(avatarFrame, info);
+                
+                String finalName = name;
+                item.setOnMouseClicked(e -> openConversation(c, finalName));
+                scrollContent.getChildren().add(item);
+            }
+        }
+
+        private StackPane createAvatarFrame(String url, boolean isGroup) {
+            StackPane frame = new StackPane();
+            frame.getStyleClass().add("conv-avatar");
+            
+            if (isGroup) {
+                Label icon = new Label("👥");
+                icon.setStyle("-fx-font-size: 20px;");
+                frame.getChildren().add(icon);
+            } else if (url != null && !url.isEmpty()) {
+                try {
+                    // Convert relative path to absolute file URL for JavaFX
+                    File file = new File(url);
+                    String fileUrl = file.toURI().toString();
+                    
+                    ImageView img = new ImageView(new Image(fileUrl, true));
+                    img.setFitWidth(48);
+                    img.setFitHeight(48);
+                    Circle clip = new Circle(24, 24, 24);
+                    img.setClip(clip);
+                    frame.getChildren().add(img);
+                } catch (Exception e) {
+                    Label lbl = new Label("👤");
+                    lbl.setStyle("-fx-text-fill: rgba(255,255,255,0.2);");
+                    frame.getChildren().add(lbl);
+                }
+            } else {
+                Label lbl = new Label("👤");
+                lbl.setStyle("-fx-text-fill: rgba(255,255,255,0.2);");
+                frame.getChildren().add(lbl);
+            }
+            return frame;
+        }
+
+        private VBox createChatView() {
+            VBox view = new VBox(15);
+            view.setPadding(new Insets(0, 20, 20, 20));
+
+            VBox messagesBox = new VBox(14);
+            ScrollPane scroll = new ScrollPane(messagesBox);
+            scroll.getStyleClass().add("horizon-scroll");
+            scroll.setFitToWidth(true);
+            VBox.setVgrow(scroll, Priority.ALWAYS);
+
+            HBox inputArea = new HBox(10);
+            inputArea.getStyleClass().add("horizon-input-row");
+            TextField input = new TextField();
+            input.getStyleClass().add("horizon-input");
+            input.setPromptText("Type a message...");
+            HBox.setHgrow(input, Priority.ALWAYS);
+            
+            Button btnSend = new Button("▶");
+            btnSend.getStyleClass().add("horizon-send");
+            
+            inputArea.getChildren().addAll(input, btnSend);
+            
+            Runnable sendAction = () -> {
+                String txt = input.getText().trim();
+                if (txt.isEmpty()) return;
+                
+                int resultId = messagingService.sendMessage(currentUser.getIdUser(), txt, 
+                    currentConversation != null ? currentConversation.getId() : null, 
+                    activeRecipientId);
+                
+                if (resultId != -1) {
+                    input.clear();
+                    if (currentConversation == null) {
+                        // We started a new conversation
+                        currentConversation = new Conversation();
+                        currentConversation.setId(resultId);
+                        activeRecipientId = null;
+                    }
+                    refreshMessages();
+                }
+            };
+            
+            btnSend.setOnAction(e -> sendAction.run());
+            input.setOnAction(e -> sendAction.run());
+
+            view.getChildren().addAll(scroll, inputArea);
+            return view;
+        }
+
+        private void openConversation(Conversation c, String name) {
+            currentConversation = c;
+            activeRecipientId = null;
+            titleText.setText(name);
+            switchView("chat");
+            refreshMessages();
+        }
+
+        private void refreshMessages() {
+            if (currentConversation == null) return;
+            VBox messagesBox = (VBox) ((ScrollPane) chatContainer.getChildren().get(0)).getContent();
+            List<Message> msgs = messagingService.findConversationMessages(currentConversation.getId());
+            
+            Platform.runLater(() -> {
+                messagesBox.getChildren().clear();
+                for (Message m : msgs) {
+                    boolean isMine = m.getSenderId() == currentUser.getIdUser();
+                    HBox row = new HBox(8);
+                    row.setAlignment(isMine ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+                    
+                    // Add small avatar for others in group chats or all chats
+                    if (!isMine) {
+                        String senderAvatar = profileService.findOneByUserId(m.getSenderId()).map(Profile::getAvatar).orElse(null);
+                        StackPane smallAvatar = createAvatarFrame(senderAvatar, false);
+                        smallAvatar.setPrefSize(32, 32);
+                        smallAvatar.setMinSize(32, 32);
+                        smallAvatar.setMaxSize(32, 32);
+                        // Resize image inside
+                        if (!smallAvatar.getChildren().isEmpty() && smallAvatar.getChildren().get(0) instanceof ImageView) {
+                            ImageView iv = (ImageView) smallAvatar.getChildren().get(0);
+                            iv.setFitWidth(32);
+                            iv.setFitHeight(32);
+                            ((Circle) iv.getClip()).setRadius(16);
+                            ((Circle) iv.getClip()).setCenterX(16);
+                            ((Circle) iv.getClip()).setCenterY(16);
+                        }
+                        row.getChildren().add(smallAvatar);
+                    }
+
+                    VBox bubble = new VBox();
+                    bubble.getStyleClass().add(isMine ? "msg-mine" : "msg-theirs");
+                    bubble.setMaxWidth(280);
+                    
+                    Label content = new Label(m.getContent());
+                    content.getStyleClass().add("msg-text");
+                    content.setWrapText(true);
+                    
+                    bubble.getChildren().add(content);
+                    row.getChildren().add(bubble);
+                    messagesBox.getChildren().add(row);
+                }
+                ((ScrollPane) chatContainer.getChildren().get(0)).setVvalue(1.0);
+            });
+        }
+
+        private VBox createSelectionView() {
+            VBox view = new VBox(15);
+            view.setPadding(new Insets(20));
+
+            TextField search = new TextField();
+            search.getStyleClass().add("horizon-input");
+            search.setPromptText("Search friends...");
+            search.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-padding: 12; -fx-background-radius: 12;");
+
+            VBox scrollContent = new VBox(10);
+            ScrollPane scroll = new ScrollPane(scrollContent);
+            scroll.getStyleClass().add("horizon-scroll");
+            scroll.setFitToWidth(true);
+            VBox.setVgrow(scroll, Priority.ALWAYS);
+
+            view.getChildren().addAll(search, scroll);
+            return view;
+        }
+
+        private void loadFriends() {
+            VBox scrollContent = (VBox) ((ScrollPane) selectionContainer.getChildren().get(1)).getContent();
+            scrollContent.getChildren().clear();
+            
+            List<User> friends = relationshipService.findFriends(currentUser, 0);
+            for (User f : friends) {
+                HBox card = new HBox(12);
+                card.getStyleClass().add("friend-card");
+                card.setAlignment(Pos.CENTER_LEFT);
+                
+                StackPane avatar = createAvatarFrame(profileService.findOneByUserId(f.getIdUser()).map(Profile::getAvatar).orElse(null), false);
+                Label name = new Label(f.getFirstName() + " " + f.getLastName());
+                name.getStyleClass().add("conv-name");
+                
+                card.getChildren().addAll(avatar, name);
+                card.setOnMouseClicked(e -> {
+                    currentConversation = null;
+                    activeRecipientId = f.getIdUser();
+                    titleText.setText(f.getFirstName() + " " + f.getLastName());
+                    switchView("chat");
+                    ((VBox) ((ScrollPane) chatContainer.getChildren().get(0)).getContent()).getChildren().clear();
+                });
+                scrollContent.getChildren().add(card);
+            }
+        }
+
+        // Polling removed in favor of sockets
     }
 }

@@ -1,7 +1,6 @@
 package com.syndicati.services;
 
 import com.syndicati.utils.config.EnvConfig;
-
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -9,179 +8,163 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.lang.reflect.Proxy;
 
 /**
- * Database Service - Handles database operations and connectivity
+ * Database Service - Handles database operations and connectivity with high-performance pooling and caching.
  */
 public class DatabaseService {
     
     private static DatabaseService instance;
+    private static final int POOL_SIZE = 8;
+    private static final long CACHE_TTL_MS = 30000; // 30s cache
+    
+    private final BlockingQueue<Connection> pool;
+    private final Map<String, CacheEntry> dataCache = new ConcurrentHashMap<>();
+
     private String dbUrl;
     private String dbUser;
     private String dbPassword;
     private int connectionTimeout;
-    
+
+    private static class CacheEntry {
+        final Object data;
+        final long expiry;
+        CacheEntry(Object data) {
+            this.data = data;
+            this.expiry = System.currentTimeMillis() + CACHE_TTL_MS;
+        }
+        boolean isExpired() { return System.currentTimeMillis() > expiry; }
+    }
+
     private DatabaseService() {
         // Initialize from DATABASE_URL when available.
         DbConfig cfg = parseDatabaseConfig(EnvConfig.get("DATABASE_URL"));
         this.dbUrl = cfg.jdbcUrl;
         this.dbUser = cfg.username;
         this.dbPassword = cfg.password;
-        this.connectionTimeout = 5000; // 5 seconds - longer timeout for debugging
+        this.connectionTimeout = 5000;
+        this.pool = new LinkedBlockingQueue<>(POOL_SIZE);
+        
+        // Pre-fill pool in background
+        Thread.startVirtualThread(this::initializePool);
+    }
+
+    private void initializePool() {
+        for (int i = 0; i < POOL_SIZE; i++) {
+            try {
+                Connection conn = createNewConnection();
+                if (conn != null) pool.offer(conn);
+            } catch (Exception e) {
+                System.err.println("Failed to pre-fill pool connection: " + e.getMessage());
+            }
+        }
+    }
+
+    private Connection createNewConnection() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("user", dbUser);
+        props.setProperty("password", dbPassword);
+        props.setProperty("connectTimeout", String.valueOf(connectionTimeout));
+        props.setProperty("socketTimeout", "30000"); // Longer socket timeout for queries
+        props.setProperty("autoReconnect", "true");
+        props.setProperty("useSSL", "false");
+        props.setProperty("allowPublicKeyRetrieval", "true");
+        props.setProperty("serverTimezone", "UTC");
+        props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
+        return DriverManager.getConnection(dbUrl, props);
     }
     
-    public static DatabaseService getInstance() {
+    public static synchronized DatabaseService getInstance() {
         if (instance == null) {
             instance = new DatabaseService();
         }
         return instance;
     }
     
-    /**
-     * Test database connection
-     * @return true if connection successful, false otherwise
-     */
-    public boolean testConnection() {
-        System.out.println("=== Database Connection Test ===");
-        System.out.println("URL: " + dbUrl);
-        System.out.println("User: " + dbUser);
-        System.out.println("Password: " + (dbPassword.isEmpty() ? "[empty]" : "[set]"));
-        System.out.println("Timeout: " + connectionTimeout + "ms");
-        
-        // Try multiple connection approaches
-        return testConnectionWithProperties() || 
-               testConnectionSimple() || 
-               testConnectionWithoutDatabase() ||
-               testCommonConfigurations();
-    }
-    
-    private boolean testConnectionWithProperties() {
-        System.out.println("--- Testing with full properties ---");
-        try {
-            Properties props = new Properties();
-            props.setProperty("user", dbUser);
-            props.setProperty("password", dbPassword);
-            props.setProperty("connectTimeout", String.valueOf(connectionTimeout));
-            props.setProperty("socketTimeout", String.valueOf(connectionTimeout));
-            props.setProperty("autoReconnect", "true");
-            props.setProperty("useSSL", "false");
-            props.setProperty("allowPublicKeyRetrieval", "true");
-            props.setProperty("serverTimezone", "UTC");
-            props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
-            
-            try (Connection connection = DriverManager.getConnection(dbUrl, props)) {
-                if (connection != null && !connection.isClosed()) {
-                    System.out.println("[OK] Database connection successful!");
-                    return true;
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println("[ERROR] Connection with properties failed: " + e.getMessage());
-            System.out.println("   Error Code: " + e.getErrorCode());
-            System.out.println("   SQL State: " + e.getSQLState());
-        }
-        return false;
-    }
-    
-    private boolean testConnectionSimple() {
-        System.out.println("--- Testing with simple connection ---");
-        try {
-            try (Connection connection = DriverManager.getConnection(dbUrl, dbUser, dbPassword)) {
-                if (connection != null && !connection.isClosed()) {
-                    System.out.println("[OK] Simple database connection successful!");
-                    return true;
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println("[ERROR] Simple connection failed: " + e.getMessage());
-        }
-        return false;
-    }
-    
-    private boolean testConnectionWithoutDatabase() {
-        System.out.println("--- Testing connection to MySQL server (no database) ---");
-        try {
-            String serverUrl = "jdbc:mysql://" + extractHostPort(dbUrl) + "/";
-            try (Connection connection = DriverManager.getConnection(serverUrl, dbUser, dbPassword)) {
-                if (connection != null && !connection.isClosed()) {
-                    System.out.println("[OK] MySQL server connection successful!");
-                    System.out.println("   Server is running, but configured database might not exist or be accessible");
-                    return false; // Still return false since we need the specific database
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println("[ERROR] MySQL server connection failed: " + e.getMessage());
-            System.out.println("   This suggests MySQL server is not running or not accessible");
-        }
-        return false;
-    }
-    
-    private boolean testCommonConfigurations() {
-        System.out.println("--- Using configured DATABASE_URL only (no schema fallback) ---");
-        return false;
-    }
-    
-    /**
-     * Get database connection
-     * @return Connection object or null if failed
-     */
     public Connection getConnection() {
         try {
-            Properties props = new Properties();
-            props.setProperty("user", dbUser);
-            props.setProperty("password", dbPassword);
-            props.setProperty("connectTimeout", String.valueOf(connectionTimeout));
-            props.setProperty("socketTimeout", String.valueOf(connectionTimeout));
-            props.setProperty("autoReconnect", "true");
-            props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
-            
-            return DriverManager.getConnection(dbUrl, props);
+            Connection conn = pool.poll(1, TimeUnit.SECONDS);
+            if (conn == null || conn.isClosed() || !conn.isValid(1)) {
+                if (conn != null) try { conn.close(); } catch (SQLException ignore) {}
+                conn = createNewConnection();
+            }
+            return createPooledProxy(conn);
+        } catch (Exception e) {
+            try { return createPooledProxy(createNewConnection()); } catch (Exception ex) { return null; }
+        }
+    }
+
+    private Connection createPooledProxy(final Connection physicalConn) {
+        return (Connection) Proxy.newProxyInstance(
+            Connection.class.getClassLoader(),
+            new Class<?>[]{Connection.class},
+            (proxy, method, args) -> {
+                if ("close".equals(method.getName())) {
+                    releaseConnection(physicalConn);
+                    return null;
+                }
+                return method.invoke(physicalConn, args);
+            }
+        );
+    }
+
+    public void putCache(String key, Object value) {
+        if (value != null) dataCache.put(key, new CacheEntry(value));
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T getCache(String key) {
+        CacheEntry entry = dataCache.get(key);
+        if (entry != null && !entry.isExpired()) return (T) entry.data;
+        dataCache.remove(key);
+        return null;
+    }
+
+    public void clearCache(String key) { dataCache.remove(key); }
+    public void clearAllCache() { dataCache.clear(); }
+
+    public void releaseConnection(Connection conn) {
+        if (conn == null) return;
+        try {
+            if (!conn.isClosed() && conn.isValid(1)) {
+                if (!pool.offer(conn)) {
+                    conn.close(); // Pool full
+                }
+            } else {
+                conn.close();
+            }
         } catch (SQLException e) {
-            System.out.println("Failed to get database connection: " + e.getMessage());
-            return null;
+            try { conn.close(); } catch (SQLException ignore) {}
+        }
+    }
+
+    public boolean testConnection() {
+        try (Connection connection = getConnection()) {
+            return connection != null && !connection.isClosed();
+        } catch (SQLException e) {
+            return false;
         }
     }
     
-    /**
-     * Check if database is available
-     * @return true if database is reachable, false otherwise
-     */
     public boolean isDatabaseAvailable() {
         return testConnection();
     }
     
     // Getters and setters for configuration
-    public String getDbUrl() {
-        return dbUrl;
-    }
-    
-    public void setDbUrl(String dbUrl) {
-        this.dbUrl = dbUrl;
-    }
-    
-    public String getDbUser() {
-        return dbUser;
-    }
-    
-    public void setDbUser(String dbUser) {
-        this.dbUser = dbUser;
-    }
-    
-    public String getDbPassword() {
-        return dbPassword;
-    }
-    
-    public void setDbPassword(String dbPassword) {
-        this.dbPassword = dbPassword;
-    }
-    
-    public int getConnectionTimeout() {
-        return connectionTimeout;
-    }
-    
-    public void setConnectionTimeout(int connectionTimeout) {
-        this.connectionTimeout = connectionTimeout;
-    }
+    public String getDbUrl() { return dbUrl; }
+    public void setDbUrl(String dbUrl) { this.dbUrl = dbUrl; }
+    public String getDbUser() { return dbUser; }
+    public void setDbUser(String dbUser) { this.dbUser = dbUser; }
+    public String getDbPassword() { return dbPassword; }
+    public void setDbPassword(String dbPassword) { this.dbPassword = dbPassword; }
+    public int getConnectionTimeout() { return connectionTimeout; }
+    public void setConnectionTimeout(int connectionTimeout) { this.connectionTimeout = connectionTimeout; }
 
     private static DbConfig parseDatabaseConfig(String databaseUrl) {
         String fallbackJdbc = "jdbc:mysql://127.0.0.1:3306/syndicati?serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&zeroDateTimeBehavior=CONVERT_TO_NULL";
@@ -207,9 +190,7 @@ public class DatabaseService {
             int port = uri.getPort() > 0 ? uri.getPort() : 3306;
             String path = uri.getPath() == null ? "/syndicati" : uri.getPath();
             String dbName = path.startsWith("/") ? path.substring(1) : path;
-            if (dbName.isBlank()) {
-                dbName = "syndicati";
-            }
+            if (dbName.isBlank()) dbName = "syndicati";
 
             String query = uri.getQuery();
             StringBuilder jdbc = new StringBuilder("jdbc:mysql://")
@@ -259,5 +240,3 @@ public class DatabaseService {
         }
     }
 }
-
-

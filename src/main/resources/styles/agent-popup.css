@@ -194,3 +194,76 @@
 .horizon-scroll .viewport, .horizon-log-scroll .viewport {
     -fx-background-color: transparent;
 }
+
+/* Social Messaging Enhancements */
+.conv-item {
+    -fx-padding: 12px 16px;
+    -fx-background-radius: 18px;
+    -fx-background-color: rgba(255, 255, 255, 0.02);
+    -fx-border-color: rgba(255, 255, 255, 0.05);
+    -fx-border-width: 1px;
+    -fx-cursor: hand;
+    -fx-spacing: 12px;
+}
+.conv-item:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-border-color: rgba(0, 198, 255, 0.3);
+}
+
+.conv-avatar {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1a1a1a, #0a0a0a);
+    -fx-background-radius: 14px;
+    -fx-min-width: 48px;
+    -fx-min-height: 48px;
+    -fx-max-width: 48px;
+    -fx-max-height: 48px;
+    -fx-alignment: center;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-border-width: 1px;
+    -fx-border-radius: 14px;
+}
+
+.conv-name {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 14.5px;
+}
+
+.conv-last {
+    -fx-text-fill: rgba(255, 255, 255, 0.4);
+    -fx-font-size: 12.5px;
+}
+
+.msg-mine .msg-text {
+    -fx-background-color: linear-gradient(to bottom right, #00c6ff, #0072ff);
+    -fx-text-fill: white;
+    -fx-background-radius: 20px 20px 4px 20px;
+}
+
+.msg-theirs .msg-text {
+    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-text-fill: white;
+    -fx-background-radius: 20px 20px 20px 4px;
+    -fx-border-color: rgba(255, 255, 255, 0.05);
+}
+
+.friend-card {
+    -fx-padding: 15px;
+    -fx-background-color: rgba(255, 255, 255, 0.03);
+    -fx-background-radius: 20px;
+    -fx-border-color: rgba(255, 255, 255, 0.08);
+    -fx-border-width: 1px;
+    -fx-cursor: hand;
+    -fx-alignment: center;
+    -fx-spacing: 10px;
+}
+.friend-card:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-border-color: rgba(0, 198, 255, 0.5);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+.friend-card.selected {
+    -fx-border-color: #00c6ff;
+    -fx-background-color: rgba(0, 198, 255, 0.1);
+}

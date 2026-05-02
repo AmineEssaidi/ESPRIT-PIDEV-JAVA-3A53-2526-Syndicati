@@ -10,7 +10,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.StackPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.web.WebEngine;
@@ -18,7 +18,7 @@ import javafx.scene.web.WebView;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
-import netscape.javascript.JSObject;
+// Removed netscape.javascript.JSObject to avoid deprecation in Java 24+
 
 import java.io.File;
 import java.nio.file.Files;
@@ -27,9 +27,10 @@ import java.nio.file.Path;
 /**
  * Premium hCaptcha Component using a Modal Popup for the challenge.
  */
+@SuppressWarnings("all")
 public class HCaptchaComponent {
     private final HCaptchaService hcaptchaService;
-    private StackPane container;
+    private VBox container;
     private volatile String captchaToken = "";
     private HCaptchaLocalServer localServer;
     private volatile boolean verified = false;
@@ -40,13 +41,59 @@ public class HCaptchaComponent {
     private double xOffset = 0;
     private double yOffset = 0;
 
+    private WebView modalWebView;
+    private WebEngine modalEngine;
+    private boolean modalInitialized = false;
+
     public HCaptchaComponent() {
         this.hcaptchaService = new HCaptchaService();
         initializeComponent();
+        // Proactively initialize the WebView and local server on a background thread
+        Platform.runLater(this::preInitializeModal);
+    }
+
+    private void preInitializeModal() {
+        if (modalInitialized) return;
+
+        modalWebView = new WebView();
+        modalWebView.setPrefSize(500, 680);
+        modalWebView.setPageFill(Color.TRANSPARENT);
+        VBox.setVgrow(modalWebView, Priority.ALWAYS);
+        modalEngine = modalWebView.getEngine();
+
+        try {
+            Path tempDir = Files.createTempDirectory("syndicati-captcha-");
+            modalEngine.setUserDataDirectory(tempDir.toFile());
+        } catch (Exception e) {}
+
+        // Use a future-proof Alert-based bridge instead of the deprecated JSObject
+        modalEngine.setOnAlert(event -> {
+            String data = event.getData();
+            if (data == null) return;
+
+            if (data.startsWith("captcha:verified:")) {
+                setCaptchaToken(data.substring(17));
+                setVerified(true);
+            } else if (data.startsWith("captcha:log:")) {
+                log(data.substring(12));
+            }
+        });
+
+        try {
+            if (localServer == null) {
+                localServer = new HCaptchaLocalServer(buildHCaptchaHtml());
+                localServer.start();
+            }
+            modalEngine.load(localServer.getUrl());
+            modalInitialized = true;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     private void initializeComponent() {
-        container = new StackPane();
+        container = new VBox();
+        container.setSpacing(0);
         container.setAlignment(Pos.CENTER);
         container.setPrefHeight(60);
         container.setMaxWidth(350);
@@ -74,73 +121,23 @@ public class HCaptchaComponent {
     }
 
     private void openCaptchaModal() {
-        if (verified) return;
-
-        currentModal = new Stage();
-        currentModal.initModality(Modality.APPLICATION_MODAL);
-        currentModal.initStyle(StageStyle.TRANSPARENT);
-        currentModal.setTitle("Security Verification");
-
-        WebView modalWebView = new WebView();
-        modalWebView.setPrefSize(420, 520);
-        modalWebView.setPageFill(Color.TRANSPARENT);
-        WebEngine modalEngine = modalWebView.getEngine();
+        if (verified || modalWebView == null) return;
         
-        // Unique user data dir for this instance
-        try {
-            Path tempDir = Files.createTempDirectory("syndicati-captcha-");
-            modalEngine.setUserDataDirectory(tempDir.toFile());
-        } catch (Exception e) {}
-
-        // Setup bridge for the modal
-        modalEngine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
-            if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
-                JSObject window = (JSObject) modalEngine.executeScript("window");
-                window.setMember("java", this); // Use 'this' directly for reliability
-            }
+        Platform.runLater(() -> {
+            // Swap the button for the actual hCaptcha WebView
+            container.getChildren().clear();
+            
+            // Remove constraints that were meant for the tiny "Verify" button
+            container.setPrefHeight(Region.USE_COMPUTED_SIZE);
+            container.setMaxHeight(Double.MAX_VALUE);
+            container.setPrefWidth(Region.USE_COMPUTED_SIZE);
+            container.setMaxWidth(Double.MAX_VALUE);
+            
+            container.getChildren().add(modalWebView);
+            
+            // Ensure the panel is open in the main view
+            com.syndicati.views.frontend.login.LoginView.getInstance().openCaptchaPanel();
         });
-
-        try {
-            if (localServer == null) {
-                localServer = new HCaptchaLocalServer(buildHCaptchaHtml());
-                localServer.start();
-            }
-            modalEngine.load(localServer.getUrl());
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-
-        // Header with close button
-        HBox header = new HBox();
-        header.setAlignment(Pos.CENTER_RIGHT);
-        header.setPadding(new Insets(10, 10, 0, 10));
-        Button closeBtn = new Button("✕");
-        closeBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 16px; -fx-cursor: hand;");
-        closeBtn.setOnAction(e -> currentModal.close());
-        header.getChildren().add(closeBtn);
-
-        VBox root = new VBox(header, modalWebView);
-        root.setStyle("-fx-background-color: transparent;"); 
-        
-        // Use a StackPane to center the hCaptcha perfectly
-        StackPane rootWrapper = new StackPane(root);
-        rootWrapper.setStyle("-fx-background-color: transparent;"); // Fully invisible
-        rootWrapper.setPadding(new Insets(10));
-        
-        // Make draggable
-        rootWrapper.setOnMousePressed(event -> {
-            xOffset = event.getSceneX();
-            yOffset = event.getSceneY();
-        });
-        rootWrapper.setOnMouseDragged(event -> {
-            currentModal.setX(event.getScreenX() - xOffset);
-            currentModal.setY(event.getScreenY() - yOffset);
-        });
-
-        Scene scene = new Scene(rootWrapper);
-        scene.setFill(Color.TRANSPARENT);
-        currentModal.setScene(scene);
-        currentModal.show();
     }
 
     private void showVerifiedStatus() {
@@ -170,9 +167,7 @@ public class HCaptchaComponent {
         if (v) {
             this.verified = true;
             Platform.runLater(() -> {
-                if (currentModal != null) {
-                    currentModal.close();
-                }
+                com.syndicati.views.frontend.login.LoginView.getInstance().closeCaptchaPanel();
                 showVerifiedStatus();
                 if (onVerified != null) {
                     onVerified.run();
@@ -204,6 +199,7 @@ public class HCaptchaComponent {
             justify-content: center;
             align-items: center;
             height: 100vh;
+            min-height: 600px;
         }
         #captcha-target {
             background: transparent !important;
@@ -215,13 +211,11 @@ public class HCaptchaComponent {
     <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
     <script>
         function onCaptchaSolved(token) {
-            if (window.java) {
-                window.java.setCaptchaToken(token);
-                window.java.setVerified(true);
-            }
+            // Use Alert-based messaging bridge (future-proof replacement for window.java)
+            alert("captcha:verified:" + token);
         }
         function onCaptchaError() {
-            if (window.java) window.java.log('hCaptcha error');
+            alert("captcha:log:hCaptcha error");
         }
         function render() {
             if (!window.hcaptcha) { setTimeout(render, 500); return; }
@@ -239,7 +233,7 @@ public class HCaptchaComponent {
 """.replace("HCAPTCHA_SITE_KEY", siteKey);
     }
 
-    public StackPane getContainer() {
+    public VBox getContainer() {
         return container;
     }
 

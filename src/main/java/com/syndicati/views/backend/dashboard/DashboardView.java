@@ -92,19 +92,21 @@ public class DashboardView implements ViewInterface {
     }
 
     private void refreshAccentStyling() {
-        String section = activeSection;
-        sectionButtons.clear();
-
-        root.getChildren().clear();
-        VBox sidebar  = DashboardShell.buildSidebar(this);
-        sidebar.setPrefWidth(sidebarWidth()); sidebar.setMinWidth(sidebarWidth()); sidebar.setMaxWidth(sidebarWidth());
-        VBox mainArea = DashboardShell.buildMainArea(this);
-        HBox.setHgrow(mainArea, Priority.ALWAYS);
-        root.getChildren().addAll(sidebar, mainArea);
-
-        activeSection = section;
-        contentArea.getChildren().setAll(buildSection(section));
-        sectionButtons.forEach((k, b) -> styleSidebarItem(b, k.equals(section)));
+        // Optimization: Do NOT clear root. Re-apply styles instead.
+        root.setStyle(
+            "-fx-background-color: " + (
+                isDark()
+                    ? "linear-gradient(to bottom right, #070707, #030303 55%, #000000 100%)"
+                    : "linear-gradient(to bottom right, #f7f7f7, #f2f2f2 55%, #ececec 100%)"
+            ) + ";"
+        );
+        
+        sectionButtons.forEach((k, b) -> styleSidebarItem(b, k.equals(activeSection)));
+        
+        // Only refresh the content if necessary, but try to preserve state
+        if (contentArea != null) {
+            contentArea.getChildren().setAll(buildSection(activeSection));
+        }
     }
 
     private ThemeManager theme() { return ThemeManager.getInstance(); }
@@ -185,7 +187,7 @@ public class DashboardView implements ViewInterface {
             "-fx-border-width:1;" +
             "-fx-border-radius:24px;" +
             "-fx-background-radius:24px;" +
-            "-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.28)" : "rgba(15,23,42,0.12)") + ",26,0,0,8);";
+            "-fx-effect:dropshadow(one-pass-box," + (isDark() ? "rgba(0,0,0,0.28)" : "rgba(15,23,42,0.12)") + ",26,0,0,8);";
     }
 
     private void setupLayout() {
@@ -294,7 +296,7 @@ public class DashboardView implements ViewInterface {
 
         btn.setOnMouseEntered(_ -> {
             if (!section.equals(activeSection)) {
-                btn.setStyle("-fx-background-color:" + (isDark() ? accentRgba(0.15) : "rgba(15,23,42,0.08)") + ";-fx-background-radius:12px;-fx-cursor:hand;-fx-border-color:" + (isDark() ? accentRgba(0.22) : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:12px;-fx-effect:dropshadow(gaussian," + (isDark() ? "rgba(0,0,0,0.3)" : "rgba(15,23,42,0.12)") + ",16,0,0,4);");
+                btn.setStyle("-fx-background-color:" + (isDark() ? accentRgba(0.15) : "rgba(15,23,42,0.08)") + ";-fx-background-radius:12px;-fx-cursor:hand;-fx-border-color:" + (isDark() ? accentRgba(0.22) : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:12px;-fx-effect:dropshadow(one-pass-box," + (isDark() ? "rgba(0,0,0,0.3)" : "rgba(15,23,42,0.12)") + ",16,0,0,4);");
                 iconBox.setStyle("-fx-background-color:" + (isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.10)") + ";-fx-background-radius:10px;");
              }
         });
@@ -312,7 +314,7 @@ public class DashboardView implements ViewInterface {
                 "-fx-background-color:" + accentGradient() + ";" +
                 "-fx-background-radius:12px;" +
                 "-fx-cursor:hand;" +
-                "-fx-effect:dropshadow(gaussian," + accentRgba(0.5) + ",20,0.3,0,6);"
+                "-fx-effect:dropshadow(one-pass-box," + accentRgba(0.5) + ",20,0.3,0,6);"
             );
             // Re-style icon box inside active button to match web active item
             if (b.getGraphic() instanceof HBox inner) {
@@ -444,18 +446,37 @@ public class DashboardView implements ViewInterface {
     private VBox buildGeneralOverview() {
         VBox v = new VBox(20); v.setFillWidth(true);
         HBox stats = new HBox(16); stats.setFillHeight(true);
-        Map<String, Integer> heartbeat = dashboardAdminService.activityHeartbeat();
+        
+        // Show loading skeleton
         addStatCards(stats,
-            new String[]{"USR","OK","ACT","PLS"},
-            new String[]{"Total Residents","Active Today","Interactions Today","Community Pulse"},
-            new String[]{
-                String.valueOf(heartbeat.getOrDefault("total_users", 0)),
-                String.valueOf(heartbeat.getOrDefault("active_today", 0)),
-                String.valueOf(heartbeat.getOrDefault("interactions_today", 0)),
-                String.valueOf(heartbeat.getOrDefault("active_week", 0))
-            },
-            new String[]{"#a78bfa","#34d399","#60a5fa","#fbbf24"}
+            new String[]{"...","...","...","..."},
+            new String[]{"Loading...","Loading...","Loading...","Loading..."},
+            new String[]{"0","0","0","0"},
+            new String[]{"#808080","#808080","#808080","#808080"}
         );
+
+        Thread.startVirtualThread(() -> {
+            try {
+                Map<String, Integer> heartbeat = dashboardAdminService.activityHeartbeat();
+                javafx.application.Platform.runLater(() -> {
+                    stats.getChildren().clear();
+                    addStatCards(stats,
+                        new String[]{"USR","OK","ACT","PLS"},
+                        new String[]{"Total Residents","Active Today","Interactions Today","Community Pulse"},
+                        new String[]{
+                            String.valueOf(heartbeat.getOrDefault("total_users", 0)),
+                            String.valueOf(heartbeat.getOrDefault("active_today", 0)),
+                            String.valueOf(heartbeat.getOrDefault("interactions_today", 0)),
+                            String.valueOf(heartbeat.getOrDefault("active_week", 0))
+                        },
+                        new String[]{"#a78bfa","#34d399","#60a5fa","#fbbf24"}
+                    );
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         HBox grid = new HBox(16); grid.setFillHeight(true);
         VBox chart = buildActivityChart(); HBox.setHgrow(chart, Priority.ALWAYS);
         VBox topU  = buildTopUsers(); topU.setPrefWidth(290); topU.setMinWidth(290); topU.setMaxWidth(290);
@@ -466,69 +487,122 @@ public class DashboardView implements ViewInterface {
 
     private VBox buildEngagementContent() {
         VBox rows = new VBox(16);
-        List<String[]> pages = dashboardAdminService.topPages();
-        if (pages.isEmpty()) {
-            pages = new ArrayList<>();
-            pages.add(new String[]{"/frontend/home", "284"});
-            pages.add(new String[]{"/frontend/forum", "211"});
-            pages.add(new String[]{"/frontend/profile", "183"});
-        }
-        for (int i = 0; i < pages.size(); i++) {
-            String[] p = pages.get(i);
-            rows.getChildren().add(buildRowCard(i == 0 ? "#a78bfa" : i == 1 ? "#60a5fa" : "#34d399", p[0], p[1] + " views", String.valueOf(i + 1), 10));
-        }
+        rows.getChildren().add(new Label("Calculating engagement..."));
+
+        Thread.startVirtualThread(() -> {
+            try {
+                List<String[]> pages = dashboardAdminService.topPages();
+                javafx.application.Platform.runLater(() -> {
+                    rows.getChildren().clear();
+                    List<String[]> finalPages = pages;
+                    if (finalPages.isEmpty()) {
+                        finalPages = new ArrayList<>();
+                        finalPages.add(new String[]{"/frontend/home", "284"});
+                        finalPages.add(new String[]{"/frontend/forum", "211"});
+                        finalPages.add(new String[]{"/frontend/profile", "183"});
+                    }
+                    for (int i = 0; i < finalPages.size(); i++) {
+                        String[] p = finalPages.get(i);
+                        rows.getChildren().add(buildRowCard(i == 0 ? "#a78bfa" : i == 1 ? "#60a5fa" : "#34d399", p[0], p[1] + " views", String.valueOf(i + 1), 10));
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         VBox card = sectionCard();
         card.getChildren().addAll(t("Top Pages - Most Visited Routes", boldFont(), FontWeight.BOLD, 18), rows);
 
         VBox arrivals = sectionCard();
         arrivals.getChildren().add(t("Recent Arrivals", boldFont(), FontWeight.BOLD, 18));
-        List<User> recentUsers = dashboardAdminService.recentSignups(5);
-        if (recentUsers.isEmpty()) {
-            arrivals.getChildren().add(buildRowCard("#60a5fa", "No recent signups", "-", null, 8));
-        } else {
-            for (User u : recentUsers) {
-                String fullName = (safe(u.getFirstName()) + " " + safe(u.getLastName())).trim();
-                String role = safe(u.getRoleUser());
-                String joined = u.getCreatedAt() == null ? "-" : u.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd"));
-                arrivals.getChildren().add(buildRowCard("#60a5fa", fullName + " • " + role, joined, null, 8));
+        
+        VBox arrivalRows = new VBox(8);
+        arrivalRows.getChildren().add(new Label("Fetching recent users..."));
+        arrivals.getChildren().add(arrivalRows);
+
+        Thread.startVirtualThread(() -> {
+            try {
+                List<User> recentUsers = dashboardAdminService.recentSignups(5);
+                javafx.application.Platform.runLater(() -> {
+                    arrivalRows.getChildren().clear();
+                    if (recentUsers.isEmpty()) {
+                        arrivalRows.getChildren().add(buildRowCard("#60a5fa", "No recent signups", "-", null, 8));
+                    } else {
+                        for (User u : recentUsers) {
+                            String fullName = (safe(u.getFirstName()) + " " + safe(u.getLastName())).trim();
+                            String role = safe(u.getRoleUser());
+                            String joined = u.getCreatedAt() == null ? "-" : u.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd"));
+                            arrivalRows.getChildren().add(buildRowCard("#60a5fa", fullName + " • " + role, joined, null, 8));
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        }
+        });
 
         return new VBox(16, card, arrivals);
     }
 
     private VBox buildSystemContent() {
         VBox logs = new VBox(8);
-        List<com.syndicati.models.log.AppEventLog> recent = dashboardAdminService.recentActivityLogs(5);
-        if (recent.isEmpty()) {
-            for (String[] ev : new String[][]{
-                {"#34d399","Mar 12 09:14","User admin logged in"},
-                {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
-                {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"}
-            }) {
-                logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
+        logs.getChildren().add(new Label("Streaming system logs..."));
+
+        Thread.startVirtualThread(() -> {
+            try {
+                List<com.syndicati.models.log.AppEventLog> recent = dashboardAdminService.recentActivityLogs(5);
+                javafx.application.Platform.runLater(() -> {
+                    logs.getChildren().clear();
+                    if (recent.isEmpty()) {
+                        for (String[] ev : new String[][]{
+                            {"#34d399","Mar 12 09:14","User admin logged in"},
+                            {"#fbbf24","Mar 12 08:52","Scheduled email batch: 58 sent"},
+                            {"#34d399","Mar 12 07:30","DB backup completed (248 MB)"}
+                        }) {
+                            logs.getChildren().add(buildRowCard(ev[0], ev[2], ev[1], null, 8));
+                        }
+                    } else {
+                        for (com.syndicati.models.log.AppEventLog ev : recent) {
+                            String actor = ev.getUser() == null ? "Anonymous" : safe(ev.getUser().getFirstName()) + " " + safe(ev.getUser().getLastName());
+                            String label = safe(ev.getEventType()) + " • " + safe(ev.getLevel()) + " • " + safe(ev.getOutcome()) + " • " + safe(ev.getEntityType()) + " • " + actor.trim();
+                            String when = ev.getCreatedAt() == null ? "-" : ev.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd HH:mm"));
+                            logs.getChildren().add(buildRowCard("#34d399", label, when, null, 8));
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        } else {
-            for (com.syndicati.models.log.AppEventLog ev : recent) {
-                String actor = ev.getUser() == null ? "Anonymous" : safe(ev.getUser().getFirstName()) + " " + safe(ev.getUser().getLastName());
-                String label = safe(ev.getEventType()) + " • " + safe(ev.getLevel()) + " • " + safe(ev.getOutcome()) + " • " + safe(ev.getEntityType()) + " • " + actor.trim();
-                String when = ev.getCreatedAt() == null ? "-" : ev.getCreatedAt().format(DateTimeFormatter.ofPattern("MMM dd HH:mm"));
-                logs.getChildren().add(buildRowCard("#34d399", label, when, null, 8));
-            }
-        }
+        });
+
         VBox logCard = sectionCard();
         logCard.getChildren().addAll(t("Live Navigation Log", boldFont(), FontWeight.BOLD, 18), logs);
 
         VBox deviceCard = sectionCard();
         deviceCard.getChildren().add(t("System Access (Last 30 Days)", boldFont(), FontWeight.BOLD, 18));
-        List<String[]> deviceRows = dashboardAdminService.deviceBreakdown();
-        if (deviceRows.isEmpty()) {
-            deviceCard.getChildren().add(buildRowCard("#34d399", "No device data", "-", null, 8));
-        } else {
-            for (String[] row : deviceRows) {
-                deviceCard.getChildren().add(buildRowCard("#34d399", safe(row[0]), safe(row[1]) + "%", null, 8));
+        
+        VBox deviceRowsContainer = new VBox(8);
+        deviceRowsContainer.getChildren().add(new Label("Analyzing device data..."));
+        deviceCard.getChildren().add(deviceRowsContainer);
+
+        Thread.startVirtualThread(() -> {
+            try {
+                List<String[]> deviceRows = dashboardAdminService.deviceBreakdown();
+                javafx.application.Platform.runLater(() -> {
+                    deviceRowsContainer.getChildren().clear();
+                    if (deviceRows.isEmpty()) {
+                        deviceRowsContainer.getChildren().add(buildRowCard("#34d399", "No device data", "-", null, 8));
+                    } else {
+                        for (String[] row : deviceRows) {
+                            deviceRowsContainer.getChildren().add(buildRowCard("#34d399", safe(row[0]), safe(row[1]) + "%", null, 8));
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        }
+        });
 
         HBox grid = new HBox(16, logCard, deviceCard);
         HBox.setHgrow(logCard, Priority.ALWAYS);
@@ -1567,8 +1641,20 @@ public class DashboardView implements ViewInterface {
                 for (int c = 0; c < rowData.length; c++) {
                     Text tx = t(rowData[c], lightFont(), FontWeight.NORMAL, 14);
                     tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
+                    
+                    // CRITICAL FIX: Ensure text stays within column bounds
+                    tx.setWrappingWidth(140); 
+                    
                     HBox cb = new HBox(tx);
+                    cb.setMinWidth(100);
+                    cb.setPrefWidth(160);
+                    cb.setMaxWidth(200);
+                    
+                    // Force the text to follow the container width
+                    tx.wrappingWidthProperty().bind(cb.widthProperty().subtract(24)); 
+                    
                     cb.setPadding(new Insets(10,12,10,12));
+                    cb.setAlignment(Pos.CENTER_LEFT);
                     cb.setStyle("-fx-background-color:" + bg + ";");
                     cb.setOnMouseEntered(_ -> cb.setStyle("-fx-background-color:" + accentRgba(0.07) + ";"));
                     cb.setOnMouseExited(_ -> cb.setStyle("-fx-background-color:" + bg + ";"));
@@ -2581,7 +2667,7 @@ public class DashboardView implements ViewInterface {
             "-fx-focus-color:transparent;" +
             "-fx-faint-focus-color:transparent;";
         if (hover || focus) {
-            base += "-fx-effect:dropshadow(gaussian," + (focus ? accentRgba(0.25) : "rgba(0,0,0,0.15)") + "," + (focus ? "12" : "8") + ",0,0," + (focus ? "6" : "4") + ");";
+            base += "-fx-effect:dropshadow(one-pass-box," + (focus ? accentRgba(0.25) : "rgba(0,0,0,0.15)") + "," + (focus ? "12" : "8") + ",0,0," + (focus ? "6" : "4") + ");";
         }
         return base;
     }
@@ -2787,7 +2873,7 @@ public class DashboardView implements ViewInterface {
             100
         );
         DropShadow pillShadow = new DropShadow();
-        pillShadow.setBlurType(BlurType.GAUSSIAN);
+        pillShadow.setBlurType(BlurType.ONE_PASS_BOX);
         pillShadow.setColor(Color.web(isDark() ? "rgba(0,0,0,0.35)" : "rgba(15,23,42,0.10)"));
         pillShadow.setRadius(20);
         pillShadow.setOffsetX(0);

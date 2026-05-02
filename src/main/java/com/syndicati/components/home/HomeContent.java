@@ -792,7 +792,7 @@ public class HomeContent {
 
     private void addShadow(javafx.scene.Node node, double radius, double opacity) {
         DropShadow ds = new DropShadow();
-        ds.setBlurType(BlurType.GAUSSIAN);
+        ds.setBlurType(BlurType.ONE_PASS_BOX);
         ds.setColor(Color.web(theme.getAccentHex()).deriveColor(0, 1, 1.15, opacity));
         ds.setRadius(radius);
         ds.setOffsetX(0);
@@ -802,7 +802,7 @@ public class HomeContent {
 
     private void applyGlow(javafx.scene.Node node, double radius, double opacity) {
         DropShadow glow = new DropShadow();
-        glow.setBlurType(BlurType.GAUSSIAN);
+        glow.setBlurType(BlurType.ONE_PASS_BOX);
         glow.setColor(Color.web(theme.getAccentHex()).deriveColor(0, 1, 1.2, opacity));
         glow.setRadius(radius);
         glow.setOffsetX(0);

@@ -104,11 +104,66 @@ public class ProfileView implements ViewInterface {
         this.tm = ThemeManager.getInstance();
         this.root = new VBox();
         this.insightFaceService = InsightFaceService.getInstance();
-        this.insightFaceService.initialize();
+        
+        // Try to pull from cache immediately for instant render
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            new ProfileController().findOneByUserId(currentUser.getIdUser()).ifPresent(p -> {
+                SessionManager.getInstance().setCurrentProfile(p);
+            });
+        }
+        
         build();
+        // Still run async to catch any fresh updates or heavy circle data
+        Thread.startVirtualThread(this::loadDataAsync);
+    }
+
+    private void loadDataAsync() {
+        // Fetch all heavy data on a virtual thread
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        if (currentUser == null) return;
+
+        // Fetch Profile
+        new ProfileController().findOneByUserId(currentUser.getIdUser()).ifPresent(p -> {
+            Profile current = SessionManager.getInstance().getCurrentProfile();
+            if (current == null || !current.getSettingsJson().equals(p.getSettingsJson())) {
+                SessionManager.getInstance().setCurrentProfile(p);
+            }
+        });
+
+        // Fetch Standing
+        new UserStandingRepository().findByUserId(currentUser.getIdUser()).ifPresent(s -> {
+            SessionManager.getInstance().setCurrentStanding(s);
+        });
+
+        // Fetch Circle Data (Relationship counts and lists)
+        UserRelationshipController rc = new UserRelationshipController();
+        int friendCount = rc.countFriends(currentUser);
+        int pendingCount = rc.countPendingRequests(currentUser);
+        List<User> friends = rc.findFriends(currentUser, 24);
+        List<UserRelationship> pending = rc.findPendingRequestsFor(currentUser);
+
+        // Update UI once all data is ready
+        Platform.runLater(() -> {
+            // Update the UI components if they are already built
+            refreshUIWithData();
+        });
+    }
+
+    private void refreshUIWithData() {
+        // Rebuild or update components that depend on DB data
+        build(); // Re-run build with session data populated
     }
 
     private void build() {
+        if (root.getChildren().size() > 0 && SessionManager.getInstance().getCurrentProfile() == null) {
+            // Already built a skeleton, wait for data
+            return;
+        }
+        root.getChildren().clear();
+        mainPages.clear();
+        mainNavButtons.clear();
+        
         VBox content = new VBox(26);
         content.setAlignment(Pos.TOP_CENTER);
         content.setPadding(new Insets(24, 0, 42, 0));
@@ -214,12 +269,6 @@ public class ProfileView implements ViewInterface {
     private VBox createHeroCard() {
         User currentUser = SessionManager.getInstance().getCurrentUser();
         Profile currentProfile = SessionManager.getInstance().getCurrentProfile();
-        if (currentProfile == null && currentUser != null && currentUser.getIdUser() != null) {
-            currentProfile = new ProfileController().findOneByUserId(currentUser.getIdUser()).orElse(null);
-            if (currentProfile != null) {
-                SessionManager.getInstance().setCurrentProfile(currentProfile);
-            }
-        }
         
         VBox card = new VBox(0);
         card.setMaxWidth(1800);
@@ -490,14 +539,7 @@ public class ProfileView implements ViewInterface {
 
         User currentUser = SessionManager.getInstance().getCurrentUser();
         UserStanding standing = SessionManager.getInstance().getCurrentStanding();
-        if ((standing == null || standing.getUserId() == null) && currentUser != null && currentUser.getIdUser() != null) {
-            UserStandingRepository repo = new UserStandingRepository();
-            Optional<UserStanding> opt = repo.findByUserId(currentUser.getIdUser());
-            standing = opt.orElse(null);
-            if (standing != null) {
-                SessionManager.getInstance().setCurrentStanding(standing);
-            }
-        }
+        // Removed blocking DB lookup from UI thread
 
         int levelValue = standing != null ? standing.getLevel() : 1;
         int pointsValue = standing != null ? standing.getPoints() : 0;
@@ -581,6 +623,7 @@ public class ProfileView implements ViewInterface {
 
         UserRelationshipController relationshipController = new UserRelationshipController();
         UserController userController = new UserController();
+        // Removed blocking DB calls (refreshCircle[0].run() call at bottom)
 
         Text friendsBadge = badge("0 FRIENDS");
         Text pendingBadge = badge("0 PENDING");
@@ -774,7 +817,10 @@ public class ProfileView implements ViewInterface {
             animateCircleFace(friendsGrid, pendingList);
         });
 
-        refreshCircle[0].run();
+        // Initial refresh only if we already have some data, otherwise wait for async
+        if (SessionManager.getInstance().getCurrentStanding() != null) {
+            refreshCircle[0].run();
+        }
         refreshSearch[0].run();
 
         search.getChildren().addAll(searchTitle, searchSub, searchField, searchResults);

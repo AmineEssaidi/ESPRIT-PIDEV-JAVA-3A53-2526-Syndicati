@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -164,7 +165,25 @@ public class ForumPageView implements ViewInterface {
 
         root.getChildren().addAll(buildHero(), buildSplit());
         showFace(readFace);
-        loadCategory("General");
+        
+        // Try to pull from cache immediately
+        List<Publication> cached = publications.publicationsByCategory("General");
+        if (cached != null && !cached.isEmpty()) {
+            displayPublications(cached);
+        } else {
+            listBox.getChildren().setAll(new Label("Loading discussions..."));
+        }
+    }
+
+    public void loadDataAsync() {
+        Thread.startVirtualThread(() -> {
+            try {
+                // Fetch on background thread
+                loadCategory("General");
+            } catch (Exception e) {
+                Platform.runLater(() -> listBox.getChildren().setAll(new Label("Failed to load forum data.")));
+            }
+        });
     }
 
     @Override
@@ -776,6 +795,27 @@ public class ForumPageView implements ViewInterface {
         return side;
     }
 
+    private void displayPublications(List<Publication> items) {
+        if (items == null) return;
+        List<Publication> sorted = new ArrayList<>(items);
+        sorted.sort((a, b) -> compareDates(b.getDateCreationPub(), a.getDateCreationPub()));
+
+        Platform.runLater(() -> {
+            listBox.getChildren().clear();
+            listItemsById.clear();
+
+            if (sorted.isEmpty()) {
+                listBox.getChildren().add(emptyLabel("No publications."));
+                clearCurrent();
+                return;
+            }
+
+            for (Publication pub : sorted) {
+                listBox.getChildren().add(publicationItem(pub));
+            }
+        });
+    }
+
     private void loadCategory(String category) {
         currentFilter = category;
         updateFilterButtons();
@@ -783,26 +823,16 @@ public class ForumPageView implements ViewInterface {
         List<Publication> items = "Announcement".equals(category)
             ? publications.publicationsByCategory("Announcement")
             : publications.publicationsByCategory("General");
-        items = new ArrayList<>(items);
-        items.sort((a, b) -> compareDates(b.getDateCreationPub(), a.getDateCreationPub()));
+        
+        displayPublications(items);
 
-        listBox.getChildren().clear();
-        listItemsById.clear();
-
-        if (items.isEmpty()) {
-            listBox.getChildren().add(emptyLabel("No publications."));
-            clearCurrent();
-            return;
-        }
-
-        for (Publication pub : items) {
-            listBox.getChildren().add(publicationItem(pub));
-        }
+        List<Publication> itemsSorted = new ArrayList<>(items);
+        itemsSorted.sort((a, b) -> compareDates(b.getDateCreationPub(), a.getDateCreationPub()));
 
         Publication target = current;
         boolean found = false;
         if (target != null) {
-            for (Publication item : items) {
+            for (Publication item : itemsSorted) {
                 if (Objects.equals(item.getIdPublication(), target.getIdPublication())) {
                     found = true;
                     break;

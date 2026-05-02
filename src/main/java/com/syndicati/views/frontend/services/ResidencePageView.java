@@ -125,7 +125,7 @@ public class ResidencePageView implements ViewInterface {
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 48px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.48), 36, 0.16, 0, 10);"
+            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.48), 36, 0.16, 0, 10);"
         );
 
         Region glow = new Region();
@@ -231,7 +231,7 @@ public class ResidencePageView implements ViewInterface {
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 32px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.24), 18, 0.12, 0, 6);"
+            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.24), 18, 0.12, 0, 6);"
         );
 
         StackPane media = new StackPane();

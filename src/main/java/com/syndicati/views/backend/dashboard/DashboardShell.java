@@ -33,6 +33,8 @@ final class DashboardShell {
         VBox.setVgrow(sb, Priority.ALWAYS);
         sb.setStyle("-fx-background-color:transparent;");
         sb.setPadding(new Insets(12, 10, 12, 10));
+        sb.setCache(true);
+        sb.setCacheHint(javafx.scene.CacheHint.SPEED);
 
         VBox topPill = view.glassPill(Pos.CENTER);
         topPill.setPadding(new Insets(12, 10, 12, 10));
@@ -43,7 +45,7 @@ final class DashboardShell {
         logoMark.setStyle(
             "-fx-background-color:" + view.accentGradient() + ";" +
             "-fx-background-radius:14px;" +
-            "-fx-effect:dropshadow(gaussian," + view.accentRgba(0.45) + ",18,0.4,0,4);"
+            "-fx-effect:dropshadow(one-pass-box," + view.accentRgba(0.45) + ",18,0.4,0,4);"
         );
         Text sLetter = view.t("S", view.boldFont(), FontWeight.BOLD, 26);
         sLetter.setFill(Color.WHITE);
@@ -251,7 +253,7 @@ final class DashboardShell {
             "-fx-border-width:1;" +
             "-fx-background-radius:16px;" +
             "-fx-border-radius:16px;" +
-            "-fx-effect:dropshadow(gaussian," + (view.isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
+            "-fx-effect:dropshadow(one-pass-box," + (view.isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
         );
 
         HBox header = new HBox();
@@ -391,7 +393,7 @@ final class DashboardShell {
             "-fx-border-width:1;" +
             "-fx-background-radius:16px;" +
             "-fx-border-radius:16px;" +
-            "-fx-effect:dropshadow(gaussian," + (view.isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
+            "-fx-effect:dropshadow(one-pass-box," + (view.isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
         );
 
         HBox header = new HBox(10);
