@@ -111,9 +111,18 @@ public class ProfileView implements ViewInterface {
         this.root.setFillWidth(true);
         this.insightFaceService = InsightFaceService.getInstance();
 
-        this.root.getChildren().setAll(buildSkeleton());
-        // Always load data/content in background to ensure zero UI freeze during navigation
-        Thread.startVirtualThread(this::loadDataAsync);
+        com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+        if (sm.isProfileFresh() && sm.isCircleCacheFresh() && sm.isStandingFresh()) {
+            // Data is already pre-fetched and fresh! Build the real UI instantly.
+            // This ensures zero skeleton flash during the session recovery flow.
+            System.out.println("[ProfileView] Data is fresh, building content synchronously.");
+            this.root.getChildren().setAll(buildContent());
+        } else {
+            // Fallback to skeleton + background load
+            System.out.println("[ProfileView] Data stale or missing, showing skeleton.");
+            this.root.getChildren().setAll(buildSkeleton());
+            Thread.startVirtualThread(this::loadDataAsync);
+        }
     }
 
     /** Lightweight skeleton shown while data loads. Instant to build. */

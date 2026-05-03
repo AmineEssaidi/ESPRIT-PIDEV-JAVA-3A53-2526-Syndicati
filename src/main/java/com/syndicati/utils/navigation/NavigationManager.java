@@ -55,13 +55,13 @@ public class NavigationManager {
     }
 
     public void warmup() {
-        // Silent background warmup for data only. No view instantiation.
+        // Silent background warmup for data and heavy views.
         Thread.startVirtualThread(() -> {
             try {
                 com.syndicati.models.user.User user = SessionManager.getInstance().getCurrentUser();
                 if (user == null) return;
 
-                // Refresh data silently if not fresh
+                // 1. Refresh data silently if not fresh
                 SessionManager sm = SessionManager.getInstance();
                 if (!sm.isProfileFresh()) {
                     new com.syndicati.controllers.user.profile.ProfileController()
@@ -84,6 +84,14 @@ public class NavigationManager {
                         rc.countPendingRequests(user)
                     );
                 }
+
+                // 2. Pre-instantiate heavy views on the FX thread while the animation plays
+                javafx.application.Platform.runLater(() -> {
+                    if (profileView == null) {
+                        System.out.println("[WARMUP] Pre-instantiating ProfileView...");
+                        profileView = new com.syndicati.views.frontend.profile.ProfileView();
+                    }
+                });
             } catch (Exception ignored) {}
         });
     }

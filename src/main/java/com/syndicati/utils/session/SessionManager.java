@@ -64,11 +64,10 @@ public class SessionManager {
     public Profile getCurrentProfile() { return currentProfile; }
 
     /**
-     * Returns true if a fresh profile is already cached (fetched within the last 60s).
-     * ProfileView.loadDataAsync() uses this to skip redundant DB calls.
+     * Returns true if the profile state is fresh (explicitly fetched/checked within the last 60s).
      */
     public boolean isProfileFresh() {
-        return currentProfile != null
+        return profileFetchedAt > 0
             && (System.currentTimeMillis() - profileFetchedAt) < CIRCLE_TTL_MS;
     }
 
@@ -80,9 +79,9 @@ public class SessionManager {
 
     public UserStanding getCurrentStanding() { return currentStanding; }
 
-    /** Returns true if a fresh standing is already cached (fetched within the last 60s). */
+    /** Returns true if the standing state is fresh (explicitly fetched/checked within the last 60s). */
     public boolean isStandingFresh() {
-        return currentStanding != null
+        return standingFetchedAt > 0
             && (System.currentTimeMillis() - standingFetchedAt) < CIRCLE_TTL_MS;
     }
 

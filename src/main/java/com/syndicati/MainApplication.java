@@ -2,6 +2,7 @@ package com.syndicati;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
+import javafx.scene.Node;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
@@ -10,6 +11,10 @@ import javafx.stage.StageStyle;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.scene.text.Font;
+import javafx.animation.FadeTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.ParallelTransition;
+import javafx.util.Duration;
 import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.controllers.log.ActivityLogController;
 import com.syndicati.views.frontend.home.AdminDestinationChoiceView;
@@ -23,6 +28,8 @@ import com.syndicati.services.DiscordRPCService;
 import com.syndicati.services.observability.LogAIWorkerService;
 import com.syndicati.services.user.messaging.socket.MessagingSocketServer;
 import com.syndicati.services.InsightFaceService;
+import com.syndicati.models.user.User;
+import com.syndicati.utils.session.SessionManager;
 
 /**
  * Main JavaFX Application - Syndicati desktop client
@@ -33,7 +40,6 @@ public class MainApplication extends Application {
     private static MainApplication instance;
     private Stage primaryStage;
     private LandingPageView landingPageView;
-    private AdminDestinationChoiceView adminDestinationChoiceView;
     private LoginView loginView;
     private boolean isLoggedIn = false;
     private javafx.animation.Timeline loginChecker; // Keep reference to stop it later
@@ -52,135 +58,199 @@ public class MainApplication extends Application {
         instance = this;
         this.primaryStage = primaryStage;
         
-        // Load custom fonts once (will be cached by JavaFX)
+        // 1. Load custom fonts
         loadCustomFonts();
         
-        // Create the login view first
+        // 2. Configure Stage (CRITICAL: initStyle MUST be called before show())
+        primaryStage.setTitle("Syndicati");
+        primaryStage.initStyle(StageStyle.TRANSPARENT);
+        primaryStage.setResizable(true);
+        primaryStage.setMinWidth(1500);
+        primaryStage.setMinHeight(800);
+
+        // 3. Initialize Views
         loginView = new LoginView();
         loginView.setOnLoginSuccess(this::navigateToLandingPage);
         
-        // Set up the scene with login view - dynamic sizing with min constraints
-        Scene scene = new Scene(loginView.getRoot(), 1500, 800);
+        com.syndicati.views.frontend.auth.IntroCinematicView introView = new com.syndicati.views.frontend.auth.IntroCinematicView();
+        
+        // 4. Create Scene
+        Scene scene = new Scene(introView.getRoot(), 1500, 800);
+        scene.setFill(Color.BLACK);
         applyGlobalStyles(scene);
-        // Apply global font family to entire scene (use Light as default body font)
         if (scene.getRoot() != null) {
             appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
         }
-        
-        // Set up theme manager
-        ThemeManager themeManager = ThemeManager.getInstance();
-        themeManager.setScene(scene);
 
+        // 5. Setup Managers
+        ThemeManager.getInstance().setScene(scene);
         installWindowChromeListener();
-        applyRoundedShape(scene);
-        
-        // Start background services in parallel to keep UI responsive
-        Thread.startVirtualThread(() -> {
-            com.syndicati.utils.database.ConnectionManager connectionManager = com.syndicati.utils.database.ConnectionManager.getInstance();
-            connectionManager.startMonitoring();
-            langfuseRuntimeService.start();
-            anomalyScoringScheduler.start();
-            // Start blocking background services in a separate thread to keep UI responsive
-            Thread.startVirtualThread(() -> {
-                LogAIWorkerService.getInstance(); // Blocks for 2s to start Python worker
-                InsightFaceService.getInstance().initialize(); // Blocks up to 30s for ping retries
-                DiscordRPCService.getInstance().initialize();
-                DiscordRPCService.getInstance().updatePresence("Authentication", "Signing into Syndicati");
-                
-                // Start messaging socket server
-                MessagingSocketServer.getInstance().start();
-                
-                // Check for Auto-Login (Remember Me)
-                String savedUserId = com.syndicati.utils.shared.AppPreferences.getLocal("LOCAL_LOGGED_IN_USER_ID", null);
-                if (savedUserId != null && !savedUserId.trim().isEmpty()) {
-                    System.out.println("[AUTO-LOGIN] Checking for saved session. Found ID: " + savedUserId);
-                    try {
-                        int userId = Integer.parseInt(savedUserId.trim());
-                        com.syndicati.models.user.data.UserRepository userRepo = new com.syndicati.models.user.data.UserRepository();
-                        java.util.Optional<com.syndicati.models.user.User> userOpt = userRepo.findById(userId);
-                        
-                        if (userOpt.isPresent()) {
-                            System.out.println("[AUTO-LOGIN] User found! Prefetching profile...");
-                            com.syndicati.models.user.User user = userOpt.get();
-                            
-                            // Prefetch profile so the app loads fully styled
-                            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
-                            new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(userId)
-                                    .ifPresent(sm::setCurrentProfile);
 
-                            // Prefetch circle data so the profile tab is instant
-                            com.syndicati.controllers.user.relationship.UserRelationshipController rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
-                            sm.setCircleData(
-                                rc.findFriends(user, 24),
-                                rc.findPendingRequestsFor(user),
-                                rc.countFriends(user),
-                                rc.countPendingRequests(user)
-                            );
-                            
+        // 6. Show and Play Intro
+        primaryStage.setScene(scene);
+        primaryStage.show();
+        centerStageOnScreen(primaryStage);
+        applyRoundedShape(scene);
+        addResizeHandlers(primaryStage, scene);
+        introView.play();
+
+        // 7. Background Tasks Coordination
+        java.util.concurrent.CompletableFuture<Boolean> sessionCheckFuture = new java.util.concurrent.CompletableFuture<>();
+        java.util.concurrent.atomic.AtomicReference<com.syndicati.models.user.User> recoveryUserRef = new java.util.concurrent.atomic.AtomicReference<>();
+
+        introView.setOnFinished(() -> {
+            sessionCheckFuture.thenAccept(hasSession -> {
+                javafx.application.Platform.runLater(() -> {
+                    if (hasSession) {
+                        com.syndicati.models.user.User recoveryUser = recoveryUserRef.get();
+                        com.syndicati.views.frontend.auth.SessionRecoveryView recoveryView = new com.syndicati.views.frontend.auth.SessionRecoveryView();
+                        
+                        // Destination Choice Callbacks
+                        recoveryView.setOnGoHome(() -> {
                             javafx.application.Platform.runLater(() -> {
-                                System.out.println("[AUTO-LOGIN] Setting user and navigating...");
-                                sm.setCurrentUser(user);
-                                navigateToLandingPage();
+                                // 1. Fade out current view
+                                FadeTransition ft = new FadeTransition(Duration.millis(800), recoveryView.getRoot());
+                                ft.setToValue(0);
+                                ScaleTransition st = new ScaleTransition(Duration.millis(800), recoveryView.getRoot());
+                                st.setToX(0.95); st.setToY(0.95);
+                                
+                                ParallelTransition pt = new ParallelTransition(ft, st);
+                                pt.setOnFinished(evt -> {
+                                    double w = primaryStage.getWidth();
+                                    double h = primaryStage.getHeight();
+                                    double x = primaryStage.getX();
+                                    double y = primaryStage.getY();
+                                    boolean max = primaryStage.isMaximized();
+                                    
+                                    showLandingPage(w, h, x, y, max, false);
+                                    
+                                    // 2. Fade in new view
+                                    Node newRoot = primaryStage.getScene().getRoot();
+                                    newRoot.setOpacity(0);
+                                    newRoot.setScaleX(1.05); newRoot.setScaleY(1.05);
+                                    
+                                    FadeTransition fadeIn = new FadeTransition(Duration.millis(1000), newRoot);
+                                    fadeIn.setToValue(1.0);
+                                    ScaleTransition scaleIn = new ScaleTransition(Duration.millis(1000), newRoot);
+                                    scaleIn.setToX(1.0); scaleIn.setToY(1.0);
+                                    
+                                    new ParallelTransition(fadeIn, scaleIn).play();
+                                    recoveryView.cleanup();
+                                });
+                                pt.play();
                             });
-                        } else {
-                            System.out.println("[AUTO-LOGIN] User ID " + userId + " not found in DB.");
-                        }
-                    } catch (Exception e) {
-                        System.err.println("[AUTO-LOGIN] Failed or invalid token: " + e.getMessage());
+                        });
+                        
+                        recoveryView.setOnGoDashboard(() -> {
+                            javafx.application.Platform.runLater(() -> {
+                                // 1. Fade out current view
+                                FadeTransition ft = new FadeTransition(Duration.millis(800), recoveryView.getRoot());
+                                ft.setToValue(0);
+                                ScaleTransition st = new ScaleTransition(Duration.millis(800), recoveryView.getRoot());
+                                st.setToX(0.95); st.setToY(0.95);
+                                
+                                ParallelTransition pt = new ParallelTransition(ft, st);
+                                pt.setOnFinished(evt -> {
+                                    double w = primaryStage.getWidth();
+                                    double h = primaryStage.getHeight();
+                                    double x = primaryStage.getX();
+                                    double y = primaryStage.getY();
+                                    boolean max = primaryStage.isMaximized();
+                                    
+                                    showLandingPage(w, h, x, y, max, true);
+                                    
+                                    // 2. Fade in new view
+                                    Node newRoot = primaryStage.getScene().getRoot();
+                                    newRoot.setOpacity(0);
+                                    newRoot.setScaleX(1.05); newRoot.setScaleY(1.05);
+                                    
+                                    FadeTransition fadeIn = new FadeTransition(Duration.millis(1000), newRoot);
+                                    fadeIn.setToValue(1.0);
+                                    ScaleTransition scaleIn = new ScaleTransition(Duration.millis(1000), newRoot);
+                                    scaleIn.setToX(1.0); scaleIn.setToY(1.0);
+                                    
+                                    new ParallelTransition(fadeIn, scaleIn).play();
+                                    recoveryView.cleanup();
+                                });
+                                pt.play();
+                            });
+                        });
+
+                        primaryStage.getScene().setRoot(recoveryView.getRoot());
+                        
+                        Thread.startVirtualThread(() -> {
+                            try {
+                                com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+                                recoveryView.setProgress(0.4, "Restoring profile...");
+                                sm.setCurrentProfile(new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(recoveryUser.getIdUser()).orElse(null));
+                                
+                                recoveryView.setProgress(0.8, "Connecting...");
+                                com.syndicati.controllers.user.relationship.UserRelationshipController rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
+                                sm.setCircleData(rc.findFriends(recoveryUser, 24), rc.findPendingRequestsFor(recoveryUser), rc.countFriends(recoveryUser), rc.countPendingRequests(recoveryUser));
+                                
+                                // CRITICAL: Set user and update UI before finalizing progress
+                                sm.setCurrentUser(recoveryUser);
+                                recoveryView.updateUser(recoveryUser);
+                                recoveryView.setProgress(1.0, "Ready to enter");
+
+                                javafx.application.Platform.runLater(() -> {
+                                    // Pre-warm the profile view so it's ready in the background
+                                    com.syndicati.utils.navigation.NavigationManager.getInstance().getView("profile");
+                                });
+                            } catch (Exception e) {
+                                javafx.application.Platform.runLater(() -> primaryStage.getScene().setRoot(loginView.getRoot()));
+                            }
+                        });
+                    } else {
+                        primaryStage.getScene().setRoot(loginView.getRoot());
                     }
-                }
+                });
             });
         });
 
-        // Log application startup event - first record anchors the Langfuse session.
-        activityLogController.logPageView("app_startup", "Application Startup", java.util.Map.of(
-            "source",  "main_application",
-            "langfuse_enabled", String.valueOf(langfuseRuntimeService.isEnabled()),
-            "diagnostics", langfuseRuntimeService.diagnosticSummary()
-        ));
-        
-        // Add JVM shutdown hook as backup
-        Runtime.getRuntime().addShutdownHook(
-            Thread.ofPlatform()
-                .name("Syndicati-ShutdownHook")
-                .unstarted(() -> {
-                    System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
-                    LogAIWorkerService.getInstance().stopWorker();
-                    com.syndicati.services.ai.AgentService.shutdown();
-                    com.syndicati.services.mail.AsyncMailerService.shutdown();
-                    com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
-                    com.syndicati.services.DatabaseService.getInstance().shutdown();
-                    langfuseRuntimeService.stop();
-                    anomalyScoringScheduler.stop();
-                    DiscordRPCService.getInstance().shutdown();
-                    System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
-                })
-        );
-        
-        // Configure the stage. Use solid black scene fill to avoid desktop bleed-through.
-        primaryStage.setTitle("Syndicati - Login");
-        scene.setFill(Color.BLACK);
-        primaryStage.initStyle(StageStyle.TRANSPARENT);
-        primaryStage.setScene(scene);
-        primaryStage.setResizable(true);
-        
-        // Set minimum window size
-        primaryStage.setMinWidth(1500);
-        primaryStage.setMinHeight(800);
-        
-        // Show the stage first (needed for width/height to be set)
-        primaryStage.show();
-        
-        // Center the window on screen after showing
-        centerStageOnScreen(primaryStage);
-        
-        // Add corner resize functionality
-        addResizeHandlers(primaryStage, scene);
-        
-        // Force rounded corners by applying shape to scene root after showing
-        applyRoundedShape(scene);
-        
-        // Add shutdown hook to properly close database monitoring and async email service
+        // 8. Parallel Initialization
+        Thread.startVirtualThread(() -> {
+            try {
+                com.syndicati.utils.database.ConnectionManager.getInstance().startMonitoring();
+                langfuseRuntimeService.start();
+                anomalyScoringScheduler.start();
+
+                String savedUserId = com.syndicati.utils.shared.AppPreferences.getLocal("LOCAL_LOGGED_IN_USER_ID", null);
+                if (savedUserId != null && !savedUserId.trim().isEmpty()) {
+                    int uid = Integer.parseInt(savedUserId.trim());
+                    new com.syndicati.models.user.data.UserRepository().findById(uid).ifPresent(u -> {
+                        recoveryUserRef.set(u);
+                        sessionCheckFuture.complete(true);
+                    });
+                }
+                if (!sessionCheckFuture.isDone()) sessionCheckFuture.complete(false);
+
+                LogAIWorkerService.getInstance();
+                InsightFaceService.getInstance().initialize();
+                DiscordRPCService.getInstance().initialize();
+                MessagingSocketServer.getInstance().start();
+                
+                activityLogController.logPageView("app_startup", "Application Startup", java.util.Map.of(
+                    "source", "main_application",
+                    "langfuse_enabled", String.valueOf(langfuseRuntimeService.isEnabled())
+                ));
+            } catch (Exception e) {
+                sessionCheckFuture.complete(false);
+            }
+        });
+
+        // 9. Shutdown Hook
+        Runtime.getRuntime().addShutdownHook(Thread.ofPlatform().unstarted(() -> {
+            LogAIWorkerService.getInstance().stopWorker();
+            com.syndicati.services.ai.AgentService.shutdown();
+            com.syndicati.services.mail.AsyncMailerService.shutdown();
+            com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
+            com.syndicati.services.DatabaseService.getInstance().shutdown();
+            langfuseRuntimeService.stop();
+            anomalyScoringScheduler.stop();
+            DiscordRPCService.getInstance().shutdown();
+        }));
+
         primaryStage.setOnCloseRequest(event -> {
             System.out.println("[SHUTDOWN] Shutting down application...");
             // Log shutdown before stopping services so tracer is still live.
@@ -294,88 +364,47 @@ public class MainApplication extends Application {
         }
 
         showLoadingOverlayAndRun(() -> {
-            if (AccessControlService.canAccessAdminArea()) {
-                showAdminDestinationChoice(currentWidth, currentHeight, currentX, currentY, wasMaximized);
-            } else {
-                activityLogController.logPageView("landing_page", "Landing Page", java.util.Map.of("source", "login_success"));
-                DiscordRPCService.getInstance().updatePresence("Landing Page", "Main Hub");
-                showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
-            }
+            // Use the new Unified Recovery View for a premium transition
+            com.syndicati.views.frontend.auth.SessionRecoveryView recoveryView = new com.syndicati.views.frontend.auth.SessionRecoveryView();
+            
+            recoveryView.setOnGoHome(() -> {
+                javafx.application.Platform.runLater(() -> {
+                    showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
+                    recoveryView.cleanup();
+                });
+            });
+            
+            recoveryView.setOnGoDashboard(() -> {
+                javafx.application.Platform.runLater(() -> {
+                    showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, true);
+                    recoveryView.cleanup();
+                });
+            });
+
+            primaryStage.getScene().setRoot(recoveryView.getRoot());
+            
+            // Background sync (since we already have the user, we just ensure data is fresh)
+            Thread.startVirtualThread(() -> {
+                try {
+                    User user = SessionManager.getInstance().getCurrentUser();
+                    com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+                    
+                    recoveryView.setProgress(0.5, "Syncing workspace...");
+                    // Ensure profile and circle data are loaded if not already
+                    if (sm.getCurrentProfile() == null) {
+                        sm.setCurrentProfile(new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(user.getIdUser()).orElse(null));
+                    }
+                    
+                    recoveryView.updateUser(user);
+                    recoveryView.setProgress(1.0, "Ready");
+                } catch (Exception e) {
+                    javafx.application.Platform.runLater(() -> showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false));
+                }
+            });
         });
         System.out.println("[OK] Successfully initiated navigation to landing page.");
     }
 
-    private void showAdminDestinationChoice(
-        double currentWidth,
-        double currentHeight,
-        double currentX,
-        double currentY,
-        boolean wasMaximized
-    ) {
-        if (loginView != null) {
-            loginView.cleanup();
-            loginView = null;
-        }
-
-        if (landingPageView != null) {
-            landingPageView.cleanup();
-            landingPageView = null;
-        }
-
-        adminDestinationChoiceView = new AdminDestinationChoiceView();
-        adminDestinationChoiceView.setOnChooseHome(() -> {
-            showLoadingOverlayAndRun(() -> {
-                double w = primaryStage.getWidth();
-                double h = primaryStage.getHeight();
-                double x = primaryStage.getX();
-                double y = primaryStage.getY();
-                boolean max = primaryStage.isMaximized();
-                showLandingPage(w, h, x, y, max, false);
-            });
-        });
-        adminDestinationChoiceView.setOnChooseDashboard(() -> {
-            showLoadingOverlayAndRun(() -> {
-                double w = primaryStage.getWidth();
-                double h = primaryStage.getHeight();
-                double x = primaryStage.getX();
-                double y = primaryStage.getY();
-                boolean max = primaryStage.isMaximized();
-                showLandingPage(w, h, x, y, max, true);
-            });
-        });
-
-        Scene scene = new Scene(adminDestinationChoiceView.getRoot());
-        scene.setFill(Color.BLACK);
-        scene.getStylesheets().clear();
-        applyGlobalStyles(scene);
-        if (scene.getRoot() != null) {
-            appendRootStyle(scene.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
-        }
-
-        primaryStage.setMinWidth(1500);
-        primaryStage.setMinHeight(800);
-        ThemeManager.getInstance().setScene(scene);
-        primaryStage.setScene(scene);
-
-        if (wasMaximized) {
-            primaryStage.setMaximized(true);
-        } else {
-            primaryStage.setWidth(currentWidth);
-            primaryStage.setHeight(currentHeight);
-            primaryStage.setX(currentX);
-            primaryStage.setY(currentY);
-        }
-
-        primaryStage.setTitle("Syndicati - Choose Destination");
-        addResizeHandlers(primaryStage, scene);
-        applyRoundedShape(scene);
-        primaryStage.show();
-
-        activityLogController.logPageView("admin_destination_choice", "Admin Destination Choice", java.util.Map.of(
-            "source", "login_success"
-        ));
-        DiscordRPCService.getInstance().updatePresence("Admin Area", "Choosing Destination");
-    }
 
     private void showLandingPage(
         double currentWidth,
@@ -388,11 +417,6 @@ public class MainApplication extends Application {
         if (loginView != null) {
             loginView.cleanup();
             loginView = null;
-        }
-
-        if (adminDestinationChoiceView != null) {
-            adminDestinationChoiceView.cleanup();
-            adminDestinationChoiceView = null;
         }
 
         if (landingPageView != null) {
