@@ -70,9 +70,23 @@ public class LandingPageView implements ViewInterface {
         
         // Use ThemeManager for dynamic background color based on theme
         ThemeManager themeManager = ThemeManager.getInstance();
+        
+        // Root gets the background image
+        String imagePath = getClass().getResource("/images/login_bg_3.jpg") != null 
+            ? getClass().getResource("/images/login_bg_3.jpg").toExternalForm() 
+            : "";
+        root.setStyle(
+            "-fx-background-image: url('" + imagePath + "');" +
+            "-fx-background-size: cover;" +
+            "-fx-background-position: center center;" +
+            themeManager.getScrollbarVariableStyle()
+        );
+        
+        // darkPanel gets a semi-transparent overlay to ensure text readability
         String backgroundColor = themeManager.isDarkMode()
-            ? "radial-gradient(focus-angle 28deg, focus-distance 24%, center 14% 8%, radius 135%, " + themeManager.toRgba(themeManager.getAccentHex(), 0.12) + " 0%, rgba(6,6,10,0.97) 62%, rgba(3,3,5,0.99) 100%), linear-gradient(to bottom right, rgba(18,18,26,0.92), rgba(10,10,14,0.94) 52%, rgba(4,4,6,0.97) 100%)"
-            : "linear-gradient(to bottom right, #f8fbff, #eef2f8 55%, #edf6ff 100%)";
+            ? "rgba(15,15,20,0.75)"
+            : "rgba(245,248,255,0.75)";
+            
         darkPanel.setStyle(
             "-fx-background-color: " + backgroundColor + ";" +
             "-fx-border-color: " + (themeManager.isDarkMode() ? themeManager.toRgba(themeManager.getAccentHex(), 0.26) : "rgba(15,23,42,0.14)") + ";" +
@@ -264,16 +278,26 @@ public class LandingPageView implements ViewInterface {
     }
     
     private void applyThemeStyling() {
-        // Keep root completely transparent for rounded corners
-        root.setStyle(rootBaseStyle());
-        root.setBackground(null); // Force remove any background
+        ThemeManager themeManager = ThemeManager.getInstance();
+        
+        // Root gets the background image
+        String imagePath = getClass().getResource("/images/login_bg_3.jpg") != null 
+            ? getClass().getResource("/images/login_bg_3.jpg").toExternalForm() 
+            : "";
+        root.setStyle(
+            "-fx-background-image: url('" + imagePath + "');" +
+            "-fx-background-size: cover;" +
+            "-fx-background-position: center center;" +
+            themeManager.getScrollbarVariableStyle()
+        );
         
         // Update darkPanel background color based on current theme
         if (darkPanel != null) {
-            ThemeManager themeManager = ThemeManager.getInstance();
+            // Semi-transparent overlay to ensure text readability over image
             String backgroundColor = themeManager.isDarkMode()
-                ? "radial-gradient(focus-angle 28deg, focus-distance 24%, center 14% 8%, radius 135%, " + themeManager.toRgba(themeManager.getAccentHex(), 0.12) + " 0%, rgba(6,6,10,0.97) 62%, rgba(3,3,5,0.99) 100%), linear-gradient(to bottom right, rgba(18,18,26,0.92), rgba(10,10,14,0.94) 52%, rgba(4,4,6,0.97) 100%)"
-                : "linear-gradient(to bottom right, #f8fbff, #eef2f8 55%, #edf6ff 100%)";
+                ? "rgba(15,15,20,0.75)"
+                : "rgba(245,248,255,0.75)";
+                
             darkPanel.setStyle(
                 "-fx-background-color: " + backgroundColor + ";" +
                 "-fx-border-color: " + (themeManager.isDarkMode() ? themeManager.toRgba(themeManager.getAccentHex(), 0.26) : "rgba(15,23,42,0.14)") + ";" +
