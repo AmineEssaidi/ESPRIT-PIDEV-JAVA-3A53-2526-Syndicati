@@ -63,6 +63,7 @@ public class EvenementPageView implements ViewInterface {
     private List<Evenement> currentEvents;
     private int currentPage = 0;
     private static final int CARDS_PER_PAGE = 3;
+    private boolean dataLoaded = false;
     
     // Form fields (class level for access across methods)
     private TextField titleField;
@@ -84,6 +85,20 @@ public class EvenementPageView implements ViewInterface {
             buildDashboardSection(),
             buildEventsSection()
         );
+        
+        // Attempt immediate hydration from cache
+        loadInitialDataFromCache();
+    }
+    
+    private void loadInitialDataFromCache() {
+        List<Evenement> cached = evenementController.evenements();
+        if (cached != null && !cached.isEmpty()) {
+            currentEvents = cached;
+            if (eventsGrid != null) {
+                rebuildEventsGrid(eventsGrid, root.getWidth());
+            }
+            dataLoaded = true;
+        }
     }
 
     private StackPane buildHeroSection() {
@@ -96,19 +111,19 @@ public class EvenementPageView implements ViewInterface {
         VBox left = new VBox(18);
         left.setAlignment(Pos.CENTER_LEFT);
 
-        left.getChildren().add(sectionPill("Community Experiences"));
+        left.getChildren().add(sectionPill(com.syndicati.utils.localization.LocalizationManager.getInstance().get("community_experiences")));
 
-        Text title = text("Discover. Connect.\nExperience.", 80, true, tm.getAccentHex());
+        Text title = text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("discover_connect_experience"), 80, true, tm.getAccentHex());
         title.wrappingWidthProperty().bind(Bindings.max(300, hero.widthProperty().subtract(120)));
         Text subtitle = text(
-            "Join exclusive events, workshops, and gatherings designed for our community. Your next great story starts here.",
+            com.syndicati.utils.localization.LocalizationManager.getInstance().get("events_hero_desc"),
             21,
             false,
             textMuted()
         );
         subtitle.wrappingWidthProperty().bind(Bindings.max(280, hero.widthProperty().subtract(180)));
 
-        Button explore = gradientButton("Explore Events", 14, new Insets(12, 26, 12, 26));
+        Button explore = gradientButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("explore_events_btn"), 14, new Insets(12, 26, 12, 26));
         explore.setOnAction(e -> {
             // Scroll to events section
             root.getParent().requestLayout();
@@ -646,9 +661,12 @@ public class EvenementPageView implements ViewInterface {
 
     @Override
     public void loadDataAsync() {
+        if (dataLoaded) return; // Skip if already warmed up
+        
         Thread.startVirtualThread(() -> {
             try {
                 refreshEventsList();
+                dataLoaded = true;
             } catch (Exception e) {
                 System.err.println("Error loading events asynchronously: " + e.getMessage());
             }

@@ -23,6 +23,10 @@ public class EvenementRepository {
     }
 
     public List<Evenement> findAll() {
+        String cacheKey = "events_all";
+        List<Evenement> cached = databaseService.getCache(cacheKey);
+        if (cached != null) return cached;
+
         String sql = "SELECT id_event, titre_event, description_event, date_event, lieu_event, " +
                 "nb_places, nb_restants, statut_event, image_event, type_event, created_at, edited_at, user_id " +
                 "FROM evenement ORDER BY date_event DESC";
@@ -35,6 +39,7 @@ public class EvenementRepository {
             while (rs.next()) {
                 events.add(mapResultSetToEvenement(rs));
             }
+            databaseService.putCache(cacheKey, events);
         } catch (SQLException e) {
             System.err.println("Error fetching all evenements: " + e.getMessage());
         }
@@ -86,6 +91,10 @@ public class EvenementRepository {
     }
 
     public List<Evenement> findByType(String type) {
+        String cacheKey = "events_type_" + type;
+        List<Evenement> cached = databaseService.getCache(cacheKey);
+        if (cached != null) return cached;
+
         String sql = "SELECT id_event, titre_event, description_event, date_event, lieu_event, " +
                 "nb_places, nb_restants, statut_event, image_event, type_event, created_at, edited_at, user_id " +
                 "FROM evenement WHERE type_event = ? AND statut_event IN ('planifie', 'en_cours') ORDER BY date_event ASC";
@@ -100,6 +109,7 @@ public class EvenementRepository {
                     events.add(mapResultSetToEvenement(rs));
                 }
             }
+            databaseService.putCache(cacheKey, events);
         } catch (SQLException e) {
             System.err.println("Error fetching evenements by type: " + e.getMessage());
         }
@@ -108,6 +118,10 @@ public class EvenementRepository {
     }
 
     public List<Evenement> findByStatut(String statut) {
+        String cacheKey = "events_statut_" + statut;
+        List<Evenement> cached = databaseService.getCache(cacheKey);
+        if (cached != null) return cached;
+
         String sql = "SELECT id_event, titre_event, description_event, date_event, lieu_event, " +
                 "nb_places, nb_restants, statut_event, image_event, type_event, created_at, edited_at, user_id " +
                 "FROM evenement WHERE statut_event = ? ORDER BY date_event DESC";
@@ -122,6 +136,7 @@ public class EvenementRepository {
                     events.add(mapResultSetToEvenement(rs));
                 }
             }
+            databaseService.putCache(cacheKey, events);
         } catch (SQLException e) {
             System.err.println("Error fetching evenements by statut: " + e.getMessage());
         }

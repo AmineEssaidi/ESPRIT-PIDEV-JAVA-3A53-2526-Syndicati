@@ -84,7 +84,7 @@ public class HomeContent {
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 999px;"
         );
-        Text badgeText = new Text("Innovation immobiliere");
+        Text badgeText = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("innovation_badge"));
         badgeText.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
         badgeText.setFill(Color.web(theme.getAccentHex()));
         badge.getChildren().add(badgeText);
@@ -100,17 +100,15 @@ public class HomeContent {
         applyGlow(dot, 18, 0.7);
         titleRow.getChildren().addAll(title, dot);
 
-        Text desc = new Text(
-            "L'excellence de la gestion de complexe residentiel. Une plateforme tout-en-un pour la communication, la maintenance et l'engagement communautaire."
-        );
+        Text desc = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("hero_description"));
         desc.setFont(Font.font(lightFont(), FontWeight.NORMAL, 18));
         desc.setFill(Color.web(theme.getSecondaryTextColor()));
         desc.setWrappingWidth(590);
         desc.setLineSpacing(5);
 
         HBox actions = new HBox(16,
-            buildPrimaryButton("Explorer le Complexe"),
-            buildSecondaryButton("Rejoindre le Hub")
+            buildPrimaryButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("explore_complex")),
+            buildSecondaryButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("join_hub"))
         );
         actions.setAlignment(Pos.CENTER_LEFT);
 
@@ -137,7 +135,7 @@ public class HomeContent {
 
         HBox row = new HBox(2);
         row.setAlignment(Pos.CENTER);
-        Text title = new Text("Notre Complexe");
+        Text title = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("our_complex"));
         title.setFont(Font.font(boldFont(), FontWeight.BOLD, 42));
         title.setFill(Color.web(theme.getTextColor()));
         Text dot = new Text(".");
@@ -146,7 +144,7 @@ public class HomeContent {
         applyGlow(dot, 12, 0.6);
         row.getChildren().addAll(title, dot);
 
-        Text sub = new Text("Decouvrez nos residences de prestige et services haut de gamme.");
+        Text sub = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("our_complex_desc"));
         sub.setFont(Font.font(lightFont(), FontWeight.NORMAL, 15));
         sub.setFill(Color.web(theme.getSecondaryTextColor()));
         sub.setTextAlignment(TextAlignment.CENTER);

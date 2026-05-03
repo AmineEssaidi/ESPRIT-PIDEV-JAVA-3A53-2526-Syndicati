@@ -111,18 +111,59 @@ public class ProfileView implements ViewInterface {
         this.root.setFillWidth(true);
         this.insightFaceService = InsightFaceService.getInstance();
 
-        com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
-        if (sm.isProfileFresh() && sm.isCircleCacheFresh() && sm.isStandingFresh()) {
-            // Data is already pre-fetched and fresh! Build the real UI instantly.
-            // This ensures zero skeleton flash during the session recovery flow.
-            System.out.println("[ProfileView] Data is fresh, building content synchronously.");
-            this.root.getChildren().setAll(buildContent());
-        } else {
-            // Fallback to skeleton + background load
-            System.out.println("[ProfileView] Data stale or missing, showing skeleton.");
-            this.root.getChildren().setAll(buildSkeleton());
-            Thread.startVirtualThread(this::loadDataAsync);
-        }
+        // 1. Show skeleton instantly (Zero freeze)
+        this.root.getChildren().setAll(buildSkeleton());
+
+        // 2. Build heavy content progressively in the background
+        javafx.application.Platform.runLater(() -> {
+            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+            if (sm.isProfileFresh() && sm.isCircleCacheFresh() && sm.isStandingFresh()) {
+                buildContentAsync();
+            } else {
+                Thread.startVirtualThread(this::loadDataAsync);
+            }
+        });
+    }
+
+    private void buildContentAsync() {
+        // Build the structure in slices to keep the UI thread breathing
+        javafx.application.Platform.runLater(() -> {
+            VBox container = new VBox();
+            container.setAlignment(Pos.TOP_CENTER);
+            container.setFillWidth(true);
+            container.setStyle("-fx-background-color: transparent;");
+            
+            mainPages.clear();
+            mainNavButtons.clear();
+            
+            VBox content = new VBox(26);
+            content.setAlignment(Pos.TOP_CENTER);
+            content.setPadding(new Insets(24, 0, 42, 0));
+            content.setFillWidth(true);
+
+            // Slice 1: Navigation
+            content.getChildren().add(createMainNavigation());
+            
+            // Slice 2: Heavy Pages
+            javafx.application.Platform.runLater(() -> {
+                VBox page1 = createOverviewPage();
+                VBox page2 = createActivityPage();
+                mainPages.put("overview", page1);
+                mainPages.put("activity", page2);
+                content.getChildren().addAll(page1, page2);
+                setMainPage("overview");
+
+                ScrollPane scroll = new ScrollPane(content);
+                scroll.setFitToWidth(true);
+                scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+                scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+                scroll.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
+                container.getChildren().add(scroll);
+
+                // Final Swap
+                this.root.getChildren().setAll(container);
+            });
+        });
     }
 
     /** Lightweight skeleton shown while data loads. Instant to build. */
@@ -1805,8 +1846,18 @@ public class ProfileView implements ViewInterface {
         if (avatarPath != null && !avatarPath.isBlank()) {
             Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
             if (img != null && !img.isError()) {
-                avatarCircle.setFill(new ImagePattern(img));
-                return true;
+                // Ensure image is actually loaded to prevent IllegalArgumentException in ImagePattern
+                if (img.getProgress() == 1.0) {
+                    avatarCircle.setFill(new ImagePattern(img));
+                    return true;
+                } else {
+                    // If not loaded yet (despite sync flag), use a listener to apply it once ready
+                    img.progressProperty().addListener((obs, old, progress) -> {
+                        if (progress.doubleValue() == 1.0) {
+                            javafx.application.Platform.runLater(() -> avatarCircle.setFill(new ImagePattern(img)));
+                        }
+                    });
+                }
             }
         }
         avatarCircle.setFill(Color.web(tm.getAccentHex()));

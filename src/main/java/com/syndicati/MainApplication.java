@@ -30,6 +30,8 @@ import com.syndicati.services.user.messaging.socket.MessagingSocketServer;
 import com.syndicati.services.InsightFaceService;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
+import com.syndicati.controllers.forum.PublicationController;
+import com.syndicati.controllers.evenement.EvenementController;
 
 /**
  * Main JavaFX Application - Syndicati desktop client
@@ -95,6 +97,11 @@ public class MainApplication extends Application {
         introView.play();
 
         // 7. Background Tasks Coordination
+        // One-time sync to generate fr.json and ar.json if they don't exist
+        Thread.startVirtualThread(() -> {
+            com.syndicati.utils.localization.LocalizationManager.getInstance().syncTranslations("fr", "ar");
+        });
+        
         java.util.concurrent.CompletableFuture<Boolean> sessionCheckFuture = new java.util.concurrent.CompletableFuture<>();
         java.util.concurrent.atomic.AtomicReference<com.syndicati.models.user.User> recoveryUserRef = new java.util.concurrent.atomic.AtomicReference<>();
 
@@ -190,13 +197,21 @@ public class MainApplication extends Application {
                                 
                                 // CRITICAL: Set user and update UI before finalizing progress
                                 sm.setCurrentUser(recoveryUser);
+                                // Refresh navigation managers with the existing user
+                                com.syndicati.utils.navigation.NavigationManager nm = com.syndicati.utils.navigation.NavigationManager.getInstance();
+                                nm.warmup();
+                                
+                                // Give warmup a moment to fetch profile data from DB
+                                Thread.sleep(1000);
+                                
                                 recoveryView.updateUser(recoveryUser);
-                                recoveryView.setProgress(1.0, "Ready to enter");
-
-                                javafx.application.Platform.runLater(() -> {
-                                    // Pre-warm the profile view so it's ready in the background
-                                    com.syndicati.utils.navigation.NavigationManager.getInstance().getView("profile");
-                                });
+                                
+                                // CRITICAL: One-time pre-load of heavy views during session recovery
+                                nm.initializeHeavyViews();
+                                
+                                recoveryView.setProgress(0.8, com.syndicati.utils.localization.LocalizationManager.getInstance().get("warming_workspace"));
+                                Thread.sleep(800);
+                                recoveryView.setProgress(1.0, com.syndicati.utils.localization.LocalizationManager.getInstance().get("ready_to_enter"));
                             } catch (Exception e) {
                                 javafx.application.Platform.runLater(() -> primaryStage.getScene().setRoot(loginView.getRoot()));
                             }
@@ -367,7 +382,29 @@ public class MainApplication extends Application {
             // Use the new Unified Recovery View for a premium transition
             com.syndicati.views.frontend.auth.SessionRecoveryView recoveryView = new com.syndicati.views.frontend.auth.SessionRecoveryView();
             
+            // IMMEDIATELY start warm-starting the LandingPageView as soon as the recovery screen appears.
+            javafx.application.Platform.runLater(() -> {
+                if (landingPageView == null) {
+                    System.out.println("[INFO] Immediate warm-start of LandingPageView initiated...");
+                    landingPageView = new com.syndicati.views.frontend.home.LandingPageView();
+                    
+                    // PRE-INITIALIZE Forum and Events views during the idle intro period
+                    // This moves their heavy UI construction off the navigation path.
+                    com.syndicati.utils.navigation.NavigationManager nm = com.syndicati.utils.navigation.NavigationManager.getInstance();
+                    com.syndicati.interfaces.ViewInterface forumView = nm.getView("forum");
+                    com.syndicati.interfaces.ViewInterface eventsView = nm.getView("events");
+                    
+                    // Trigger early data hydration so they are ready immediately
+                    if (forumView != null) forumView.loadDataAsync();
+                    if (eventsView != null) eventsView.loadDataAsync();
+                }
+            });
+
             recoveryView.setOnGoHome(() -> {
+                if (landingPageView == null) {
+                    // Fallback if click happens before warmup finished
+                    landingPageView = new com.syndicati.views.frontend.home.LandingPageView();
+                }
                 javafx.application.Platform.runLater(() -> {
                     showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
                     recoveryView.cleanup();
@@ -375,6 +412,9 @@ public class MainApplication extends Application {
             });
             
             recoveryView.setOnGoDashboard(() -> {
+                if (landingPageView == null) {
+                    landingPageView = new com.syndicati.views.frontend.home.LandingPageView();
+                }
                 javafx.application.Platform.runLater(() -> {
                     showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, true);
                     recoveryView.cleanup();
@@ -383,21 +423,40 @@ public class MainApplication extends Application {
 
             primaryStage.getScene().setRoot(recoveryView.getRoot());
             
-            // Background sync (since we already have the user, we just ensure data is fresh)
+            // Background sync (ensure profile and metadata are warm in memory)
             Thread.startVirtualThread(() -> {
                 try {
                     User user = SessionManager.getInstance().getCurrentUser();
                     com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
                     
-                    recoveryView.setProgress(0.5, "Syncing workspace...");
-                    // Ensure profile and circle data are loaded if not already
+                    recoveryView.setProgress(0.2, "Syncing identity...");
+                    
+                    // 1. Fetch Profile (Critical)
                     if (sm.getCurrentProfile() == null) {
                         sm.setCurrentProfile(new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(user.getIdUser()).orElse(null));
                     }
                     
+                    recoveryView.setProgress(0.5, com.syndicati.utils.localization.LocalizationManager.getInstance().get("warming_workspace"));
+                    
+                    // 2. Pre-load Service Data (Forum & Events)
+                    // This populates the repository caches during the intro sequence
+                    PublicationController pubController = new PublicationController();
+                    EvenementController eventController = new EvenementController();
+                    
+                    recoveryView.setProgress(0.7, com.syndicati.utils.localization.LocalizationManager.getInstance().get("syncing_community"));
+                    pubController.publicationsByCategory("General");
+                    pubController.publicationsByCategory("Announcement");
+                    
+                    recoveryView.setProgress(0.85, com.syndicati.utils.localization.LocalizationManager.getInstance().get("fetching_events"));
+                    eventController.evenements();
+                    
+                    // 3. Refresh local cache for Dashboard data
+                    com.syndicati.services.DatabaseService.getInstance().getCache("warmup"); 
+                    
                     recoveryView.updateUser(user);
-                    recoveryView.setProgress(1.0, "Ready");
+                    recoveryView.setProgress(1.0, com.syndicati.utils.localization.LocalizationManager.getInstance().get("ready_to_enter"));
                 } catch (Exception e) {
+                    System.err.println("[ERROR] Preloading failed: " + e.getMessage());
                     javafx.application.Platform.runLater(() -> showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false));
                 }
             });
@@ -424,7 +483,10 @@ public class MainApplication extends Application {
             landingPageView = null;
         }
 
-        landingPageView = new LandingPageView();
+        // If already warm, we just use the instance, otherwise create it
+        if (landingPageView == null) {
+            landingPageView = new com.syndicati.views.frontend.home.LandingPageView();
+        }
 
         NavigationManager navigationManager = NavigationManager.getInstance();
         navigationManager.setViews(landingPageView);
@@ -613,27 +675,29 @@ public class MainApplication extends Application {
         loginView = new LoginView();
         loginView.setOnLoginSuccess(this::navigateToLandingPage);
         
-        // Update the scene with solid black fill - don't set initial size
-        Scene scene = new Scene(loginView.getRoot());
-        scene.setFill(Color.BLACK); // Keep non-transparent app background
-        scene.getStylesheets().clear(); // Avoid inherited styles that could reintroduce backgrounds
+        // Explicitly set the scene size to the current window size to prevent shrinking
+        Scene scene = new Scene(loginView.getRoot(), currentWidth, currentHeight);
+        scene.setFill(Color.BLACK); 
+        scene.getStylesheets().clear(); 
         applyGlobalStyles(scene);
         
-        // Set minimum window size
+        // Enforce minimum window size (consistent with start())
         primaryStage.setMinWidth(1500);
         primaryStage.setMinHeight(800);
         
         ThemeManager.getInstance().setScene(scene);
-        
-        // Set scene first, THEN restore size
         primaryStage.setScene(scene);
         
-        // Restore window size and position before showing
+        // Re-apply rounded corners for the transparent stage
+        applyRoundedShape(scene);
+        addResizeHandlers(primaryStage, scene);
+        
+        // Restore window size and position
         if (wasMaximized) {
             primaryStage.setMaximized(true);
         } else {
-            primaryStage.setWidth(currentWidth);
-            primaryStage.setHeight(currentHeight);
+            primaryStage.setWidth(Math.max(1500, currentWidth));
+            primaryStage.setHeight(Math.max(800, currentHeight));
             primaryStage.setX(currentX);
             primaryStage.setY(currentY);
         }
@@ -864,6 +928,48 @@ public class MainApplication extends Application {
         });
     }
     
+    /**
+     * Instantly refreshes the entire application UI.
+     * Used for language switching (RTL) and global theme updates.
+     */
+    public void refreshAppUI() {
+        if (landingPageView == null) return;
+        
+        String savedPage = landingPageView.getCurrentPageName();
+
+        javafx.application.Platform.runLater(() -> {
+            // CRITICAL: Clear cached views in NavigationManager so they are re-created with new translations
+            // We pass FALSE to skip re-instantiating the heavy ProfileView to prevent UI freezes
+            com.syndicati.utils.navigation.NavigationManager nm = com.syndicati.utils.navigation.NavigationManager.getInstance();
+            nm.clearAllViews(false);
+            
+            // Re-instantiate the landing page to pick up new translations and orientation
+            landingPageView = new com.syndicati.views.frontend.home.LandingPageView(savedPage);
+            
+            // Update the NavigationManager to use the new view instance
+            nm.setViews(landingPageView);
+            
+            // Re-trigger warmup to ensure profile data is fresh and heavy views are pre-loaded
+            nm.warmup();
+            
+            javafx.scene.Scene newScene = new javafx.scene.Scene(landingPageView.getRoot(), 1500, 800);
+            newScene.setFill(javafx.scene.paint.Color.TRANSPARENT);
+            
+            // Re-apply the premium scrollbar styling to the new scene
+            newScene.getStylesheets().add(getClass().getResource("/styles/app-scrollbar.css").toExternalForm());
+            
+            // Apply RTL if needed
+            com.syndicati.utils.localization.LocalizationManager.getInstance().applyOrientation(landingPageView.getRoot());
+            
+            primaryStage.setScene(newScene);
+            applyRoundedShape(newScene);
+            addResizeHandlers(primaryStage, newScene);
+            
+            // Restore the page we were on
+            landingPageView.navigateToPage(savedPage);
+        });
+    }
+
     public static void main(String[] args) {
         launch(args);
     }

@@ -39,10 +39,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import com.syndicati.utils.localization.LocalizationManager;
+
 public class DynamicHeader {
 
     private final StackPane root;
     private final ThemeManager themeManager;
+    private final LocalizationManager lm = LocalizationManager.getInstance();
 
     private Runnable backgroundUpdateCallback;
 
@@ -121,7 +124,7 @@ public class DynamicHeader {
         HBox left = new HBox();
         left.setAlignment(Pos.CENTER_LEFT);
 
-        Button logo = new Button("SYNDICATI");
+        Button logo = new Button(lm.get("app_name").toUpperCase());
         logo.setMinWidth(95);
         logo.setPrefWidth(95);
         logo.setAlignment(Pos.CENTER);
@@ -148,7 +151,7 @@ public class DynamicHeader {
         tabsPill.setSpacing(4);
         tabsPill.setPadding(new Insets(8));
 
-        Button home = createTabButton("home", "Home");
+        Button home = createTabButton("home", lm.get("home"));
         home.setOnAction(e -> {
             activeTab = "home";
             updateTabsState();
@@ -156,19 +159,19 @@ public class DynamicHeader {
             NavigationManager.getInstance().navigateTo("home");
         });
 
-        Button services = createTabButton("services", "Services");
+        Button services = createTabButton("services", lm.get("services"));
         Map<String, String> servicesItems = new LinkedHashMap<>();
-        servicesItems.put("Residence", "services/residence");
-        servicesItems.put("Forum", "services/forum");
-        servicesItems.put("Syndicat", "services/syndicat");
-        servicesItems.put("Evenement", "services/evenement");
+        servicesItems.put(lm.get("residence"), "services/residence");
+        servicesItems.put(lm.get("forum"), "services/forum");
+        servicesItems.put(lm.get("syndicat"), "services/syndicat");
+        servicesItems.put(lm.get("evenement"), "services/evenement");
         attachTabDropdown("services", services, servicesItems);
 
-        Button about = createTabButton("about", "About");
+        Button about = createTabButton("about", lm.get("about"));
         Map<String, String> aboutItems = new LinkedHashMap<>();
-        aboutItems.put("Our Team", "about");
-        aboutItems.put("Company", "about");
-        aboutItems.put("Contact", "about");
+        aboutItems.put(lm.get("our_team"), "about");
+        aboutItems.put(lm.get("company"), "about");
+        aboutItems.put(lm.get("contact"), "about");
         attachTabDropdown("about", about, aboutItems);
 
         tabsPill.getChildren().addAll(home, services, about);
@@ -298,12 +301,58 @@ public class DynamicHeader {
         right.setAlignment(Pos.CENTER_RIGHT);
         right.setSpacing(10);
 
+        StackPane langSwitcher = buildLanguageSwitcher();
         StackPane themeToggle = buildThemeToggle();
         StackPane bell = buildNotificationTrigger();
         StackPane profile = buildProfileTrigger();
 
-        right.getChildren().addAll(themeToggle, bell, profile);
+        right.getChildren().addAll(langSwitcher, themeToggle, bell, profile);
         return right;
+    }
+
+    private StackPane buildLanguageSwitcher() {
+        com.syndicati.utils.localization.LocalizationManager lm = com.syndicati.utils.localization.LocalizationManager.getInstance();
+        HBox container = new HBox(0);
+        container.setAlignment(Pos.CENTER);
+        container.setPadding(new Insets(2));
+        container.setStyle(
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.05)") + ";" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)") + ";" +
+            "-fx-border-radius: 20px;"
+        );
+
+        String[] langs = {"EN", "FR", "AR"};
+        for (String lang : langs) {
+            Button btn = new Button(lang);
+            btn.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.BOLD, 9));
+            btn.setPadding(new Insets(4, 8, 4, 8));
+            styleLangButton(btn, lang.equalsIgnoreCase(lm.getCurrentLanguage()));
+            btn.setOnAction(e -> {
+                if (!lang.equalsIgnoreCase(lm.getCurrentLanguage())) {
+                    lm.loadLanguage(lang.toLowerCase());
+                    MainApplication.getInstance().refreshAppUI();
+                }
+            });
+            container.getChildren().add(btn);
+        }
+        
+        return new StackPane(container);
+    }
+
+    private void styleLangButton(Button btn, boolean active) {
+        String base = "-fx-background-radius: 18px; -fx-cursor: hand; -fx-transition: all 0.2s;";
+        if (active) {
+            btn.setStyle(base + 
+                "-fx-background-color: " + themeManager.getAccentHex() + ";" +
+                "-fx-text-fill: #ffffff;"
+            );
+        } else {
+            btn.setStyle(base + 
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: " + (themeManager.isDarkMode() ? "#94a3b8" : "#64748b") + ";"
+            );
+        }
     }
 
     private StackPane buildThemeToggle() {
@@ -538,15 +587,15 @@ public class DynamicHeader {
         sep1.setPrefHeight(1);
         sep1.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
-        Button profile = profileRow("\ud83d\udc64  Profile", "profile");
-        Button settings = profileRow("\u2699  Settings", "settings");
+        Button profile = profileRow("\ud83d\udc64  " + lm.get("profile"), "profile");
+        Button settings = profileRow("\u2699  " + lm.get("settings"), "settings");
 
         VBox rows = new VBox();
         rows.setPadding(new Insets(8));
         rows.setSpacing(6);
         rows.getChildren().add(profile);
         if (AccessControlService.canAccessAdminArea()) {
-            rows.getChildren().add(profileRow("\ud83d\udcca  Dashboard", "dashboard"));
+            rows.getChildren().add(profileRow("\ud83d\udcca  " + lm.get("dashboard"), "dashboard"));
         }
         rows.getChildren().add(settings);
 
@@ -554,7 +603,7 @@ public class DynamicHeader {
         sep2.setPrefHeight(1);
         sep2.setStyle("-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.10)") + ";");
 
-        Button logout = new Button("\u23fb  Sign Out");
+        Button logout = new Button("\u23fb  " + lm.get("logout"));
         logout.setMaxWidth(Double.MAX_VALUE);
         logout.setAlignment(Pos.CENTER_LEFT);
         logout.setPadding(new Insets(9, 10, 9, 10));

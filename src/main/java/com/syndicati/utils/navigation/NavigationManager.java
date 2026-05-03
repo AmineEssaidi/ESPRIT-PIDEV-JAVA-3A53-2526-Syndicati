@@ -50,8 +50,35 @@ public class NavigationManager {
     
     public void setViews(LandingPageView landingPageView) {
         this.landingPageView = landingPageView;
-        // Don't rebuild everything on the FX thread during navigation.
-        // Let warmup handle lazy initialization.
+    }
+
+    public void clearAllViews(boolean includeHeavy) {
+        this.servicesView = null;
+        this.aboutView = null;
+        if (includeHeavy) {
+            this.profileView = null;
+            this.dashboardView = null;
+        }
+        this.serviceDetailView = null;
+        this.aboutDetailView = null;
+        this.settingsView = null;
+        this.residenceView = null;
+        this.forumView = null;
+        this.syndicatView = null;
+        this.evenementView = null;
+    }
+
+    /**
+     * One-time initialization of heavy views like ProfileView.
+     * Called during session recovery to prevent hangs later.
+     */
+    public void initializeHeavyViews() {
+        javafx.application.Platform.runLater(() -> {
+            if (profileView == null) {
+                System.out.println("[NavigationManager] Initializing heavy ProfileView...");
+                profileView = new com.syndicati.views.frontend.profile.ProfileView();
+            }
+        });
     }
 
     public void warmup() {
@@ -84,14 +111,6 @@ public class NavigationManager {
                         rc.countPendingRequests(user)
                     );
                 }
-
-                // 2. Pre-instantiate heavy views on the FX thread while the animation plays
-                javafx.application.Platform.runLater(() -> {
-                    if (profileView == null) {
-                        System.out.println("[WARMUP] Pre-instantiating ProfileView...");
-                        profileView = new com.syndicati.views.frontend.profile.ProfileView();
-                    }
-                });
             } catch (Exception ignored) {}
         });
     }

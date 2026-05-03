@@ -98,9 +98,9 @@ public class ForumPageView implements ViewInterface {
     private final Rectangle detailHeroClip = new Rectangle();
     private Image currentHeroImage;
 
-    private final Text heroTitle = new Text("Welcome to the Forum");
+    private final Text heroTitle = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("welcome_to_forum"));
     private final Text heroMeta = new Text("");
-    private final Text heroBody = new Text("Select a publication from the right panel.");
+    private final Text heroBody = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("forum_hero_body"));
     private final Text heroCategory = new Text("Discussion General");
     private final HBox ownerActions = new HBox(8);
 
@@ -157,6 +157,7 @@ public class ForumPageView implements ViewInterface {
 
     private Publication current;
     private String currentFilter = "General";
+    private boolean dataLoaded = false;
 
     public ForumPageView() {
         root.setPadding(new Insets(24));
@@ -166,16 +167,34 @@ public class ForumPageView implements ViewInterface {
         root.getChildren().addAll(buildHero(), buildSplit());
         showFace(readFace);
         
-        listBox.getChildren().setAll(new Label("Loading discussions..."));
+        // Attempt immediate hydration from cache to avoid 'empty shell'
+        loadInitialDataFromCache();
+    }
+    
+    private void loadInitialDataFromCache() {
+        List<Publication> cached = publications.publicationsByCategory("General");
+        if (cached != null && !cached.isEmpty()) {
+            displayPublications(cached);
+            dataLoaded = true;
+        } else {
+            listBox.getChildren().setAll(new Label("Loading discussions..."));
+        }
     }
 
     public void loadDataAsync() {
+        if (dataLoaded) return; // Skip if already hydrated during warm-start
+        
         Thread.startVirtualThread(() -> {
             try {
                 // Fetch on background thread
                 loadCategory("General");
+                dataLoaded = true;
             } catch (Exception e) {
-                Platform.runLater(() -> listBox.getChildren().setAll(new Label("Failed to load forum data.")));
+                Platform.runLater(() -> {
+                    if (listBox.getChildren().isEmpty() || (listBox.getChildren().size() == 1 && listBox.getChildren().get(0) instanceof Label)) {
+                        listBox.getChildren().setAll(new Label("Failed to load forum data."));
+                    }
+                });
             }
         });
     }
@@ -498,8 +517,8 @@ public class ForumPageView implements ViewInterface {
         HBox previewRow = new HBox(8, createImagePreview);
 
         HBox actions = new HBox(8,
-            primaryButton("Publish", this::submitPublication),
-            ghostButton("Back", () -> showFace(readFace))
+            primaryButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("publish"), this::submitPublication),
+            ghostButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("back"), () -> showFace(readFace))
         );
 
         card.getChildren().addAll(
@@ -533,7 +552,7 @@ public class ForumPageView implements ViewInterface {
         card.setPadding(new Insets(22));
         card.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
 
-        Text heading = new Text("Edit Publication");
+        Text heading = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("edit_publication"));
         heading.setFill(Color.WHITE);
         heading.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 24));
 

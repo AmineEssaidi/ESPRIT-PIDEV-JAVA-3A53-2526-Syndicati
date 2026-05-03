@@ -104,7 +104,7 @@ public class SessionRecoveryView {
         
         avatarFrame.getChildren().addAll(border, avatarView);
 
-        nameLabel = new Label("RECOVERING...");
+        nameLabel = new Label(com.syndicati.utils.localization.LocalizationManager.getInstance().get("recovering").toUpperCase());
         nameLabel.setStyle("-fx-font-family: 'Clash Grotesk Bold'; -fx-font-size: 24px; -fx-text-fill: white; -fx-letter-spacing: 2px;");
         
         userCard.getChildren().addAll(avatarFrame, nameLabel);
@@ -116,7 +116,7 @@ public class SessionRecoveryView {
         statusBox = new VBox(15);
         statusBox.setAlignment(Pos.CENTER);
         
-        statusLabel = new Label("RESTORING YOUR WORKSPACE");
+        statusLabel = new Label(com.syndicati.utils.localization.LocalizationManager.getInstance().get("warming_workspace").toUpperCase());
         statusLabel.setStyle("-fx-font-family: 'Archivo'; -fx-font-size: 12px; -fx-text-fill: white; -fx-opacity: 0.5; -fx-letter-spacing: 4px;");
         
         customProgress = new ProgressBar();
@@ -203,7 +203,7 @@ public class SessionRecoveryView {
         }
 
         // 1. Create Buttons
-        Button homeBtn = createStyledButton("GO TO COMMUNITY", false);
+        Button homeBtn = createStyledButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("go_to_community").toUpperCase(), false);
         homeBtn.setOnAction(e -> { if(onGoHome != null) onGoHome.run(); });
 
         actionsBox.getChildren().add(homeBtn);
@@ -211,7 +211,7 @@ public class SessionRecoveryView {
         // Add Dashboard if Admin/Syndic
         String role = user.getRoleUser();
         if ("ADMIN".equals(role) || "SUPERADMIN".equals(role) || "SYNDIC".equals(role)) {
-            Button dashBtn = createStyledButton("GO TO DASHBOARD", true);
+            Button dashBtn = createStyledButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("go_to_dashboard").toUpperCase(), true);
             dashBtn.setOnAction(e -> { if(onGoDashboard != null) onGoDashboard.run(); });
             actionsBox.getChildren().add(dashBtn);
         }

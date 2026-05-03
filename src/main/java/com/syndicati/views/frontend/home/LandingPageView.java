@@ -34,6 +34,11 @@ public class LandingPageView implements ViewInterface {
     private final java.util.Map<String, javafx.scene.Node> pageCache = new java.util.HashMap<>();
     
     public LandingPageView() {
+        this("home");
+    }
+
+    public LandingPageView(String initialPage) {
+        this.currentPageName = initialPage != null ? initialPage : "home";
         this.root = new StackPane();
         this.header = new DynamicHeader();
         this.footer = new DynamicFooter();
@@ -50,6 +55,38 @@ public class LandingPageView implements ViewInterface {
         header.setBackgroundUpdateCallback(() -> {
             applyThemeStyling();
             footer.refreshTheme();
+        });
+        
+        // Start building the UI in small slices to prevent freezing
+        loadProgressively();
+    }
+    
+    private void loadProgressively() {
+        // Step 1: Initialize Header (Fast)
+        javafx.application.Platform.runLater(() -> {
+            if (header.getRoot() != null) {
+                // Ensure header is in the right place
+            }
+        });
+
+        // Step 2: Initialize HomeContent (Heavy)
+        javafx.application.Platform.runLater(() -> {
+            homeContent = new HomeContent();
+            if (mainContent != null && homeContent.getRoot() != null) {
+                mainContent.getChildren().add(homeContent.getRoot());
+                // If we are NOT on home page, hide the home content immediately
+                if (!"home".equalsIgnoreCase(currentPageName)) {
+                    homeContent.getRoot().setVisible(false);
+                    homeContent.getRoot().setManaged(false);
+                }
+            }
+        });
+
+        // Step 3: Initialize Footer (Medium)
+        javafx.application.Platform.runLater(() -> {
+            if (footer.getRoot() != null && contentRow != null) {
+                // Footer is usually at the bottom of the pageWrapper scroll content
+            }
         });
     }
     
@@ -99,14 +136,14 @@ public class LandingPageView implements ViewInterface {
         mainContent.setCache(true);
         mainContent.setCacheHint(javafx.scene.CacheHint.QUALITY);
 
-        homeContent = new HomeContent();
-        mainContent.getChildren().add(homeContent.getRoot());
+        // REMOVED: immediate creation of homeContent. 
+        // It is now handled in loadProgressively()
 
         ScrollPane scrollPane = new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;" + themeManager.getScrollbarVariableStyle());
 
         VBox pageWrapper = new VBox();
         pageWrapper.setFillWidth(true);
