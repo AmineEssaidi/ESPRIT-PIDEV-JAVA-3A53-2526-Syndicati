@@ -1,4 +1,5 @@
 package com.syndicati.utils.navigation;
+import com.syndicati.interfaces.ViewInterface;
 
 import javafx.scene.layout.Pane;
 import com.syndicati.views.frontend.home.LandingPageView;
@@ -49,34 +50,41 @@ public class NavigationManager {
     
     public void setViews(LandingPageView landingPageView) {
         this.landingPageView = landingPageView;
-        rebuildThemeSensitiveViews();
+        // Don't rebuild everything on the FX thread during navigation.
+        // Let warmup handle lazy initialization.
     }
 
     public void warmup() {
-        // Pre-instantiate heavy views and pre-fetch data on a background thread.
-        Thread.ofVirtual().name("Syndicati-NavigationWarmup").start(() -> {
+        // Silent background warmup for data only. No view instantiation.
+        Thread.startVirtualThread(() -> {
             try {
-                // Pre-fetch critical user data into the cache
-                com.syndicati.models.user.User user = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
-                if (user != null) {
-                    new com.syndicati.controllers.user.profile.ProfileController().findOneByUserId(user.getIdUser());
-                    new com.syndicati.models.user.data.UserStandingRepository().findByUserId(user.getIdUser());
-                    com.syndicati.controllers.user.relationship.UserRelationshipController rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
-                    rc.countFriends(user);
-                    rc.countPendingRequests(user);
+                com.syndicati.models.user.User user = SessionManager.getInstance().getCurrentUser();
+                if (user == null) return;
+
+                // Refresh data silently if not fresh
+                SessionManager sm = SessionManager.getInstance();
+                if (!sm.isProfileFresh()) {
+                    new com.syndicati.controllers.user.profile.ProfileController()
+                        .findOneByUserId(user.getIdUser())
+                        .ifPresent(sm::setCurrentProfile);
+                }
+                
+                if (!sm.isStandingFresh()) {
+                    new com.syndicati.models.user.data.UserStandingRepository()
+                        .findByUserId(user.getIdUser())
+                        .ifPresent(sm::setCurrentStanding);
                 }
 
-                // Short delay to let the landing page finish its first render
-                Thread.sleep(800);
-                javafx.application.Platform.runLater(() -> {
-                    if (profileView == null) getPage("profile");
-                    if (aboutView == null) getPage("about");
-                    if (residenceView == null) getPage("services/residence");
-                    if (forumView == null) getPage("services/forum");
-                });
-            } catch (Exception e) {
-                System.err.println("Warmup failed: " + e.getMessage());
-            }
+                if (!sm.isCircleCacheFresh()) {
+                    var rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
+                    sm.setCircleData(
+                        rc.findFriends(user, 24),
+                        rc.findPendingRequestsFor(user),
+                        rc.countFriends(user),
+                        rc.countPendingRequests(user)
+                    );
+                }
+            } catch (Exception ignored) {}
         });
     }
 
@@ -98,47 +106,47 @@ public class NavigationManager {
         this.evenementView = null;
     }
 
-    private ServicesView servicesView() {
+    private synchronized ServicesView servicesView() {
         if (servicesView == null) servicesView = new ServicesView();
         return servicesView;
     }
 
-    private AboutView aboutView() {
+    private synchronized AboutView aboutView() {
         if (aboutView == null) aboutView = new AboutView();
         return aboutView;
     }
 
-    private ProfileView profileView() {
+    private synchronized ProfileView profileView() {
         if (profileView == null) profileView = new ProfileView();
         return profileView;
     }
 
-    private DashboardView dashboardView() {
+    private synchronized DashboardView dashboardView() {
         if (dashboardView == null) dashboardView = new DashboardView();
         return dashboardView;
     }
 
-    private ServiceDetailView serviceDetailView() {
+    private synchronized ServiceDetailView serviceDetailView() {
         if (serviceDetailView == null) serviceDetailView = new ServiceDetailView();
         return serviceDetailView;
     }
 
-    private AboutDetailView aboutDetailView() {
+    private synchronized AboutDetailView aboutDetailView() {
         if (aboutDetailView == null) aboutDetailView = new AboutDetailView();
         return aboutDetailView;
     }
 
-    private SettingsView settingsView() {
+    private synchronized SettingsView settingsView() {
         if (settingsView == null) settingsView = new SettingsView();
         return settingsView;
     }
 
-    private ResidencePageView residenceView() {
+    private synchronized ResidencePageView residenceView() {
         if (residenceView == null) residenceView = new ResidencePageView();
         return residenceView;
     }
 
-    private ForumPageView forumView() {
+    private synchronized ForumPageView forumView() {
         if (forumView == null) {
             forumView = new ForumPageView();
             forumView.loadDataAsync();
@@ -146,12 +154,12 @@ public class NavigationManager {
         return forumView;
     }
 
-    private SyndicatPageView syndicatView() {
+    private synchronized SyndicatPageView syndicatView() {
         if (syndicatView == null) syndicatView = new SyndicatPageView();
         return syndicatView;
     }
 
-    private EvenementPageView evenementView() {
+    private synchronized EvenementPageView evenementView() {
         if (evenementView == null) evenementView = new EvenementPageView();
         return evenementView;
     }
@@ -160,7 +168,7 @@ public class NavigationManager {
         SessionManager.getInstance().awardXp(xpDelta);
     }
     
-    public Pane getPage(String pageName) {
+    public ViewInterface getView(String pageName) {
         String normalized = pageName == null ? "home" : pageName.toLowerCase().trim();
         
         // Handle service aliases
@@ -170,34 +178,46 @@ public class NavigationManager {
         if (normalized.equals("evenement")) normalized = "services/evenement";
 
         switch (normalized) {
-            case "home":
-                // Return a fresh HomeContent root instead of the LandingPageView root (prevents cycle)
-                return new com.syndicati.components.home.HomeContent().getRoot();
             case "services":
-                return servicesView().getRoot();
+                return servicesView();
             case "about":
-                return aboutView().getRoot();
+                return aboutView();
             case "profile":
-                return profileView().getRoot();
+                return profileView();
             case "dashboard":
-                return dashboardView().getRoot();
+                return dashboardView();
             case "service-detail":
-                return serviceDetailView().getRoot();
+                return serviceDetailView();
             case "about-detail":
-                return aboutDetailView().getRoot();
+                return aboutDetailView();
             case "settings":
-                return settingsView().getRoot();
+                return settingsView();
             case "services/residence":
-                return residenceView().getRoot();
+                return residenceView();
             case "services/forum":
-                return forumView().getRoot();
+                return forumView();
             case "services/syndicat":
-                return syndicatView().getRoot();
+                return syndicatView();
             case "services/evenement":
-                return evenementView().getRoot();
+                return evenementView();
             default:
-                return new com.syndicati.components.home.HomeContent().getRoot();
+                return null;
         }
+    }
+
+    public Pane getPage(String pageName) {
+        String normalized = pageName == null ? "home" : pageName.toLowerCase().trim();
+        
+        if (normalized.equals("home")) {
+            return new com.syndicati.components.home.HomeContent().getRoot();
+        }
+
+        ViewInterface view = getView(pageName);
+        if (view != null) {
+            return (Pane) view.getRoot();
+        }
+        
+        return new com.syndicati.components.home.HomeContent().getRoot();
     }
     
     public void navigateTo(String pageName) {

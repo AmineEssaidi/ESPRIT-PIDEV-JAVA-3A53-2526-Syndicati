@@ -166,13 +166,7 @@ public class ForumPageView implements ViewInterface {
         root.getChildren().addAll(buildHero(), buildSplit());
         showFace(readFace);
         
-        // Try to pull from cache immediately
-        List<Publication> cached = publications.publicationsByCategory("General");
-        if (cached != null && !cached.isEmpty()) {
-            displayPublications(cached);
-        } else {
-            listBox.getChildren().setAll(new Label("Loading discussions..."));
-        }
+        listBox.getChildren().setAll(new Label("Loading discussions..."));
     }
 
     public void loadDataAsync() {
@@ -800,6 +794,12 @@ public class ForumPageView implements ViewInterface {
         List<Publication> sorted = new ArrayList<>(items);
         sorted.sort((a, b) -> compareDates(b.getDateCreationPub(), a.getDateCreationPub()));
 
+        // Pre-build UI nodes in background thread
+        List<Node> nodes = new ArrayList<>();
+        for (Publication pub : sorted) {
+            nodes.add(publicationItem(pub));
+        }
+
         Platform.runLater(() -> {
             listBox.getChildren().clear();
             listItemsById.clear();
@@ -810,16 +810,15 @@ public class ForumPageView implements ViewInterface {
                 return;
             }
 
-            for (Publication pub : sorted) {
-                listBox.getChildren().add(publicationItem(pub));
-            }
+            listBox.getChildren().setAll(nodes);
         });
     }
 
     private void loadCategory(String category) {
         currentFilter = category;
-        updateFilterButtons();
+        Platform.runLater(this::updateFilterButtons);
 
+        // DB Call (Background)
         List<Publication> items = "Announcement".equals(category)
             ? publications.publicationsByCategory("Announcement")
             : publications.publicationsByCategory("General");
@@ -841,9 +840,13 @@ public class ForumPageView implements ViewInterface {
         }
 
         if (target == null || !found) {
-            target = items.get(0);
+            if (!itemsSorted.isEmpty()) {
+                target = itemsSorted.get(0);
+            }
         }
-        selectPublication(target);
+        
+        final Publication finalTarget = target;
+        Platform.runLater(() -> selectPublication(finalTarget));
     }
 
     private Node publicationItem(Publication pub) {
@@ -899,36 +902,43 @@ public class ForumPageView implements ViewInterface {
     private void selectPublication(Publication publication) {
         current = publication;
         if (publication == null) {
-            clearCurrent();
+            Platform.runLater(this::clearCurrent);
             return;
         }
 
-        heroTitle.setText(publication.getTitrePub() == null ? "Untitled" : publication.getTitrePub());
-        heroBody.setText(publication.getDescriptionPub() == null ? "" : publication.getDescriptionPub());
-        heroCategory.setText(publication.getCategoriePub() == null ? "Discussion General" : publication.getCategoriePub());
-        heroMeta.setText(author(publication.getUser()) + " • " + format(publication.getDateCreationPub()));
+        Platform.runLater(() -> {
+            heroTitle.setText(publication.getTitrePub() == null ? "Untitled" : publication.getTitrePub());
+            heroBody.setText(publication.getDescriptionPub() == null ? "" : publication.getDescriptionPub());
+            heroCategory.setText(publication.getCategoriePub() == null ? "Discussion General" : publication.getCategoriePub());
+            heroMeta.setText(author(publication.getUser()) + " • " + format(publication.getDateCreationPub()));
 
-        Image image = resolveImage(publication.getImagePub(), "forum_images");
-        setHeroImage(image);
+            Image image = resolveImage(publication.getImagePub(), "forum_images");
+            setHeroImage(image);
 
-        updateOwnerActionsVisibility();
-        updateActiveListItem();
+            updateOwnerActionsVisibility();
+            updateActiveListItem();
+        });
+
         refreshPublicationReactionUI();
         renderComments(publication);
     }
 
     private void renderComments(Publication publication) {
+        // DB Call (Background)
         List<Commentaire> list = comments.commentairesByPublication(publication);
-        commentsBox.getChildren().clear();
+        
+        Platform.runLater(() -> {
+            commentsBox.getChildren().clear();
 
-        if (list.isEmpty()) {
-            commentsBox.getChildren().add(emptyLabel("No comments yet."));
-            return;
-        }
+            if (list.isEmpty()) {
+                commentsBox.getChildren().add(emptyLabel("No comments yet."));
+                return;
+            }
 
-        for (Commentaire comment : list) {
-            commentsBox.getChildren().add(commentCard(comment));
-        }
+            for (Commentaire c : list) {
+                commentsBox.getChildren().add(commentCard(c));
+            }
+        });
     }
 
     private Node commentCard(Commentaire comment) {
@@ -1687,7 +1697,9 @@ public class ForumPageView implements ViewInterface {
             return;
         }
 
-        applyPublicationReactionUI(reactions.publicationStatus(current, session.getCurrentUser()));
+        // DB Call (Background)
+        ReactionStatus status = reactions.publicationStatus(current, session.getCurrentUser());
+        Platform.runLater(() -> applyPublicationReactionUI(status));
     }
 
     private void applyPublicationReactionUI(ReactionStatus status) {

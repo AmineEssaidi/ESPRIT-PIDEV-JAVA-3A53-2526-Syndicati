@@ -34,6 +34,18 @@ public class AppPreferences {
         return PREFS.get(key, defaultValue);
     }
 
+    public static void setLocalOnly(String key, String value) {
+        PREFS.put(key, value);
+    }
+
+    public static String getLocal(String key, String defaultValue) {
+        return PREFS.get(key, defaultValue);
+    }
+
+    public static void removeLocal(String key) {
+        PREFS.remove(key);
+    }
+
     public static void setBoolean(String key, boolean value) {
         PREFS.putBoolean(key, value);
         syncToDatabase(key, value);

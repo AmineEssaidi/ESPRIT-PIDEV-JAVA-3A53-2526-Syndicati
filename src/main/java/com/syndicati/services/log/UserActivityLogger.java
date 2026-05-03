@@ -159,12 +159,18 @@ public class UserActivityLogger {
                 }
             }
 
-            repository.create(log);
-            logBuffer.push(log);
-
-            // --- Langfuse trace/span recording ---
-            recordToLangfuse(log);
-        } catch (Exception e) {
+            // Perform database persistence and Langfuse recording in background
+            // to avoid blocking the caller (especially if it's the UI thread).
+            Thread.startVirtualThread(() -> {
+                try {
+                    repository.create(log);
+                    logBuffer.push(log);
+                    recordToLangfuse(log);
+                } catch (Throwable t) {
+                    System.out.println("[UserActivityLogger] Async logging error: " + t.getMessage());
+                }
+            });
+        } catch (Throwable e) {
             System.out.println("[UserActivityLogger] Error: " + e.getMessage());
             e.printStackTrace();
         }

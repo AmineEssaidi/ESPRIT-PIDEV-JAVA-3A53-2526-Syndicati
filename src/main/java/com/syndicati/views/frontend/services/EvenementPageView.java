@@ -534,7 +534,6 @@ public class EvenementPageView implements ViewInterface {
         eventsGrid.setHgap(48);
         eventsGrid.setVgap(48);
         
-        refreshEventsList();
         eventsSection.widthProperty().addListener((obs, oldW, newW) -> rebuildEventsGrid(eventsGrid, newW.doubleValue()));
 
         // Pagination controls
@@ -645,11 +644,25 @@ public class EvenementPageView implements ViewInterface {
         }
     }
 
+    @Override
+    public void loadDataAsync() {
+        Thread.startVirtualThread(() -> {
+            try {
+                refreshEventsList();
+            } catch (Exception e) {
+                System.err.println("Error loading events asynchronously: " + e.getMessage());
+            }
+        });
+    }
+
     private void refreshEventsList() {
-        currentEvents = evenementController.evenements();
-        if (eventsGrid != null) {
-            rebuildEventsGrid(eventsGrid, root.getWidth());
-        }
+        List<Evenement> events = evenementController.evenements();
+        Platform.runLater(() -> {
+            currentEvents = events;
+            if (eventsGrid != null) {
+                rebuildEventsGrid(eventsGrid, root.getWidth());
+            }
+        });
     }
 
     private void rebuildEventsGrid(GridPane grid, double width) {

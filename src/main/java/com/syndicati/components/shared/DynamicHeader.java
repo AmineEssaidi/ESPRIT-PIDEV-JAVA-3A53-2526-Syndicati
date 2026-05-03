@@ -205,6 +205,7 @@ public class DynamicHeader {
         content.setPadding(new Insets(10));
         content.setSpacing(3);
         content.setPrefWidth(210);
+        content.setStyle("-fx-background-color: transparent;"); // Prevent white flash
 
         for (Map.Entry<String, String> entry : items.entrySet()) {
             Button row = new Button(entry.getKey());
@@ -693,7 +694,7 @@ public class DynamicHeader {
     }
 
     private void showProfilePopup() {
-        if (profileDropdown == null || profileAnchor == null) {
+        if (profileAnchor == null) {
             return;
         }
 
@@ -702,24 +703,18 @@ public class DynamicHeader {
         closeAllTabPopups();
         closeNotificationPopup();
 
-        VBox previousProfileDropdown = profileDropdown;
-        profileDropdown = buildProfileDropdown();
-        profileDropdown.setVisible(false);
-        profileDropdown.setManaged(false);
-        profileDropdown.setMouseTransparent(true);
-        profileDropdown.setOnMouseEntered(e -> cancelProfileCloseDelay());
-        profileDropdown.setOnMouseExited(e -> scheduleCloseProfilePopup());
-
-        if (previousProfileDropdown != null) {
-            root.getChildren().remove(previousProfileDropdown);
-        }
-        if (!root.getChildren().contains(profileDropdown)) {
+        if (profileDropdown == null) {
+            profileDropdown = buildProfileDropdown();
+            profileDropdown.setVisible(false);
+            profileDropdown.setManaged(false);
+            profileDropdown.setMouseTransparent(true);
+            profileDropdown.setOnMouseEntered(e -> cancelProfileCloseDelay());
+            profileDropdown.setOnMouseExited(e -> scheduleCloseProfilePopup());
             root.getChildren().add(profileDropdown);
             StackPane.setAlignment(profileDropdown, Pos.TOP_LEFT);
         }
 
         positionProfileDropdown();
-        profileDropdown.setManaged(false);
         profileDropdown.setVisible(true);
         profileDropdown.setMouseTransparent(false);
         profileDropdown.toFront();
@@ -786,9 +781,17 @@ public class DynamicHeader {
         String avatarPath = profile == null ? null : profile.getAvatar();
 
         if (avatarPath != null && !avatarPath.isBlank()) {
-            Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
+            Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, true);
             if (img != null && !img.isError()) {
-                avatarCircle.setFill(new ImagePattern(img));
+                if (img.getProgress() < 1.0) {
+                    img.progressProperty().addListener((obs, oldVal, newVal) -> {
+                        if (newVal.doubleValue() >= 1.0) {
+                            avatarCircle.setFill(new ImagePattern(img));
+                        }
+                    });
+                } else {
+                    avatarCircle.setFill(new ImagePattern(img));
+                }
                 return true;
             }
         }
@@ -979,6 +982,11 @@ public class DynamicHeader {
                     styleDropdownRow(b);
                 }
             }
+        }
+
+        if (profileDropdown != null) {
+            root.getChildren().remove(profileDropdown);
+            profileDropdown = null;
         }
 
         updateTabsState();

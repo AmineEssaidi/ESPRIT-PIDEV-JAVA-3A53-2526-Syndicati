@@ -50,17 +50,16 @@ public class UserRelationshipService {
         }
 
         List<UserRelationship> relationships = relationshipRepository.findFriendRelationships(user.getIdUser(), limit > 0 ? limit : null);
-        List<User> friends = new ArrayList<>();
+        List<Integer> friendIds = new java.util.ArrayList<>();
         for (UserRelationship relationship : relationships) {
             int friendId = relationship.getUserFirstId() != null && relationship.getUserFirstId().equals(user.getIdUser())
                 ? safeId(relationship.getUserSecondId())
                 : safeId(relationship.getUserFirstId());
-            if (friendId <= 0) {
-                continue;
+            if (friendId > 0) {
+                friendIds.add(friendId);
             }
-            userService.findById(friendId).ifPresent(friends::add);
         }
-        return friends;
+        return userService.findAllByIds(friendIds);
     }
 
     public List<UserRelationship> findPendingRequestsFor(User user) {

@@ -69,6 +69,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Profile page replica based on templates/frontend/profile/profile.html.twig.
@@ -99,68 +100,120 @@ public class ProfileView implements ViewInterface {
     private VBox quickActionsDetailView;
     private Button quickActionsButton;
     private final InsightFaceService insightFaceService;
+    /** Prevents duplicate concurrent loadDataAsync() runs. */
+    private final AtomicBoolean isLoading = new AtomicBoolean(false);
 
     public ProfileView() {
         this.tm = ThemeManager.getInstance();
         this.root = new VBox();
+        this.root.setStyle("-fx-background-color: transparent;");
+        this.root.setAlignment(Pos.TOP_CENTER);
+        this.root.setFillWidth(true);
         this.insightFaceService = InsightFaceService.getInstance();
-        
-        // Try to pull from cache immediately for instant render
-        User currentUser = SessionManager.getInstance().getCurrentUser();
-        if (currentUser != null) {
-            new ProfileController().findOneByUserId(currentUser.getIdUser()).ifPresent(p -> {
-                SessionManager.getInstance().setCurrentProfile(p);
-            });
-        }
-        
-        build();
-        // Still run async to catch any fresh updates or heavy circle data
+
+        this.root.getChildren().setAll(buildSkeleton());
+        // Always load data/content in background to ensure zero UI freeze during navigation
         Thread.startVirtualThread(this::loadDataAsync);
     }
 
-    private void loadDataAsync() {
-        // Fetch all heavy data on a virtual thread
-        User currentUser = SessionManager.getInstance().getCurrentUser();
-        if (currentUser == null) return;
+    /** Lightweight skeleton shown while data loads. Instant to build. */
+    private VBox buildSkeleton() {
+        VBox skeleton = new VBox(20);
+        skeleton.setAlignment(Pos.TOP_CENTER);
+        skeleton.setPadding(new Insets(40, 24, 40, 24));
+        skeleton.setStyle("-fx-background-color: transparent;");
 
-        // Fetch Profile
-        new ProfileController().findOneByUserId(currentUser.getIdUser()).ifPresent(p -> {
-            Profile current = SessionManager.getInstance().getCurrentProfile();
-            if (current == null || !current.getSettingsJson().equals(p.getSettingsJson())) {
-                SessionManager.getInstance().setCurrentProfile(p);
+        // Shimmer header bar
+        for (int i = 0; i < 4; i++) {
+            javafx.scene.layout.Region bar = new javafx.scene.layout.Region();
+            bar.setPrefHeight(i == 0 ? 180 : 48);
+            bar.setMaxWidth(i == 0 ? 1600 : (i == 1 ? 420 : 800));
+            bar.setStyle(
+                "-fx-background-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";" +
+                "-fx-background-radius: " + (i == 0 ? 34 : 12) + "px;"
+            );
+            // Shimmer animation
+            javafx.animation.FadeTransition ft = new javafx.animation.FadeTransition(javafx.util.Duration.millis(900), bar);
+            ft.setFromValue(0.4);
+            ft.setToValue(1.0);
+            ft.setAutoReverse(true);
+            ft.setCycleCount(javafx.animation.Animation.INDEFINITE);
+            ft.setDelay(javafx.util.Duration.millis(i * 120));
+            ft.play();
+            skeleton.getChildren().add(bar);
+        }
+
+        // Loading label
+        Label lbl = new Label("Loading profile...");
+        lbl.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
+        lbl.setTextFill(Color.web(tm.isDarkMode() ? "rgba(255,255,255,0.35)" : "rgba(15,23,42,0.35)"));
+        skeleton.getChildren().add(lbl);
+        return skeleton;
+    }
+
+    @Override
+    public void loadDataAsync() {
+        // Prevent overlapping concurrent loads
+        if (!isLoading.compareAndSet(false, true)) return;
+
+        Thread.startVirtualThread(() -> {
+            try {
+                User currentUser = SessionManager.getInstance().getCurrentUser();
+                if (currentUser == null) {
+                    isLoading.set(false);
+                    return;
+                }
+
+                com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+
+                // --- PHASE 1: Fetch all data on background thread (Cache Aware) ---
+                if (!sm.isProfileFresh()) {
+                    Profile profile = new ProfileController()
+                        .findOneByUserId(currentUser.getIdUser()).orElse(null);
+                    if (profile != null) sm.setCurrentProfile(profile);
+                }
+
+                if (!sm.isStandingFresh()) {
+                    UserStanding standing = new UserStandingRepository()
+                        .findByUserId(currentUser.getIdUser()).orElse(null);
+                    if (standing != null) sm.setCurrentStanding(standing);
+                }
+
+                if (!sm.isCircleCacheFresh()) {
+                    UserRelationshipController rc = new UserRelationshipController();
+                    
+                    // Fetch sequentially to respect the pool size of 2 and avoid 10s timeouts
+                    int friendCount = rc.countFriends(currentUser);
+                    int pendingCount = rc.countPendingRequests(currentUser);
+                    List<User> friendList = rc.findFriends(currentUser, 24);
+                    List<UserRelationship> pendingList = rc.findPendingRequestsFor(currentUser);
+
+                    sm.setCircleData(friendList, pendingList, friendCount, pendingCount);
+                }
+
+                // --- PHASE 2: Build ENTIRE UI off the FX thread ---
+                // Safe because nodes are not yet attached to a live scene.
+                VBox newContent = buildContent();
+
+                // --- PHASE 3: Single atomic swap on FX thread (< 1ms) ---
+                Platform.runLater(() -> {
+                    root.getChildren().setAll(newContent);
+                });
+            } catch (Exception ex) {
+                System.err.println("[ProfileView] loadDataAsync failed: " + ex.getMessage());
+                ex.printStackTrace();
+            } finally {
+                isLoading.set(false);
             }
         });
-
-        // Fetch Standing
-        new UserStandingRepository().findByUserId(currentUser.getIdUser()).ifPresent(s -> {
-            SessionManager.getInstance().setCurrentStanding(s);
-        });
-
-        // Fetch Circle Data (Relationship counts and lists)
-        UserRelationshipController rc = new UserRelationshipController();
-        int friendCount = rc.countFriends(currentUser);
-        int pendingCount = rc.countPendingRequests(currentUser);
-        List<User> friends = rc.findFriends(currentUser, 24);
-        List<UserRelationship> pending = rc.findPendingRequestsFor(currentUser);
-
-        // Update UI once all data is ready
-        Platform.runLater(() -> {
-            // Update the UI components if they are already built
-            refreshUIWithData();
-        });
     }
 
-    private void refreshUIWithData() {
-        // Rebuild or update components that depend on DB data
-        build(); // Re-run build with session data populated
-    }
-
-    private void build() {
-        if (root.getChildren().size() > 0 && SessionManager.getInstance().getCurrentProfile() == null) {
-            // Already built a skeleton, wait for data
-            return;
-        }
-        root.getChildren().clear();
+    private VBox buildContent() {
+        VBox container = new VBox();
+        container.setAlignment(Pos.TOP_CENTER);
+        container.setFillWidth(true);
+        container.setStyle("-fx-background-color: transparent;");
+        
         mainPages.clear();
         mainNavButtons.clear();
         
@@ -185,8 +238,8 @@ public class ProfileView implements ViewInterface {
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scroll.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
 
-        root.getChildren().add(scroll);
-        root.setStyle("-fx-background-color: transparent;");
+        container.getChildren().add(scroll);
+        return container;
     }
 
     private HBox createMainNavigation() {
@@ -252,8 +305,7 @@ public class ProfileView implements ViewInterface {
 
         HBox row = new HBox(22);
         row.setAlignment(Pos.TOP_CENTER);
-        row.setMaxWidth(1800);
-        row.prefWidthProperty().bind(root.widthProperty().multiply(0.95));
+        row.setMaxWidth(1600);
         VBox standing = createStandingCard();
         VBox circle = createCircleCard();
         HBox.setHgrow(standing, Priority.ALWAYS);
@@ -271,8 +323,8 @@ public class ProfileView implements ViewInterface {
         Profile currentProfile = SessionManager.getInstance().getCurrentProfile();
         
         VBox card = new VBox(0);
-        card.setMaxWidth(1800);
-        card.prefWidthProperty().bind(root.widthProperty().multiply(0.95));
+        card.setMaxWidth(1600);
+        card.setAlignment(Pos.TOP_CENTER);
         card.setStyle(shell(34, surfaceCard(), 0.16));
 
         StackPane banner = new StackPane();
@@ -597,8 +649,12 @@ public class ProfileView implements ViewInterface {
         fill.setMinHeight(8);
         fill.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-background-radius: 999px;");
         
-        // Use binding to ensure the fill takes up exactly the right percentage
-        fill.prefWidthProperty().bind(progressTrack.widthProperty().multiply(currentXp / 100.0));
+        // Use StackPane alignment so fill snaps to the left at the computed percentage.
+        // No live binding needed — this is a static snapshot at render time.
+        StackPane.setAlignment(fill, Pos.CENTER_LEFT);
+        double clampedXp = Math.min(Math.max(currentXp, 0.0), 100.0);
+        fill.setMaxWidth(Double.MAX_VALUE);
+        fill.prefWidthProperty().bind(progressTrack.widthProperty().multiply(clampedXp / 100.0));
         
         progressTrack.getChildren().add(fill);
 
@@ -706,32 +762,41 @@ public class ProfileView implements ViewInterface {
 
             pendingList.getChildren().clear();
             List<UserRelationship> pending = relationshipController.findPendingRequestsFor(currentUser);
+            
+            // Batch fetch users for pending requests
+            List<Integer> otherIds = new java.util.ArrayList<>();
+            for (UserRelationship rel : pending) {
+                Integer otherId = (rel.getUserSecondId() != null && rel.getUserSecondId().equals(currentUser.getIdUser())) 
+                                  ? rel.getUserFirstId() : rel.getUserSecondId();
+                if (otherId != null && otherId > 0) otherIds.add(otherId);
+            }
+            java.util.Map<Integer, User> userMap = userController.findAllByIds(otherIds).stream()
+                    .collect(java.util.stream.Collectors.toMap(User::getIdUser, u -> u));
+
             for (UserRelationship relationship : pending) {
                 Integer firstId = relationship.getUserFirstId();
                 Integer secondId = relationship.getUserSecondId();
-                if (firstId == null || secondId == null) {
-                    continue;
-                }
+                if (firstId == null || secondId == null) continue;
 
                 boolean incoming = secondId.equals(currentUser.getIdUser());
                 int otherId = incoming ? firstId : secondId;
-                Optional<User> otherUser = userController.findById(otherId);
-                if (otherUser.isEmpty()) {
-                    continue;
-                }
+                User otherUser = userMap.get(otherId);
+                if (otherUser == null) continue;
 
                 pendingList.getChildren().add(circlePendingRow(
-                    otherUser.get(),
+                    otherUser,
                     incoming,
                     () -> {
                         if (relationship.getId() != null) {
                             relationshipController.acceptRequest(relationship.getId(), currentUser.getIdUser());
+                            com.syndicati.utils.session.SessionManager.getInstance().invalidateCircleCache();
                             refreshCircle[0].run();
                             refreshSearch[0].run();
                         }
                     },
                     () -> {
-                        relationshipController.removeConnection(currentUser.getIdUser(), otherUser.get().getIdUser());
+                        relationshipController.removeConnection(currentUser.getIdUser(), otherUser.getIdUser());
+                        com.syndicati.utils.session.SessionManager.getInstance().invalidateCircleCache();
                         refreshCircle[0].run();
                         refreshSearch[0].run();
                     }
@@ -979,8 +1044,7 @@ public class ProfileView implements ViewInterface {
 
         VBox wrapper = new VBox(0);
         wrapper.setAlignment(Pos.TOP_CENTER);
-        wrapper.setMaxWidth(1800);
-        wrapper.prefWidthProperty().bind(root.widthProperty().multiply(0.95));
+        wrapper.setMaxWidth(1600);
         wrapper.getChildren().addAll(tabNav);
         wrapper.getChildren().addAll(detailTabs.values());
 

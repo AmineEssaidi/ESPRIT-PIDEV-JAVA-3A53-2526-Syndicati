@@ -21,7 +21,7 @@ import java.lang.reflect.Proxy;
 public class DatabaseService {
     
     private static DatabaseService instance;
-    private static final int POOL_SIZE = 8;
+    private static final int POOL_SIZE = 4; // Balanced pool for Clever Cloud limits
     private static final long CACHE_TTL_MS = 30000; // 30s cache
     
     private final BlockingQueue<Connection> pool;
@@ -57,12 +57,24 @@ public class DatabaseService {
 
     private void initializePool() {
         for (int i = 0; i < POOL_SIZE; i++) {
-            try {
-                Connection conn = createNewConnection();
-                if (conn != null) pool.offer(conn);
-            } catch (Exception e) {
-                System.err.println("Failed to pre-fill pool connection: " + e.getMessage());
+            boolean success = false;
+            for (int retry = 0; retry < 3 && !success; retry++) {
+                try {
+                    Connection conn = createNewConnection();
+                    if (conn != null) {
+                        pool.offer(conn);
+                        success = true;
+                    }
+                } catch (Exception e) {
+                    if (retry == 2) {
+                        System.err.println("Failed to pre-fill pool connection after 3 retries: " + e.getMessage());
+                    } else {
+                        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+                    }
+                }
             }
+            // Add a substantial delay between successful connection creations to avoid triggering rate limits
+            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
         }
     }
 
@@ -70,10 +82,12 @@ public class DatabaseService {
         Properties props = new Properties();
         props.setProperty("user", dbUser);
         props.setProperty("password", dbPassword);
-        props.setProperty("connectTimeout", String.valueOf(connectionTimeout));
+        props.setProperty("connectTimeout", "15000"); // 15 seconds for Clever Cloud cold starts
         props.setProperty("socketTimeout", "30000"); // Longer socket timeout for queries
         props.setProperty("autoReconnect", "true");
-        props.setProperty("useSSL", "false");
+        props.setProperty("useSSL", "true");
+        props.setProperty("requireSSL", "false");
+        props.setProperty("enabledTLSProtocols", "TLSv1.2,TLSv1.3");
         props.setProperty("allowPublicKeyRetrieval", "true");
         props.setProperty("serverTimezone", "UTC");
         props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
@@ -93,15 +107,27 @@ public class DatabaseService {
     
     public Connection getConnection() {
         try {
+            // Try to get an existing connection from the pool quickly (1s timeout)
             Connection conn = pool.poll(1, TimeUnit.SECONDS);
-            if (conn == null || conn.isClosed() || !conn.isValid(1)) {
-                if (conn != null) try { conn.close(); } catch (SQLException ignore) {}
-                conn = createNewConnection();
+            if (conn != null) {
+                if (!conn.isClosed()) {
+                    return createPooledProxy(conn);
+                }
+                // If closed, create a replacement
+                return createNewConnectionFallback();
             }
-            return createPooledProxy(conn);
+
+            // Pool is empty - create an emergency connection if we're under the limit
+            System.out.println("[WARN] Connection pool empty. Creating emergency connection.");
+            return createNewConnectionFallback();
         } catch (Exception e) {
-            try { return createPooledProxy(createNewConnection()); } catch (Exception ex) { return null; }
+            System.err.println("[ERROR] Failed to get database connection: " + e.getMessage());
+            return null;
         }
+    }
+
+    private synchronized Connection createNewConnectionFallback() throws SQLException {
+        return createNewConnection();
     }
 
     private Connection createPooledProxy(final Connection physicalConn) {
@@ -136,7 +162,7 @@ public class DatabaseService {
     public void releaseConnection(Connection conn) {
         if (conn == null) return;
         try {
-            if (!conn.isClosed() && conn.isValid(1)) {
+            if (!conn.isClosed()) {
                 if (!pool.offer(conn)) {
                     conn.close(); // Pool full
                 }
@@ -177,7 +203,8 @@ public class DatabaseService {
         }
 
         try {
-            URI uri = URI.create(databaseUrl);
+            // Use http scheme for parsing to ensure userInfo and host are correctly extracted
+            URI uri = URI.create(databaseUrl.replace("mysql://", "http://"));
             String userInfo = uri.getUserInfo();
             String username = "root";
             String password = "";
@@ -241,6 +268,19 @@ public class DatabaseService {
             this.jdbcUrl = jdbcUrl;
             this.username = username;
             this.password = password;
+        }
+    }
+    
+    public void shutdown() {
+        System.out.println("[SHUTDOWN] Closing database connections...");
+        java.util.List<Connection> connections = new java.util.ArrayList<>();
+        pool.drainTo(connections);
+        for (Connection conn : connections) {
+            try {
+                if (conn != null && !conn.isClosed()) {
+                    conn.close();
+                }
+            } catch (SQLException ignore) {}
         }
     }
 }

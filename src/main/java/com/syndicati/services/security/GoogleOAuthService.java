@@ -9,7 +9,17 @@ import java.util.logging.Logger;
 
 public class GoogleOAuthService {
     private static final Logger LOGGER = Logger.getLogger(GoogleOAuthService.class.getName());
-    
+
+    /** Ports to try in order. If 8888 is stuck, we fall back to the next one. */
+    private static final int[] CANDIDATE_PORTS = {8888, 8889, 8890, 8891, 8892};
+
+    /**
+     * Static reference to the currently running callback server.
+     * Shared across all instances so clicking the button twice always stops the first server.
+     */
+    private static com.sun.net.httpserver.HttpServer activeServer = null;
+    private static int activePort = -1;
+
     private final String clientId;
     private final String clientSecret;
     private final OkHttpClient httpClient;
@@ -17,24 +27,42 @@ public class GoogleOAuthService {
     public GoogleOAuthService() {
         this.clientId = EnvConfig.get("GOOGLE_OAUTH_CLIENT_ID");
         this.clientSecret = EnvConfig.get("GOOGLE_OAUTH_CLIENT_SECRET");
-        this.httpClient = new OkHttpClient();
-        
+        this.httpClient = new OkHttpClient.Builder()
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .build();
+
         if (this.clientId == null || this.clientId.isEmpty()) {
             LOGGER.warning("GOOGLE_OAUTH_CLIENT_ID is not configured in .env");
         }
     }
 
     /**
+     * Stops any currently running OAuth callback server.
+     * Safe to call even if no server is running.
+     */
+    public static synchronized void stopActiveServer() {
+        if (activeServer != null) {
+            try {
+                activeServer.stop(0);
+                LOGGER.info("Stopped previous OAuth callback server on port " + activePort);
+            } catch (Exception e) {
+                LOGGER.warning("Error stopping previous server: " + e.getMessage());
+            }
+            activeServer = null;
+            activePort = -1;
+        }
+    }
+
+    /**
      * Generates the Google OAuth authorization URL.
-     * @param redirectUri The local redirect URI (e.g., http://localhost:12345/callback)
-     * @return The authorization URL to open in the browser
      */
     public String getAuthorizationUrl(String redirectUri) {
         String encodedUri = redirectUri;
         try {
             encodedUri = java.net.URLEncoder.encode(redirectUri, "UTF-8");
         } catch (java.io.UnsupportedEncodingException e) {}
-        
+
         return "https://accounts.google.com/o/oauth2/v2/auth?" +
                 "client_id=" + clientId +
                 "&redirect_uri=" + encodedUri +
@@ -46,15 +74,11 @@ public class GoogleOAuthService {
 
     /**
      * Exchanges the authorization code for an access token and fetches user info.
-     * @param code The authorization code received in the callback
-     * @param redirectUri The redirect URI used in the initial request
-     * @return A GoogleUserInfo object containing user details
-     * @throws Exception If token exchange or user info fetch fails
+     * Must be called from a background thread — makes network calls.
      */
     public GoogleUserInfo exchangeCodeAndGetUserInfo(String code, String redirectUri) throws Exception {
         LOGGER.info("Exchanging Google OAuth code for token...");
-        
-        // 1. Exchange code for token
+
         RequestBody formBody = new FormBody.Builder()
                 .add("client_id", clientId)
                 .add("client_secret", clientSecret)
@@ -75,14 +99,12 @@ public class GoogleOAuthService {
                 LOGGER.severe("Token exchange failed: " + response.code() + " - " + error);
                 throw new Exception("Failed to exchange code for token: " + response.code());
             }
-            
             JSONObject json = new JSONObject(response.body().string());
             accessToken = json.getString("access_token");
         }
 
         LOGGER.info("Token obtained. Fetching user info...");
-        
-        // 2. Fetch user info
+
         Request userInfoRequest = new Request.Builder()
                 .url("https://www.googleapis.com/oauth2/v2/userinfo")
                 .header("Authorization", "Bearer " + accessToken)
@@ -93,58 +115,57 @@ public class GoogleOAuthService {
             if (!response.isSuccessful() || response.body() == null) {
                 throw new Exception("Failed to fetch user info: " + response.code());
             }
-            
             JSONObject json = new JSONObject(response.body().string());
-            
+
             GoogleUserInfo userInfo = new GoogleUserInfo();
             userInfo.setId(json.optString("id"));
             userInfo.setEmail(json.optString("email"));
             userInfo.setFirstName(json.optString("given_name", ""));
             userInfo.setLastName(json.optString("family_name", ""));
             userInfo.setPicture(json.optString("picture", ""));
-            
+
             LOGGER.info("User info fetched successfully for: " + userInfo.getEmail());
             return userInfo;
         }
     }
 
-    public static class GoogleUserInfo {
-        private String id;
-        private String email;
-        private String firstName;
-        private String lastName;
-        private String picture;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getEmail() { return email; }
-        public void setEmail(String email) { this.email = email; }
-        public String getFirstName() { return firstName; }
-        public void setFirstName(String firstName) { this.firstName = firstName; }
-        public String getLastName() { return lastName; }
-        public void setLastName(String lastName) { this.lastName = lastName; }
-        public String getPicture() { return picture; }
-        public void setPicture(String picture) { this.picture = picture; }
-    }
-
     /**
      * Starts a local HTTP server to listen for the Google OAuth callback.
-     * @param onCodeReceived Callback invoked when the authorization code is received.
-     * @return The redirect URI to use for the OAuth request.
+     * Automatically stops any previously running server first.
+     * Tries ports 8888-8892 in sequence if earlier ports are taken.
+     *
+     * @param onCodeReceived Callback invoked with the authorization code when it arrives.
+     * @return The redirect URI that was successfully bound (e.g. http://localhost:8888/callback).
      */
-    public String startCallbackServer(java.util.function.Consumer<String> onCodeReceived) throws IOException {
-        com.sun.net.httpserver.HttpServer server = null;
-        int port = 8888; // Fixed port so it can be added to Google Console
-        try {
-            server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(port), 0);
-        } catch (java.net.BindException e) {
-            LOGGER.severe("Port " + port + " is already in use. Please close any applications using this port.");
-            throw e;
-        }
-        
-        String redirectUri = "http://localhost:" + port + "/callback";
+    public synchronized String startCallbackServer(java.util.function.Consumer<String> onCodeReceived) throws IOException {
+        // Always stop any previous server first — handles double-click and crashed auth flows.
+        stopActiveServer();
 
+        com.sun.net.httpserver.HttpServer server = null;
+        int boundPort = -1;
+
+        for (int port : CANDIDATE_PORTS) {
+            try {
+                server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(port), 0);
+                boundPort = port;
+                LOGGER.info("OAuth callback server bound to port " + port);
+                break;
+            } catch (java.net.BindException e) {
+                LOGGER.warning("Port " + port + " busy, trying next...");
+            }
+        }
+
+        if (server == null) {
+            throw new IOException("All OAuth callback ports are in use. Please restart the application.");
+        }
+
+        // Store as active so subsequent clicks can stop it cleanly.
+        activeServer = server;
+        activePort = boundPort;
+
+        final String redirectUri = "http://localhost:" + boundPort + "/callback";
         final com.sun.net.httpserver.HttpServer finalServer = server;
+
         server.createContext("/callback", exchange -> {
             String query = exchange.getRequestURI().getQuery();
             String code = null;
@@ -157,37 +178,59 @@ public class GoogleOAuthService {
                 }
             }
 
-            String responseMessage;
+            String responseHtml;
             if (code != null) {
-                responseMessage = "<html><body><h2>Authentication successful!</h2><p>You can close this window and return to Syndicati.</p><script>setTimeout(window.close, 3000);</script></body></html>";
-                exchange.sendResponseHeaders(200, responseMessage.length());
+                responseHtml = "<html><head><title>Syndicati</title></head><body style='font-family:sans-serif;text-align:center;padding-top:80px'>" +
+                    "<h2 style='color:#22c55e'>&#10003; Authentication successful!</h2>" +
+                    "<p>You can close this window and return to Syndicati.</p>" +
+                    "<script>setTimeout(window.close,2500);</script></body></html>";
+                exchange.sendResponseHeaders(200, responseHtml.getBytes().length);
             } else {
-                responseMessage = "<html><body><h2>Authentication failed!</h2><p>No authorization code found.</p></body></html>";
-                exchange.sendResponseHeaders(400, responseMessage.length());
+                responseHtml = "<html><body><h2>Authentication failed — no code received.</h2></body></html>";
+                exchange.sendResponseHeaders(400, responseHtml.getBytes().length);
             }
-            
-            java.io.OutputStream os = exchange.getResponseBody();
-            os.write(responseMessage.getBytes());
-            os.close();
+
+            try (java.io.OutputStream os = exchange.getResponseBody()) {
+                os.write(responseHtml.getBytes());
+            }
 
             if (code != null) {
                 final String finalCode = code;
-                // Run on a separate thread to allow server to send response before stopping
-                new Thread(() -> {
+                // Wait briefly so the browser receives the response, then shut down.
+                Thread.startVirtualThread(() -> {
                     try {
-                        Thread.sleep(500);
-                        finalServer.stop(0);
-                        onCodeReceived.accept(finalCode);
-                    } catch (Exception e) {
-                        LOGGER.severe("Error handling callback: " + e.getMessage());
-                    }
-                }).start();
+                        Thread.sleep(600);
+                    } catch (InterruptedException ignored) {}
+                    stopActiveServer();
+                    onCodeReceived.accept(finalCode);
+                });
             }
         });
 
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
         server.start();
-        LOGGER.info("OAuth Callback server listening on " + redirectUri);
+        LOGGER.info("OAuth callback server listening on " + redirectUri);
         return redirectUri;
+    }
+
+    // ── Shutdown hook — cleans up if app is killed mid-auth ───────────────────
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(GoogleOAuthService::stopActiveServer));
+    }
+
+    // ── User info model ────────────────────────────────────────────────────────
+    public static class GoogleUserInfo {
+        private String id, email, firstName, lastName, picture;
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getFirstName() { return firstName; }
+        public void setFirstName(String firstName) { this.firstName = firstName; }
+        public String getLastName() { return lastName; }
+        public void setLastName(String lastName) { this.lastName = lastName; }
+        public String getPicture() { return picture; }
+        public void setPicture(String picture) { this.picture = picture; }
     }
 }

@@ -156,6 +156,35 @@ public class UserRepository {
         return Optional.empty();
     }
 
+    public List<User> findAllByIds(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return new java.util.ArrayList<>();
+        
+        StringBuilder sql = new StringBuilder("SELECT * FROM user WHERE id_user IN (");
+        for (int i = 0; i < ids.size(); i++) {
+            sql.append("?");
+            if (i < ids.size() - 1) sql.append(",");
+        }
+        sql.append(")");
+
+        List<User> users = new java.util.ArrayList<>();
+        try (Connection conn = databaseService.getConnection()) {
+            if (conn == null) return users;
+            try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setInt(i + 1, ids.get(i));
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        users.add(mapRow(rs));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("UserRepository.findAllByIds error: " + e.getMessage());
+        }
+        return users;
+    }
+
     public Optional<User> findOneByAuthCode(String authCode, boolean onlyValid) {
         String sql = onlyValid
             ? "SELECT * FROM user WHERE authCode = ? AND authCode_expires_at > NOW() LIMIT 1"

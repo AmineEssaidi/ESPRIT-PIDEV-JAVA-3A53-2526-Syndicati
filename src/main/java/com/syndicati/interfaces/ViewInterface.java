@@ -14,6 +14,14 @@ public interface ViewInterface {
     Parent getRoot();
     
     /**
+     * Load data asynchronously for the view.
+     * Override this in views that need background data fetching.
+     */
+    default void loadDataAsync() {
+        // Default implementation does nothing
+    }
+
+    /**
      * Cleanup resources when view is destroyed
      */
     void cleanup();

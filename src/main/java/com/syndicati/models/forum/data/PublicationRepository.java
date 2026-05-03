@@ -33,7 +33,12 @@ public class PublicationRepository {
     }
 
     public List<Publication> findAllWithLimit(int limit) {
-        String sql = "SELECT id, user_id, titre_pub, description_pub, categorie_pub, image_pub, date_creation_pub FROM publication ORDER BY date_creation_pub DESC LIMIT ?";
+        String sql = """
+            SELECT p.*, u.first_name, u.last_name, u.email_user, u.role_user 
+            FROM publication p 
+            LEFT JOIN user u ON p.user_id = u.id_user 
+            ORDER BY p.date_creation_pub DESC LIMIT ?
+            """;
         List<Publication> publications = new ArrayList<>();
 
         try (Connection conn = databaseService.getConnection()) {
@@ -61,7 +66,12 @@ public class PublicationRepository {
             return Optional.empty();
         }
 
-        String sql = "SELECT id, user_id, titre_pub, description_pub, categorie_pub, image_pub, date_creation_pub FROM publication WHERE id = ?";
+        String sql = """
+            SELECT p.*, u.first_name, u.last_name, u.email_user, u.role_user 
+            FROM publication p 
+            LEFT JOIN user u ON p.user_id = u.id_user 
+            WHERE p.id = ?
+            """;
 
         try (Connection conn = databaseService.getConnection()) {
             if (conn == null) {
@@ -96,7 +106,13 @@ public class PublicationRepository {
             return new ArrayList<>();
         }
 
-        String sql = "SELECT id, user_id, titre_pub, description_pub, categorie_pub, image_pub, date_creation_pub FROM publication WHERE user_id = ? ORDER BY date_creation_pub DESC LIMIT ?";
+        String sql = """
+            SELECT p.*, u.first_name, u.last_name, u.email_user, u.role_user 
+            FROM publication p 
+            LEFT JOIN user u ON p.user_id = u.id_user 
+            WHERE p.user_id = ? 
+            ORDER BY p.date_creation_pub DESC LIMIT ?
+            """;
         List<Publication> publications = new ArrayList<>();
 
         try (Connection conn = databaseService.getConnection()) {
@@ -133,9 +149,21 @@ public class PublicationRepository {
         }
 
         if ("General".equals(category)) {
-            sql = "SELECT * FROM publication WHERE categorie_pub <> ? ORDER BY date_creation_pub DESC";
+            sql = """
+                SELECT p.*, u.first_name, u.last_name, u.email_user, u.role_user 
+                FROM publication p 
+                LEFT JOIN user u ON p.user_id = u.id_user 
+                WHERE p.categorie_pub <> ? 
+                ORDER BY p.date_creation_pub DESC
+                """;
         } else {
-            sql = "SELECT * FROM publication WHERE categorie_pub = ? ORDER BY date_creation_pub DESC";
+            sql = """
+                SELECT p.*, u.first_name, u.last_name, u.email_user, u.role_user 
+                FROM publication p 
+                LEFT JOIN user u ON p.user_id = u.id_user 
+                WHERE p.categorie_pub = ? 
+                ORDER BY p.date_creation_pub DESC
+                """;
         }
 
         try (Connection conn = databaseService.getConnection()) {
@@ -267,10 +295,28 @@ public class PublicationRepository {
             publication.setDateCreationPub(creationTs.toLocalDateTime());
         }
 
+        // Optimized: Check if user data was joined in the query
         int userId = rs.getInt("user_id");
         if (!rs.wasNull()) {
-            Optional<User> user = userRepository.findById(userId);
-            user.ifPresent(publication::setUser);
+            try {
+                // If the query included joined user columns, use them directly
+                String firstName = rs.getString("first_name");
+                if (firstName != null) {
+                    User user = new User();
+                    user.setIdUser(userId);
+                    user.setFirstName(firstName);
+                    user.setLastName(rs.getString("last_name"));
+                    user.setEmailUser(rs.getString("email_user"));
+                    user.setRoleUser(rs.getString("role_user"));
+                    publication.setUser(user);
+                } else {
+                    // Fallback to separate query ONLY if join data is missing
+                    userRepository.findById(userId).ifPresent(publication::setUser);
+                }
+            } catch (SQLException joinMissing) {
+                // Fallback to separate query if columns weren't in result set
+                userRepository.findById(userId).ifPresent(publication::setUser);
+            }
         }
 
         return publication;

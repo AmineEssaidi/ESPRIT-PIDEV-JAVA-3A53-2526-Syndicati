@@ -28,6 +28,10 @@ public class UserService {
         return userRepository.findById(idUser);
     }
 
+    public List<User> findAllByIds(List<Integer> ids) {
+        return userRepository.findAllByIds(ids);
+    }
+
     public Optional<User> findByEmail(String emailUser) {
         if (emailUser == null || emailUser.isBlank()) {
             return Optional.empty();

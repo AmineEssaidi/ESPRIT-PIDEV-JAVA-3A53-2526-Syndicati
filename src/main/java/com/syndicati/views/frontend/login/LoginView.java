@@ -2754,19 +2754,24 @@ public class LoginView implements ViewInterface {
     }
 
     private void handleGoogleLogin() {
-        com.syndicati.services.security.GoogleOAuthService googleOAuthService = new com.syndicati.services.security.GoogleOAuthService();
+        com.syndicati.services.security.GoogleOAuthService googleOAuthService =
+            new com.syndicati.services.security.GoogleOAuthService();
         try {
-            // Need a final array to hold the redirect URI so it can be accessed in the lambda
             final String[] finalRedirectUri = new String[1];
-            
+
             String redirectUri = googleOAuthService.startCallbackServer(code -> {
-                javafx.application.Platform.runLater(() -> {
+                // We are on a virtual thread here — safe to do network calls.
+                final String authCode = code;
+                Thread.startVirtualThread(() -> {
                     try {
-                        com.syndicati.services.security.GoogleOAuthService.GoogleUserInfo userInfo = googleOAuthService.exchangeCodeAndGetUserInfo(code, finalRedirectUri[0]);
-                        
-                        com.syndicati.models.user.data.UserRepository userRepo = new com.syndicati.models.user.data.UserRepository();
+                        com.syndicati.services.security.GoogleOAuthService.GoogleUserInfo userInfo =
+                            googleOAuthService.exchangeCodeAndGetUserInfo(authCode, finalRedirectUri[0]);
+
+                        // All DB work also stays off the FX thread.
+                        com.syndicati.models.user.data.UserRepository userRepo =
+                            new com.syndicati.models.user.data.UserRepository();
                         Optional<User> existingUser = userRepo.findOneByGoogleId(userInfo.getId());
-                        
+
                         if (existingUser.isEmpty() && userInfo.getEmail() != null && !userInfo.getEmail().isEmpty()) {
                             existingUser = userRepo.findOneByEmailUser(userInfo.getEmail());
                         }
@@ -2780,7 +2785,8 @@ public class LoginView implements ViewInterface {
                             }
                         } else {
                             user = new User();
-                            user.setFirstName(userInfo.getFirstName() == null || userInfo.getFirstName().isEmpty() ? "GoogleUser" : userInfo.getFirstName());
+                            user.setFirstName(userInfo.getFirstName() == null || userInfo.getFirstName().isEmpty()
+                                ? "GoogleUser" : userInfo.getFirstName());
                             user.setLastName(userInfo.getLastName() == null ? "" : userInfo.getLastName());
                             user.setEmailUser(userInfo.getEmail());
                             user.setPasswordUser(java.util.UUID.randomUUID().toString() + "A!1a");
@@ -2791,37 +2797,47 @@ public class LoginView implements ViewInterface {
                             if (id > 0) {
                                 user.setIdUser(id);
                             } else {
-                                showErrorMessage("Failed to create user from Google login.");
+                                javafx.application.Platform.runLater(() ->
+                                    showErrorMessage("Failed to create user from Google login."));
                                 return;
                             }
                         }
 
-                        SessionManager.getInstance().setCurrentUser(user);
-                        profileController.profileByUserId(user.getIdUser()).ifPresent(profile -> SessionManager.getInstance().setCurrentProfile(profile));
-                        
-                        loginSuccessFired = true;
-                        activityLogController.logAuthAction("LOGIN", "SUCCESS", "User logged in with Google: " + user.getEmailUser(), java.util.Map.of("provider", "google"));
+                        final User finalUser = user;
+                        // Profile fetch also stays off FX thread.
+                        profileController.profileByUserId(finalUser.getIdUser())
+                            .ifPresent(p -> SessionManager.getInstance().setCurrentProfile(p));
 
-                        if (onLoginSuccess != null) onLoginSuccess.run();
-                        else navigateToLandingPage();
-                        
+                        activityLogController.logAuthAction("LOGIN", "SUCCESS",
+                            "User logged in with Google: " + finalUser.getEmailUser(),
+                            java.util.Map.of("provider", "google"));
+
+                        // ── Only UI work touches Platform.runLater ──
+                        javafx.application.Platform.runLater(() -> {
+                            SessionManager.getInstance().setCurrentUser(finalUser);
+                            loginSuccessFired = true;
+                            if (onLoginSuccess != null) onLoginSuccess.run();
+                            else navigateToLandingPage();
+                        });
+
                     } catch (Exception ex) {
-                        showErrorMessage("Google Login Failed: " + ex.getMessage());
+                        javafx.application.Platform.runLater(() ->
+                            showErrorMessage("Google Login Failed: " + ex.getMessage()));
                         ex.printStackTrace();
                     }
                 });
             });
-            
+
             finalRedirectUri[0] = redirectUri;
             String authUrl = googleOAuthService.getAuthorizationUrl(redirectUri);
-            
-            if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
+
+            if (java.awt.Desktop.isDesktopSupported()
+                    && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
                 java.awt.Desktop.getDesktop().browse(new java.net.URI(authUrl));
-                showInfoMessage("Please complete the sign in process in your web browser.");
             } else {
                 Runtime.getRuntime().exec("rundll32 url.dll,FileProtocolHandler " + authUrl);
-                showInfoMessage("Please complete the sign in process in your web browser.");
             }
+            showInfoMessage("Please complete the sign in process in your web browser.");
 
         } catch (Exception ex) {
             showErrorMessage("Could not start Google Login: " + ex.getMessage());

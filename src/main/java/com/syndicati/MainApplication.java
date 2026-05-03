@@ -80,13 +80,56 @@ public class MainApplication extends Application {
             connectionManager.startMonitoring();
             langfuseRuntimeService.start();
             anomalyScoringScheduler.start();
-            LogAIWorkerService.getInstance(); // Start Python worker on port 8001
-            InsightFaceService.getInstance().initialize(); // Move into background thread
-            DiscordRPCService.getInstance().initialize();
-            DiscordRPCService.getInstance().updatePresence("Authentication", "Signing into Syndicati");
-            
-            // Start messaging socket server
-            MessagingSocketServer.getInstance().start();
+            // Start blocking background services in a separate thread to keep UI responsive
+            Thread.startVirtualThread(() -> {
+                LogAIWorkerService.getInstance(); // Blocks for 2s to start Python worker
+                InsightFaceService.getInstance().initialize(); // Blocks up to 30s for ping retries
+                DiscordRPCService.getInstance().initialize();
+                DiscordRPCService.getInstance().updatePresence("Authentication", "Signing into Syndicati");
+                
+                // Start messaging socket server
+                MessagingSocketServer.getInstance().start();
+                
+                // Check for Auto-Login (Remember Me)
+                String savedUserId = com.syndicati.utils.shared.AppPreferences.getLocal("LOCAL_LOGGED_IN_USER_ID", null);
+                if (savedUserId != null && !savedUserId.trim().isEmpty()) {
+                    System.out.println("[AUTO-LOGIN] Checking for saved session. Found ID: " + savedUserId);
+                    try {
+                        int userId = Integer.parseInt(savedUserId.trim());
+                        com.syndicati.models.user.data.UserRepository userRepo = new com.syndicati.models.user.data.UserRepository();
+                        java.util.Optional<com.syndicati.models.user.User> userOpt = userRepo.findById(userId);
+                        
+                        if (userOpt.isPresent()) {
+                            System.out.println("[AUTO-LOGIN] User found! Prefetching profile...");
+                            com.syndicati.models.user.User user = userOpt.get();
+                            
+                            // Prefetch profile so the app loads fully styled
+                            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+                            new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(userId)
+                                    .ifPresent(sm::setCurrentProfile);
+
+                            // Prefetch circle data so the profile tab is instant
+                            com.syndicati.controllers.user.relationship.UserRelationshipController rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
+                            sm.setCircleData(
+                                rc.findFriends(user, 24),
+                                rc.findPendingRequestsFor(user),
+                                rc.countFriends(user),
+                                rc.countPendingRequests(user)
+                            );
+                            
+                            javafx.application.Platform.runLater(() -> {
+                                System.out.println("[AUTO-LOGIN] Setting user and navigating...");
+                                sm.setCurrentUser(user);
+                                navigateToLandingPage();
+                            });
+                        } else {
+                            System.out.println("[AUTO-LOGIN] User ID " + userId + " not found in DB.");
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[AUTO-LOGIN] Failed or invalid token: " + e.getMessage());
+                    }
+                }
+            });
         });
 
         // Log application startup event - first record anchors the Langfuse session.
@@ -105,11 +148,12 @@ public class MainApplication extends Application {
                     LogAIWorkerService.getInstance().stopWorker();
                     com.syndicati.services.ai.AgentService.shutdown();
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
-            com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
-            langfuseRuntimeService.stop();
-            anomalyScoringScheduler.stop();
-            DiscordRPCService.getInstance().shutdown();
-            System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
+                    com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
+                    com.syndicati.services.DatabaseService.getInstance().shutdown();
+                    langfuseRuntimeService.stop();
+                    anomalyScoringScheduler.stop();
+                    DiscordRPCService.getInstance().shutdown();
+                    System.out.println("[SHUTDOWN] All services stopped in shutdown hook");
                 })
         );
         

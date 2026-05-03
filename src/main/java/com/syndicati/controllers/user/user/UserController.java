@@ -29,6 +29,10 @@ public class UserController {
         return userService.findById(idUser);
     }
 
+    public List<User> findAllByIds(List<Integer> ids) {
+        return userService.findAllByIds(ids);
+    }
+
     public Optional<User> userByEmail(String emailUser) {
         return userService.findByEmail(emailUser);
     }
