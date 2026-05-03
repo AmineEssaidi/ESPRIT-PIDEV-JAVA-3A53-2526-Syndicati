@@ -1363,76 +1363,117 @@ public class DashboardView implements ViewInterface {
         Text sub   = t("Page Views | UI Clicks | Last 7 Days", lightFont(), FontWeight.NORMAL, 13);
         sub.setFill(textMutedColor());
 
-        Map<String, Integer> community = dashboardAdminService.communityStats();
-        int newPosts = community.getOrDefault("new_posts", 0);
-        int newEvents = community.getOrDefault("new_events", 0);
-        int totalCommunity = newPosts + newEvents;
-
         HBox cw = new HBox(8); cw.setAlignment(Pos.BOTTOM_LEFT);
         cw.setPrefHeight(140); cw.setPadding(new Insets(8,0,0,0));
-        List<String[]> trends = dashboardAdminService.interactionTrends();
-        if (trends.isEmpty()) {
-            trends = new ArrayList<>();
-            trends.add(new String[]{"MON", "65", "42"});
-            trends.add(new String[]{"TUE", "82", "55"});
-            trends.add(new String[]{"WED", "58", "38"});
-            trends.add(new String[]{"THU", "90", "70"});
-            trends.add(new String[]{"FRI", "74", "52"});
-            trends.add(new String[]{"SAT", "45", "30"});
-            trends.add(new String[]{"SUN", "60", "44"});
-        }
-
-        for (String[] trend : trends) {
-            VBox col = new VBox(4); col.setAlignment(Pos.BOTTOM_CENTER);
-            HBox.setHgrow(col, Priority.ALWAYS);
-            HBox pair = new HBox(3); pair.setAlignment(Pos.BOTTOM_CENTER);
-            int views = parseInt(trend, 1);
-            int clicks = parseInt(trend, 2);
-            pair.getChildren().addAll(barR(Math.max(8, views * 2), "#a78bfa"), barR(Math.max(8, clicks * 2), "#34d399"));
-            Text d = t(trend[0], lightFont(), FontWeight.NORMAL, 11); d.setFill(textMutedColor());
-            col.getChildren().addAll(pair, d);
-            cw.getChildren().add(col);
-        }
+        
         HBox footer = new HBox(20); footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(10,0,0,0));
         footer.setStyle("-fx-border-color:rgba(255,255,255,0.06);-fx-border-width:1 0 0 0;");
-        footer.getChildren().addAll(
-            metric("P","New Posts","+" + newPosts,"#a78bfa"),
-            metric("E","New Events","+" + newEvents,"#34d399"),
-            metric("G","Community Pulse",String.valueOf(totalCommunity),"#60a5fa")
-        );
+        
+        Label loadingLabel = new Label("Loading chart...");
+        loadingLabel.setTextFill(textMutedColor());
+        cw.getChildren().add(loadingLabel);
+        
         card.getChildren().addAll(title, sub, cw, footer);
+
+        Thread.startVirtualThread(() -> {
+            try {
+                Map<String, Integer> community = dashboardAdminService.communityStats();
+                List<String[]> trends = dashboardAdminService.interactionTrends();
+                
+                javafx.application.Platform.runLater(() -> {
+                    int newPosts = community.getOrDefault("new_posts", 0);
+                    int newEvents = community.getOrDefault("new_events", 0);
+                    int totalCommunity = newPosts + newEvents;
+
+                    cw.getChildren().clear();
+                    
+                    List<String[]> finalTrends = trends;
+                    if (finalTrends.isEmpty()) {
+                        finalTrends = new ArrayList<>();
+                        finalTrends.add(new String[]{"MON", "65", "42"});
+                        finalTrends.add(new String[]{"TUE", "82", "55"});
+                        finalTrends.add(new String[]{"WED", "58", "38"});
+                        finalTrends.add(new String[]{"THU", "90", "70"});
+                        finalTrends.add(new String[]{"FRI", "74", "52"});
+                        finalTrends.add(new String[]{"SAT", "45", "30"});
+                        finalTrends.add(new String[]{"SUN", "60", "44"});
+                    }
+
+                    for (String[] trend : finalTrends) {
+                        VBox col = new VBox(4); col.setAlignment(Pos.BOTTOM_CENTER);
+                        HBox.setHgrow(col, Priority.ALWAYS);
+                        HBox pair = new HBox(3); pair.setAlignment(Pos.BOTTOM_CENTER);
+                        int views = parseInt(trend, 1);
+                        int clicks = parseInt(trend, 2);
+                        pair.getChildren().addAll(barR(Math.max(8, views * 2), "#a78bfa"), barR(Math.max(8, clicks * 2), "#34d399"));
+                        Text d = t(trend[0], lightFont(), FontWeight.NORMAL, 11); d.setFill(textMutedColor());
+                        col.getChildren().addAll(pair, d);
+                        cw.getChildren().add(col);
+                    }
+
+                    footer.getChildren().setAll(
+                        metric("P","New Posts","+" + newPosts,"#a78bfa"),
+                        metric("E","New Events","+" + newEvents,"#34d399"),
+                        metric("G","Community Pulse",String.valueOf(totalCommunity),"#60a5fa")
+                    );
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         return card;
     }
 
     private VBox buildTopUsers() {
         VBox card = sectionCard();
-        Text title = t("â­  Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
+        Text title = t("Top Active Citizens", boldFont(), FontWeight.BOLD, 14); title.setFill(textPrimaryColor());
         VBox list = new VBox(6);
-        List<String[]> users = dashboardAdminService.topUsers();
-        if (users.isEmpty()) {
-            users = new ArrayList<>();
-            users.add(new String[]{"Ahmed", "B.", "SYNDIC", "142"});
-            users.add(new String[]{"Leila", "M.", "RESIDENT", "118"});
-            users.add(new String[]{"Karim", "S.", "ADMIN", "95"});
-        }
-        for (String[] u : users) {
-            HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
-            row.setPadding(new Insets(6,8,6,8));
-            row.setStyle("-fx-background-color:rgba(255,255,255,0.025);-fx-background-radius:8;");
-            Text ini = t((u[0] == null || u[0].isBlank()) ? "U" : u[0].substring(0, 1), boldFont(), FontWeight.BOLD, 14); ini.setFill(Color.web("#fbbf24"));
-            StackPane av = new StackPane(ini); av.setPrefSize(32,32);
-            av.setStyle("-fx-background-color:rgba(251,191,36,0.15);-fx-background-radius:16;");
-            VBox info = new VBox(1); HBox.setHgrow(info, Priority.ALWAYS);
-            String fullName = (u[0] + " " + u[1]).trim();
-            Text nm = t(fullName, lightFont(), FontWeight.NORMAL, 14); nm.setFill(textSecondaryColor());
-            Text rl = t(u[2], lightFont(), FontWeight.NORMAL, 12); rl.setFill(Color.web("#fbbf24"));
-            info.getChildren().addAll(nm, rl);
-            Text pts = t(u[3], boldFont(), FontWeight.BOLD, 13); pts.setFill(textPrimaryColor());
-            row.getChildren().addAll(av, info, pts);
-            list.getChildren().add(row);
-        }
+        
+        Label loadingLabel = new Label("Loading users...");
+        loadingLabel.setTextFill(textMutedColor());
+        list.getChildren().add(loadingLabel);
+        
         card.getChildren().addAll(title, list);
+
+        Thread.startVirtualThread(() -> {
+            try {
+                List<String[]> users = dashboardAdminService.topUsers();
+                
+                javafx.application.Platform.runLater(() -> {
+                    list.getChildren().clear();
+                    
+                    List<String[]> finalUsers = users;
+                    if (finalUsers.isEmpty()) {
+                        finalUsers = new ArrayList<>();
+                        finalUsers.add(new String[]{"Ahmed", "B.", "SYNDIC", "142"});
+                        finalUsers.add(new String[]{"Leila", "M.", "RESIDENT", "118"});
+                        finalUsers.add(new String[]{"Karim", "S.", "ADMIN", "95"});
+                    }
+                    
+                    for (String[] u : finalUsers) {
+                        HBox row = new HBox(10); row.setAlignment(Pos.CENTER_LEFT);
+                        row.setPadding(new Insets(6,8,6,8));
+                        row.setStyle("-fx-background-color:rgba(255,255,255,0.025);-fx-background-radius:8;");
+                        Text ini = t((u[0] == null || u[0].isBlank()) ? "U" : u[0].substring(0, 1), boldFont(), FontWeight.BOLD, 14); ini.setFill(Color.web("#fbbf24"));
+                        StackPane av = new StackPane(ini); av.setPrefSize(32,32);
+                        av.setStyle("-fx-background-color:rgba(251,191,36,0.15);-fx-background-radius:16;");
+                        VBox info = new VBox(1); HBox.setHgrow(info, Priority.ALWAYS);
+                        String fullName = (u[0] + " " + u[1]).trim();
+                        Text nm = t(fullName, lightFont(), FontWeight.NORMAL, 14); nm.setFill(textSecondaryColor());
+                        Text rl = t(u[2], lightFont(), FontWeight.NORMAL, 12); rl.setFill(Color.web("#fbbf24"));
+                        info.getChildren().addAll(nm, rl);
+                        Text pts = t(u[3], boldFont(), FontWeight.BOLD, 13); pts.setFill(textPrimaryColor());
+                        row.getChildren().addAll(av, info, pts);
+                        list.getChildren().add(row);
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         return card;
     }
 

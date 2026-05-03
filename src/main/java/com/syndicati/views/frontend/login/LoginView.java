@@ -235,6 +235,83 @@ public class LoginView implements ViewInterface {
         topLeftControls.toFront();
         topRightControls.toFront();
         windowBar.toFront();
+
+        // 1. Setup 3D Parallax Effect
+        setupParallaxEffect();
+
+        // 2. Trigger Staggered Entrance Animation for the initial login form
+        javafx.application.Platform.runLater(() -> {
+            if (loginFormColumn != null) {
+                triggerEntranceAnimation(loginFormColumn);
+            }
+        });
+    }
+
+    // --- 3D Parallax Transform Fields ---
+    private final javafx.scene.transform.Rotate loginRotateX = new javafx.scene.transform.Rotate(0, javafx.scene.transform.Rotate.X_AXIS);
+    private final javafx.scene.transform.Rotate loginRotateY = new javafx.scene.transform.Rotate(0, javafx.scene.transform.Rotate.Y_AXIS);
+    private final javafx.scene.transform.Rotate signupRotateX = new javafx.scene.transform.Rotate(0, javafx.scene.transform.Rotate.X_AXIS);
+    private final javafx.scene.transform.Rotate signupRotateY = new javafx.scene.transform.Rotate(0, javafx.scene.transform.Rotate.Y_AXIS);
+    private final javafx.scene.transform.Rotate forgotRotateX = new javafx.scene.transform.Rotate(0, javafx.scene.transform.Rotate.X_AXIS);
+    private final javafx.scene.transform.Rotate forgotRotateY = new javafx.scene.transform.Rotate(0, javafx.scene.transform.Rotate.Y_AXIS);
+
+    private void setupParallaxEffect() {
+        // Apply transform nodes to containers
+        loginContainer.getTransforms().addAll(loginRotateX, loginRotateY);
+        signUpContainer.getTransforms().addAll(signupRotateX, signupRotateY);
+        forgotPasswordContainer.getTransforms().addAll(forgotRotateX, forgotRotateY);
+
+        root.setOnMouseMoved(e -> {
+            double width = root.getWidth();
+            double height = root.getHeight();
+            if (width == 0 || height == 0) return;
+
+            // Normalize from -1 to 1 based on center of screen
+            double normalizedX = (e.getX() / width) * 2 - 1;
+            double normalizedY = (e.getY() / height) * 2 - 1;
+
+            // Subtle 3D tilt max degrees
+            double targetRotateX = -normalizedY * 4.0;
+            double targetRotateY = normalizedX * 4.0;
+
+            animateTransform(targetRotateX, targetRotateY);
+        });
+
+        root.setOnMouseExited(e -> animateTransform(0, 0));
+    }
+
+    private void animateTransform(double targetX, double targetY) {
+        javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.millis(300),
+                new javafx.animation.KeyValue(loginRotateX.angleProperty(), targetX, javafx.animation.Interpolator.EASE_OUT),
+                new javafx.animation.KeyValue(loginRotateY.angleProperty(), targetY, javafx.animation.Interpolator.EASE_OUT),
+                new javafx.animation.KeyValue(signupRotateX.angleProperty(), targetX, javafx.animation.Interpolator.EASE_OUT),
+                new javafx.animation.KeyValue(signupRotateY.angleProperty(), targetY, javafx.animation.Interpolator.EASE_OUT),
+                new javafx.animation.KeyValue(forgotRotateX.angleProperty(), targetX, javafx.animation.Interpolator.EASE_OUT),
+                new javafx.animation.KeyValue(forgotRotateY.angleProperty(), targetY, javafx.animation.Interpolator.EASE_OUT)
+            )
+        );
+        timeline.play();
+    }
+
+    private void triggerEntranceAnimation(VBox formColumn) {
+        double delayMs = 0;
+        for (javafx.scene.Node node : formColumn.getChildren()) {
+            node.setOpacity(0);
+            node.setTranslateY(15);
+
+            javafx.animation.FadeTransition ft = new javafx.animation.FadeTransition(javafx.util.Duration.millis(350), node);
+            ft.setToValue(1);
+
+            javafx.animation.TranslateTransition tt = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(350), node);
+            tt.setToY(0);
+
+            javafx.animation.ParallelTransition pt = new javafx.animation.ParallelTransition(ft, tt);
+            pt.setDelay(javafx.util.Duration.millis(delayMs));
+            pt.play();
+
+            delayMs += 40; // Staggered delay
+        }
     }
     
     
@@ -1728,17 +1805,31 @@ public class LoginView implements ViewInterface {
         buttonShadow.setOffsetY(5);
         button.setEffect(buttonShadow);
         
-        // Add hover effects
+        // Add dynamic liquid glow hover effects
         button.setOnMouseEntered(e -> {
             button.setStyle(primaryButtonHoverStyle(themeManager));
-            button.setScaleX(1.03);
-            button.setScaleY(1.03);
+            javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(200),
+                    new javafx.animation.KeyValue(button.scaleXProperty(), 1.05, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(button.scaleYProperty(), 1.05, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(buttonShadow.radiusProperty(), 25, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(buttonShadow.colorProperty(), Color.web(themeManager.getAccentHex()), javafx.animation.Interpolator.EASE_OUT)
+                )
+            );
+            timeline.play();
         });
         
         button.setOnMouseExited(e -> {
             button.setStyle(primaryButtonStyle(themeManager));
-            button.setScaleX(1.0);
-            button.setScaleY(1.0);
+            javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(250),
+                    new javafx.animation.KeyValue(button.scaleXProperty(), 1.0, javafx.animation.Interpolator.EASE_IN),
+                    new javafx.animation.KeyValue(button.scaleYProperty(), 1.0, javafx.animation.Interpolator.EASE_IN),
+                    new javafx.animation.KeyValue(buttonShadow.radiusProperty(), 15, javafx.animation.Interpolator.EASE_IN),
+                    new javafx.animation.KeyValue(buttonShadow.colorProperty(), Color.color(0, 0, 0, 0.3), javafx.animation.Interpolator.EASE_IN)
+                )
+            );
+            timeline.play();
         });
         
         // Add click handler
@@ -1765,17 +1856,31 @@ public class LoginView implements ViewInterface {
         buttonShadow.setOffsetY(5);
         button.setEffect(buttonShadow);
         
-        // Add hover effects
+        // Add dynamic liquid glow hover effects
         button.setOnMouseEntered(e -> {
             button.setStyle(secondaryButtonHoverStyle(themeManager));
-            button.setScaleX(1.03);
-            button.setScaleY(1.03);
+            javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(200),
+                    new javafx.animation.KeyValue(button.scaleXProperty(), 1.05, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(button.scaleYProperty(), 1.05, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(buttonShadow.radiusProperty(), 25, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(buttonShadow.colorProperty(), Color.web(themeManager.isDarkMode() ? "#475569" : "#cbd5e1"), javafx.animation.Interpolator.EASE_OUT)
+                )
+            );
+            timeline.play();
         });
         
         button.setOnMouseExited(e -> {
             button.setStyle(secondaryButtonStyle(themeManager));
-            button.setScaleX(1.0);
-            button.setScaleY(1.0);
+            javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(250),
+                    new javafx.animation.KeyValue(button.scaleXProperty(), 1.0, javafx.animation.Interpolator.EASE_IN),
+                    new javafx.animation.KeyValue(button.scaleYProperty(), 1.0, javafx.animation.Interpolator.EASE_IN),
+                    new javafx.animation.KeyValue(buttonShadow.radiusProperty(), 15, javafx.animation.Interpolator.EASE_IN),
+                    new javafx.animation.KeyValue(buttonShadow.colorProperty(), Color.color(0, 0, 0, 0.3), javafx.animation.Interpolator.EASE_IN)
+                )
+            );
+            timeline.play();
         });
         
         // Add click handler

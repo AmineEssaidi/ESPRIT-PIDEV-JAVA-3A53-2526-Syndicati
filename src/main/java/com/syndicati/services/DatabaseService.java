@@ -77,6 +77,10 @@ public class DatabaseService {
         props.setProperty("allowPublicKeyRetrieval", "true");
         props.setProperty("serverTimezone", "UTC");
         props.setProperty("zeroDateTimeBehavior", "CONVERT_TO_NULL");
+        props.setProperty("useServerPrepStmts", "true");
+        props.setProperty("cachePrepStmts", "true");
+        props.setProperty("prepStmtCacheSize", "250");
+        props.setProperty("prepStmtCacheSqlLimit", "2048");
         return DriverManager.getConnection(dbUrl, props);
     }
     

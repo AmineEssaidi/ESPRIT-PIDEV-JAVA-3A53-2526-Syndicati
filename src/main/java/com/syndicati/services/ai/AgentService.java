@@ -88,6 +88,12 @@ public class AgentService {
         return instance;
     }
 
+    public static synchronized void shutdown() {
+        if (instance != null) {
+            instance.stopPythonWorker();
+        }
+    }
+
     public CompletableFuture<String> chatAsync(String message) {
         return CompletableFuture.supplyAsync(() -> {
             JsonObject payload = new JsonObject();

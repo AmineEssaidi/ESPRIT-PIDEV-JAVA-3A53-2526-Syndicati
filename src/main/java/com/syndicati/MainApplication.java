@@ -103,7 +103,7 @@ public class MainApplication extends Application {
                 .unstarted(() -> {
                     System.out.println("[SHUTDOWN] JVM Shutdown - Stopping all services...");
                     LogAIWorkerService.getInstance().stopWorker();
-                    com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
+                    com.syndicati.services.ai.AgentService.shutdown();
                     com.syndicati.services.mail.AsyncMailerService.shutdown();
             com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
             langfuseRuntimeService.stop();
