@@ -223,7 +223,10 @@ public class AdminDestinationChoiceView implements ViewInterface {
             javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
             stage.setMaximized(!stage.isMaximized());
         });
-        btnClose.setOnAction(e -> ((javafx.stage.Stage) root.getScene().getWindow()).close());
+        btnClose.setOnAction(e -> {
+            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
+            stage.fireEvent(new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
+        });
 
         final double[] dragOffset = new double[2];
         dragRegion.setOnMousePressed(e -> {

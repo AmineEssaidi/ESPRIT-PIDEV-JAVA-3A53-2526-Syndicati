@@ -3096,8 +3096,8 @@ public class LoginView implements ViewInterface {
             stage.setMaximized(!stage.isMaximized());
         });
         btnClose.setOnAction(e -> {
-            com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
-            System.exit(0);
+            javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
+            stage.fireEvent(new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
         });
 
         final double[] dragOffset = new double[2];

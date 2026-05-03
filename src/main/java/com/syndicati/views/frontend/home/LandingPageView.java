@@ -409,7 +409,7 @@ public class LandingPageView implements ViewInterface {
         });
         btnClose.setOnAction(e -> {
             javafx.stage.Stage stage = (javafx.stage.Stage) root.getScene().getWindow();
-            stage.close();
+            stage.fireEvent(new javafx.stage.WindowEvent(stage, javafx.stage.WindowEvent.WINDOW_CLOSE_REQUEST));
         });
 
         final double[] dragOffset = new double[2];
