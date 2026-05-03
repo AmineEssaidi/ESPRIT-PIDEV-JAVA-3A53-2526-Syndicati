@@ -53,7 +53,7 @@ class Fill(BaseModel):
 
 def create_graph():
     # Try different model aliases
-    model_names = ["gemini-1.5-flash", "gemini-flash-latest"]
+    model_names = ["gemini-1.5-flash-latest", "gemini-flash-latest", "gemini-1.5-flash"]
     
     # Initialize Groq Fallback
     llama = None
@@ -69,12 +69,47 @@ def create_graph():
         ui_state = state.get('ui_state')
         mode = state.get('mode', 'chat')
         
+        ROUTE_MAP = {
+            "home": "home",
+            "services": "services",
+            "about": "about",
+            "profile": "profile",
+            "settings": "settings",
+            "dashboard": "dashboard",
+            "syndicat": "services/syndicat",
+            "syndicats": "services/syndicat",
+            "forum": "services/forum",
+            "forums": "services/forum",
+            "residence": "services/residence",
+            "residences": "services/residence",
+            "evenement": "services/evenement",
+            "evenements": "services/evenement",
+            "event": "services/evenement",
+            "events": "services/evenement",
+        }
+
         system_prompt = (
-            "SYSTEM: YOU ARE THE SYNDICATI ASSISTANT. MODE: " + mode +
-            "\nCONTEXT: Syndicati property platform. Answer clearly."
+            "You are the Syndicati desktop assistant. MODE: " + mode + "\n"
+            "You help users navigate and interact with the Syndicati property management application.\n\n"
+            "VALID NAVIGATION ROUTES:\n"
+            "  home, services, about, profile, settings, dashboard\n"
+            "  services/syndicat  (also: syndicat, syndic, syndicats)\n"
+            "  services/forum     (also: forum, forums)\n"
+            "  services/residence (also: residence, residences)\n"
+            "  services/evenement (also: evenement, event, events)\n\n"
+            "TOOL USAGE RULES:\n"
+            "  - Use Navigate when the user asks to 'go to', 'open', 'navigate to', or 'show' a page/section.\n"
+            "  - Use Click ONLY for interacting with a specific button/element on the current page, never for page navigation.\n"
+            "  - Use Fill to type into text fields.\n"
+            "  - ALWAYS prefer Navigate over Click for any navigation intent.\n\n"
         )
         if mode == "takeover":
-            system_prompt += "\nMISSION: Use UI tools based on state: " + json.dumps(ui_state.get('elements', []) if ui_state else [])
+            elements_str = json.dumps(ui_state.get('elements', []) if ui_state else [])
+            system_prompt += "CURRENT UI ELEMENTS:\n" + elements_str + "\n"
+            system_prompt += (
+                "\nIMPORTANT: If the user's request is to navigate to a page, use Navigate with the exact route.\n"
+                "Do NOT click navigation-unrelated buttons to fulfill a navigation request.\n"
+            )
             
         forced_messages = [SystemMessage(content=system_prompt)] + messages
         response = None

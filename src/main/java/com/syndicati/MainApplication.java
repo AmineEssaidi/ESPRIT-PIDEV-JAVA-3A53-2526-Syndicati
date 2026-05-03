@@ -193,6 +193,43 @@ public class MainApplication extends Application {
         loginChecker.play();
     }
     
+
+    private void showLoadingOverlayAndRun(Runnable action) {
+        javafx.scene.Node rootNode = primaryStage.getScene().getRoot();
+        if (rootNode instanceof javafx.scene.layout.StackPane) {
+            javafx.scene.layout.StackPane root = (javafx.scene.layout.StackPane) rootNode;
+            
+            javafx.scene.layout.VBox overlay = new javafx.scene.layout.VBox(16);
+            overlay.setAlignment(javafx.geometry.Pos.CENTER);
+            overlay.setStyle("-fx-background-color: rgba(0, 0, 0, 0.45);");
+            
+            javafx.scene.control.ProgressIndicator spinner = new javafx.scene.control.ProgressIndicator();
+            spinner.setStyle("-fx-progress-color: " + ThemeManager.getInstance().getAccentHex() + ";");
+            spinner.setMaxSize(40, 40);
+            
+            javafx.scene.text.Text text = new javafx.scene.text.Text("Preparing Workspace...");
+            text.setFont(javafx.scene.text.Font.font(boldFontFamily, javafx.scene.text.FontWeight.BOLD, 16));
+            text.setFill(javafx.scene.paint.Color.WHITE);
+            
+            overlay.getChildren().addAll(spinner, text);
+            overlay.setOpacity(0.0);
+            
+            root.getChildren().add(overlay);
+            
+            javafx.animation.FadeTransition ft = new javafx.animation.FadeTransition(javafx.util.Duration.millis(150), overlay);
+            ft.setToValue(1.0);
+            ft.setOnFinished(e -> {
+                // Short pause to ensure JavaFX renders the overlay before blocking the thread
+                javafx.animation.PauseTransition pt = new javafx.animation.PauseTransition(javafx.util.Duration.millis(50));
+                pt.setOnFinished(evt -> action.run());
+                pt.play();
+            });
+            ft.play();
+        } else {
+            action.run();
+        }
+    }
+
     private void navigateToLandingPage() {
         if (isLoggedIn) return; // Prevent multiple navigations
 
@@ -212,17 +249,16 @@ public class MainApplication extends Application {
             loginChecker = null;
         }
 
-        if (AccessControlService.canAccessAdminArea()) {
-            showAdminDestinationChoice(currentWidth, currentHeight, currentX, currentY, wasMaximized);
-            return;
-        }
-
-        activityLogController.logPageView("landing_page", "Landing Page", java.util.Map.of(
-            "source", "login_success"
-        ));
-        DiscordRPCService.getInstance().updatePresence("Landing Page", "Main Hub");
-        showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
-        System.out.println("[OK] Successfully navigated to landing page.");
+        showLoadingOverlayAndRun(() -> {
+            if (AccessControlService.canAccessAdminArea()) {
+                showAdminDestinationChoice(currentWidth, currentHeight, currentX, currentY, wasMaximized);
+            } else {
+                activityLogController.logPageView("landing_page", "Landing Page", java.util.Map.of("source", "login_success"));
+                DiscordRPCService.getInstance().updatePresence("Landing Page", "Main Hub");
+                showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false);
+            }
+        });
+        System.out.println("[OK] Successfully initiated navigation to landing page.");
     }
 
     private void showAdminDestinationChoice(
@@ -244,20 +280,24 @@ public class MainApplication extends Application {
 
         adminDestinationChoiceView = new AdminDestinationChoiceView();
         adminDestinationChoiceView.setOnChooseHome(() -> {
-            double w = primaryStage.getWidth();
-            double h = primaryStage.getHeight();
-            double x = primaryStage.getX();
-            double y = primaryStage.getY();
-            boolean max = primaryStage.isMaximized();
-            showLandingPage(w, h, x, y, max, false);
+            showLoadingOverlayAndRun(() -> {
+                double w = primaryStage.getWidth();
+                double h = primaryStage.getHeight();
+                double x = primaryStage.getX();
+                double y = primaryStage.getY();
+                boolean max = primaryStage.isMaximized();
+                showLandingPage(w, h, x, y, max, false);
+            });
         });
         adminDestinationChoiceView.setOnChooseDashboard(() -> {
-            double w = primaryStage.getWidth();
-            double h = primaryStage.getHeight();
-            double x = primaryStage.getX();
-            double y = primaryStage.getY();
-            boolean max = primaryStage.isMaximized();
-            showLandingPage(w, h, x, y, max, true);
+            showLoadingOverlayAndRun(() -> {
+                double w = primaryStage.getWidth();
+                double h = primaryStage.getHeight();
+                double x = primaryStage.getX();
+                double y = primaryStage.getY();
+                boolean max = primaryStage.isMaximized();
+                showLandingPage(w, h, x, y, max, true);
+            });
         });
 
         Scene scene = new Scene(adminDestinationChoiceView.getRoot());
@@ -358,21 +398,20 @@ public class MainApplication extends Application {
             "dashboard_mode", goToDashboard ? "admin" : "community"
         ));
 
+        // Let the scene render once before initializing heavy subcomponents
         javafx.application.Platform.runLater(() -> {
             landingPageView.getRoot().layout();
             primaryStage.sizeToScene();
-            javafx.application.Platform.runLater(() -> {
-                landingPageView.getRoot().layout();
-                primaryStage.sizeToScene();
-                if (goToDashboard) {
-                    landingPageView.enterDashboardMode();
-                    DiscordRPCService.getInstance().updatePresence("Admin Dashboard", "Managing Syndicati");
-                } else {
-                    landingPageView.navigateToHome();
-                    DiscordRPCService.getInstance().updatePresence("Community Portal", "Browsing Home");
-                }
-                NavigationManager.getInstance().warmup();
-            });
+            
+            // Execute heavy dashboard/home loading
+            if (goToDashboard) {
+                landingPageView.enterDashboardMode();
+                DiscordRPCService.getInstance().updatePresence("Admin Dashboard", "Managing Syndicati");
+            } else {
+                landingPageView.navigateToHome();
+                DiscordRPCService.getInstance().updatePresence("Community Portal", "Browsing Home");
+            }
+            NavigationManager.getInstance().warmup();
         });
     }
 

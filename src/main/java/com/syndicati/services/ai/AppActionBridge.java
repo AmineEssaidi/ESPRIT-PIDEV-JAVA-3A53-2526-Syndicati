@@ -21,7 +21,30 @@ public class AppActionBridge {
 
     public static class DesktopPage {
         public void navigate(String route) {
-            Platform.runLater(() -> NavigationManager.getInstance().navigateTo(route));
+            Platform.runLater(() -> NavigationManager.getInstance().navigateTo(resolveRoute(route)));
+        }
+
+        private String resolveRoute(String route) {
+            if (route == null) return "home";
+            switch (route.toLowerCase().trim()) {
+                case "syndicat":
+                case "syndicats":
+                case "syndic":
+                    return "services/syndicat";
+                case "forum":
+                case "forums":
+                    return "services/forum";
+                case "residence":
+                case "residences":
+                    return "services/residence";
+                case "evenement":
+                case "evenements":
+                case "event":
+                case "events":
+                    return "services/evenement";
+                default:
+                    return route;
+            }
         }
 
         public void click(String selector) {

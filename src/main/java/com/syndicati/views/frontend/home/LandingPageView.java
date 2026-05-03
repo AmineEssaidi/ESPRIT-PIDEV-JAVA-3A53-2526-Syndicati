@@ -204,7 +204,11 @@ public class LandingPageView implements ViewInterface {
     
     public void navigateToHome() {
         currentPageName = "home";
-        // Clear existing content and restore original landing page content
+        // If dashboard mode is active, restore the frontend layout first
+        if (!darkPanel.getChildren().contains(contentRow)) {
+            darkPanel.getChildren().clear();
+            darkPanel.getChildren().add(contentRow);
+        }
         mainContent.getChildren().clear();
         homeContent = new HomeContent();
         mainContent.getChildren().add(homeContent.getRoot());
@@ -251,6 +255,11 @@ public class LandingPageView implements ViewInterface {
         if ("dashboard".equalsIgnoreCase(pageName)) {
             enterDashboardMode();
             return;
+        }
+        // If dashboard mode is active, restore the frontend layout first
+        if (!darkPanel.getChildren().contains(contentRow)) {
+            darkPanel.getChildren().clear();
+            darkPanel.getChildren().add(contentRow);
         }
         updateMainContentWithTransition(NavigationManager.getInstance().getPage(pageName));
     }
