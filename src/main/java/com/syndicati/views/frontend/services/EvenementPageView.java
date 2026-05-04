@@ -11,6 +11,7 @@ import com.syndicati.utils.theme.ThemeManager;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.animation.KeyFrame;
@@ -47,12 +48,19 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
+import javafx.scene.web.WebView;
+import javafx.scene.web.WebEngine;
 import com.syndicati.models.weather.WeatherData;
 import com.syndicati.services.WeatherService;
 import com.syndicati.services.MapService;
-import javafx.scene.web.WebView;
-import javafx.scene.web.WebEngine;
+import com.syndicati.services.RecommendationService;
+import com.syndicati.services.SocialShareService;
+import com.syndicati.services.TicketService;
+import com.syndicati.services.VoiceService;
+import com.syndicati.models.evenement.Participation;
+import javafx.scene.control.Tooltip;
 
 /**
  * Evenement page mirrored from Horizon twig/css structure.
@@ -88,6 +96,18 @@ public class EvenementPageView implements ViewInterface {
     private VBox mapContainer;
     private WebView mapView;
     private WebEngine webEngine;
+
+    // Advanced Services
+    private final RecommendationService recommendationService = new RecommendationService();
+    private final SocialShareService socialShareService = new SocialShareService();
+    private final TicketService ticketService = new TicketService();
+    private final VoiceService voiceService = new VoiceService();
+    
+    // Recommendations Container
+    private VBox recommendationsBox;
+    private TextField searchField;
+    private Evenement autoOpenEvent = null; // Set to auto-open a specific card's details
+    private boolean suppressSearchListener = false; // Prevent search listener double-rebuild
 
     public EvenementPageView() {
         root = new VBox(26);
@@ -668,16 +688,90 @@ public class EvenementPageView implements ViewInterface {
             root.widthProperty()
         ));
 
-        // Header with section pill and pagination info
-        HBox top = new HBox();
+        // Header with section pill and search
+        HBox top = new HBox(20);
         top.setAlignment(Pos.CENTER_LEFT);
+        
+        VBox topInfo = new VBox(4, sectionPill("Upcoming Events"), text("Explore community gatherings", 13, false, textMuted()));
+        
+        // Search Bar with Voice
+        HBox searchBar = new HBox(10);
+        searchBar.setAlignment(Pos.CENTER_LEFT);
+        searchBar.setPadding(new Insets(8, 16, 8, 16));
+        searchBar.setStyle(
+            "-fx-background-color: " + surfaceSoft() + ";" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 20px;"
+        );
+        HBox.setHgrow(searchBar, Priority.ALWAYS);
+        searchBar.setMaxWidth(600);
+
+        searchField = new TextField();
+        searchField.setPromptText("Search events...");
+        searchField.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.4); -fx-font-size: 14;");
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+        
+        searchField.textProperty().addListener((obs, old, val) -> {
+            if (suppressSearchListener) return; // Skip when programmatically setting
+            // Simple filter logic
+            if (currentEvents != null) {
+                currentPage = 0;
+                rebuildEventsGrid(eventsGrid, root.getWidth());
+            }
+        });
+
+        Button voiceBtn = new Button("🎤");
+        voiceBtn.setTooltip(new Tooltip("Voice Search — speak after clicking"));
+        voiceBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: " + tm.getAccentHex() + "; -fx-font-size: 18; -fx-cursor: hand; -fx-padding: 0;");
+
+        voiceService.setOnStart(() -> {
+            voiceBtn.setText("🔴");
+            voiceBtn.setTooltip(new Tooltip("Listening... click to stop"));
+            voiceBtn.setDisable(false);
+        });
+
+        voiceService.setOnStop(() -> {
+            voiceBtn.setText("🎤");
+            voiceBtn.setTooltip(new Tooltip("Voice Search — speak after clicking"));
+            voiceBtn.setDisable(false);
+        });
+
+        voiceBtn.setOnAction(e -> {
+            if (voiceService.isListening()) {
+                voiceService.stopListening();
+            } else {
+                // Show loading state while PowerShell SAPI engine initializes
+                voiceBtn.setText("⏳");
+                voiceBtn.setDisable(true);
+
+                voiceService.startListening(transcript -> {
+                    if (transcript != null && !transcript.isBlank()) {
+                        searchField.setText(transcript.trim());
+                        showNotification("🎤 Voice: \"" + transcript.trim() + "\"");
+                    } else {
+                        showNotification("No speech detected — try again");
+                    }
+                });
+            }
+        });
+
+        searchBar.getChildren().addAll(text("🔍", 14, false, "rgba(255,255,255,0.4)"), searchField, voiceBtn);
         
         Text countText = text("Showing 0 of 0", 13, false, textMuted());
         top.getChildren().addAll(
-            sectionPill("Upcoming Events"),
+            topInfo,
+            spacer(),
+            searchBar,
             spacer(),
             countText
         );
+
+        recommendationsBox = new VBox(14);
+        recommendationsBox.setPadding(new Insets(10, 0, 10, 0));
+        recommendationsBox.setVisible(false);
+        recommendationsBox.setManaged(false);
 
         eventsGrid = new GridPane();
         eventsGrid.setHgap(48);
@@ -719,7 +813,7 @@ public class EvenementPageView implements ViewInterface {
         
         pagination.getChildren().addAll(prevBtn, pageButtonsContainer, nextBtn);
 
-        eventsSection.getChildren().addAll(top, eventsGrid, pagination);
+        eventsSection.getChildren().addAll(top, recommendationsBox, eventsGrid, pagination);
         return eventsSection;
     }
 
@@ -809,17 +903,96 @@ public class EvenementPageView implements ViewInterface {
 
     private void refreshEventsList() {
         List<Evenement> events = evenementController.evenements();
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        List<Participation> history = (currentUser != null) ? participationController.participationsByUser(currentUser) : new ArrayList<>();
+        
         Platform.runLater(() -> {
             currentEvents = events;
             if (eventsGrid != null) {
                 rebuildEventsGrid(eventsGrid, root.getWidth());
             }
+            rebuildRecommendations(history);
         });
+    }
+
+    private void rebuildRecommendations(List<Participation> history) {
+        if (recommendationsBox == null) return;
+        
+        List<Evenement> recs = recommendationService.getRecommendations(currentEvents, history);
+        if (recs == null || recs.isEmpty()) {
+            recommendationsBox.setVisible(false);
+            recommendationsBox.setManaged(false);
+            return;
+        }
+
+        recommendationsBox.getChildren().clear();
+        recommendationsBox.setVisible(true);
+        recommendationsBox.setManaged(true);
+
+        Text recTitle = text("✨ Recommended For You", 18, true, tm.getAccentHex());
+        HBox recList = new HBox(16);
+        recList.setAlignment(Pos.CENTER_LEFT);
+        
+        for (Evenement e : recs) {
+            VBox miniCard = new VBox(8);
+            miniCard.setPadding(new Insets(12));
+            miniCard.setPrefWidth(220);
+            miniCard.setStyle("-fx-background-color: " + surfaceCard() + "; -fx-background-radius: 20px; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1px; -fx-border-radius: 20px;");
+            
+            Text t = text(e.getTitreEvent(), 14, true, tm.getTextColor());
+            t.setWrappingWidth(190);
+            Text d = text(e.getDateEvent() != null ? e.getDateEvent().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd")) : "TBD", 11, false, textMuted());
+            
+            Button view = gradientButton("View", 10, new Insets(6, 12, 6, 12));
+            view.setOnAction(ev -> {
+                // 1. Suppress the listener & set the search field to filter to this event
+                suppressSearchListener = true;
+                if (searchField != null) {
+                    searchField.setText(e.getTitreEvent());
+                }
+                suppressSearchListener = false;
+                // 2. Always show page 0 when filtering to a single event
+                currentPage = 0;
+                // 3. Set flag so eventCard auto-opens this card's details face, then rebuild
+                autoOpenEvent = e;
+                rebuildEventsGrid(eventsGrid, eventsSection.getWidth());
+                autoOpenEvent = null;
+            });
+            
+            miniCard.getChildren().addAll(tag(e.getTypeEvent()), t, d, view);
+            recList.getChildren().add(miniCard);
+        }
+
+        recommendationsBox.getChildren().addAll(recTitle, recList, new javafx.scene.shape.Line(0, 0, 400, 0) {{
+            setStroke(Color.web(borderSoft()));
+            setStrokeWidth(1);
+        }});
     }
 
     private void rebuildEventsGrid(GridPane grid, double width) {
         grid.getChildren().clear();
         grid.getColumnConstraints().clear();
+
+        // Deduplicate events by ID first (DB may return duplicates)
+        List<Evenement> deduplicated = (currentEvents == null) ? new ArrayList<>() :
+            currentEvents.stream()
+                .filter(e -> e != null && e.getIdEvent() != null)
+                .collect(Collectors.toMap(
+                    Evenement::getIdEvent, e -> e, (a, b) -> a, java.util.LinkedHashMap::new
+                ))
+                .values()
+                .stream()
+                .collect(Collectors.toList());
+
+        List<Evenement> filtered = deduplicated;
+        if (searchField != null && searchField.getText() != null && !searchField.getText().trim().isEmpty()) {
+            String query = searchField.getText().toLowerCase();
+            filtered = deduplicated.stream()
+                .filter(e -> e.getTitreEvent().toLowerCase().contains(query) || 
+                            (e.getDescriptionEvent() != null && e.getDescriptionEvent().toLowerCase().contains(query)) ||
+                            (e.getLieuEvent() != null && e.getLieuEvent().toLowerCase().contains(query)))
+                .collect(Collectors.toList());
+        }
 
         double effectiveWidth = Math.max(width, grid.getWidth());
         int cols = effectiveWidth < 820 ? 1 : (effectiveWidth < 1400 ? 2 : 3);
@@ -831,25 +1004,47 @@ public class EvenementPageView implements ViewInterface {
             grid.getColumnConstraints().add(c);
         }
 
-        if (currentEvents == null || currentEvents.isEmpty()) {
-            Text noEvents = text("No events available. Be the first to create one!", 16, false, textMuted());
+        if (filtered == null || filtered.isEmpty()) {
+            Text noEvents = text("No events found matching your criteria.", 16, false, textMuted());
             StackPane noEventsPane = new StackPane(noEvents);
             noEventsPane.setPadding(new Insets(60));
             grid.add(noEventsPane, 0, 0);
+            
+            // If search is empty and no events at all
+            if (searchField == null || searchField.getText().isEmpty()) {
+                noEvents.setText("No events available. Be the first to create one!");
+            }
         } else {
             // Calculate which events to show for current page
             int start = currentPage * CARDS_PER_PAGE;
-            int end = Math.min(start + CARDS_PER_PAGE, currentEvents.size());
+            int end = Math.min(start + CARDS_PER_PAGE, filtered.size());
             
             int displayIndex = 0;
             for (int i = start; i < end; i++) {
-                Evenement event = currentEvents.get(i);
+                Evenement event = filtered.get(i);
                 VBox card = eventCard(event);
                 GridPane.setFillWidth(card, true);
                 card.setMaxWidth(Double.MAX_VALUE);
                 card.setMinWidth(260);
                 grid.add(card, displayIndex % cols, displayIndex / cols);
                 displayIndex++;
+            }
+        }
+        
+        // Update count text if available
+        if (eventsSection != null && !eventsSection.getChildren().isEmpty()) {
+            Node top = eventsSection.getChildren().get(0);
+            if (top instanceof HBox) {
+                HBox topBox = (HBox) top;
+                if (!topBox.getChildren().isEmpty()) {
+                    Node last = topBox.getChildren().get(topBox.getChildren().size() - 1);
+                    if (last instanceof Text) {
+                        int total = filtered != null ? filtered.size() : 0;
+                        int s = total == 0 ? 0 : currentPage * CARDS_PER_PAGE + 1;
+                        int e = Math.min((currentPage + 1) * CARDS_PER_PAGE, total);
+                        ((Text) last).setText("Showing " + s + "-" + e + " of " + total);
+                    }
+                }
             }
         }
     }
@@ -1236,6 +1431,13 @@ public class EvenementPageView implements ViewInterface {
         detailsScrollContent.getChildren().addAll(detailImage, splitLayout, mapWeatherBox, descBox);
         detailsFace.getChildren().addAll(detailsHead, detailsScrollContent);
 
+        // FACE 5: SUCCESS (Post-Participation)
+        VBox successFace = new VBox(20);
+        successFace.setAlignment(Pos.CENTER);
+        successFace.setVisible(false);
+        successFace.setManaged(false);
+        successFace.setPadding(new Insets(30));
+
         // Action buttons for details face
         User currentUser = SessionManager.getInstance().getCurrentUser();
         HBox detailsActions = new HBox(8);
@@ -1254,46 +1456,32 @@ public class EvenementPageView implements ViewInterface {
         
         if (currentUser != null && event.getUser() != null && event.getUser().getIdUser().equals(currentUser.getIdUser())) {
             Button editBtn = new Button("✏️ Edit");
-            editBtn.setStyle(
-                "-fx-background-color: " + tm.toRgba("ffffff", 0.05) + ";" +
-                "-fx-text-fill: white;" +
-                "-fx-font-size: 12;" +
-                "-fx-background-radius: 14;" +
-                "-fx-padding: 11 16 11 16;" +
-                "-fx-border-color: " + tm.toRgba("ffffff", 0.1) + ";" +
-                "-fx-border-width: 1;"
-            );
+            editBtn.setStyle("-fx-background-color: " + tm.toRgba("ffffff", 0.05) + "; -fx-text-fill: white; -fx-font-size: 12; -fx-background-radius: 14; -fx-padding: 11 16 11 16; -fx-border-color: " + tm.toRgba("ffffff", 0.1) + "; -fx-border-width: 1;");
             editBtn.setMaxWidth(Double.MAX_VALUE);
-            editBtn.setPrefHeight(40);
             HBox.setHgrow(editBtn, Priority.ALWAYS);
             editBtn.setOnAction(e -> switchFace(detailsFace, editFace));
             detailsActions.getChildren().add(editBtn);
-            
-            Button deleteDetailsBtn = new Button("🗑️ Delete");
-            deleteDetailsBtn.setStyle(
-                "-fx-background-color: rgba(255, 77, 77, 0.1);" +
-                "-fx-text-fill: #ff6b6b;" +
-                "-fx-font-size: 12;" +
-                "-fx-background-radius: 14;" +
-                "-fx-padding: 11 16 11 16;" +
-                "-fx-border-color: rgba(255, 77, 77, 0.2);" +
-                "-fx-border-width: 1;"
-            );
-            deleteDetailsBtn.setMaxWidth(Double.MAX_VALUE);
-            deleteDetailsBtn.setPrefHeight(40);
-            HBox.setHgrow(deleteDetailsBtn, Priority.ALWAYS);
-            deleteDetailsBtn.setOnAction(e -> {
-                if (evenementController.evenementDelete(event.getIdEvent())) {
-                    showNotification("✓ Event deleted successfully!");
-                    refreshEventsList();
-                } else {
-                    showNotification("Failed to delete event");
-                }
-            });
-            detailsActions.getChildren().add(deleteDetailsBtn);
         }
         
         detailsFace.getChildren().add(detailsActions);
+
+        // Social Share Section
+        VBox shareBox = new VBox(10);
+        shareBox.setPadding(new Insets(10, 0, 0, 0));
+        Text shareLabel = text("Share with friends", 11, true, textMuted());
+        HBox shareButtons = new HBox(10);
+        
+        Button fbBtn = new Button("📘 Facebook");
+        fbBtn.setStyle("-fx-background-color: #1877F2; -fx-text-fill: white; -fx-font-size: 11; -fx-background-radius: 10; -fx-padding: 6 12; -fx-cursor: hand;");
+        fbBtn.setOnAction(e -> socialShareService.shareOnFacebook(event.getTitreEvent(), event.getDescriptionEvent()));
+        
+        Button waBtn = new Button("🟢 WhatsApp");
+        waBtn.setStyle("-fx-background-color: #25D366; -fx-text-fill: white; -fx-font-size: 11; -fx-background-radius: 10; -fx-padding: 6 12; -fx-cursor: hand;");
+        waBtn.setOnAction(e -> socialShareService.shareOnWhatsApp(event.getTitreEvent(), event.getLieuEvent(), dateStr));
+        
+        shareButtons.getChildren().addAll(fbBtn, waBtn);
+        shareBox.getChildren().addAll(shareLabel, shareButtons);
+        detailsFace.getChildren().add(shareBox);
 
         // ============ FACE 3: PARTICIPATE (Form) ============
         HBox partHead = new HBox();
@@ -1332,9 +1520,54 @@ public class EvenementPageView implements ViewInterface {
                 int accompagnants = Integer.parseInt(accompagnantsField.getText());
                 Integer participationId = participationController.participationCreate(event, currentUser, accompagnants, noteField.getText());
                 if (participationId > 0) {
-                    showNotification("✓ You joined the event!");
-                    refreshEventsList();
-                    switchFace(participateFace, mainFace);
+                    Participation part = new Participation();
+                    part.setIdParticipation(participationId);
+                    part.setEvenement(event);
+                    part.setUser(currentUser);
+                    part.setNbAccompagnants(accompagnants);
+
+                    // Show success face
+                    successFace.getChildren().clear();
+                    Text successIcon = text("✅", 48, false, "#10b981");
+                    Text successTitle = text("Registration Successful!", 20, true, tm.getTextColor());
+                    Text successSub = text("You're all set for " + event.getTitreEvent(), 14, false, textSoft());
+                    
+                    Button downloadTicketBtn = gradientButton("⬇ Download Ticket", 13, new Insets(12, 20, 12, 20));
+                    downloadTicketBtn.setOnAction(ev -> {
+                        downloadTicketBtn.setText("Generating...");
+                        downloadTicketBtn.setDisable(true);
+                        Thread.startVirtualThread(() -> {
+                            try {
+                                String path = ticketService.generateTicketPDF(part);
+                                Platform.runLater(() -> {
+                                    downloadTicketBtn.setText("⬇ Download Ticket");
+                                    downloadTicketBtn.setDisable(false);
+                                    showNotification("✓ Ticket saved to: " + path);
+                                });
+                                ticketService.openTicket(path);
+                            } catch (Exception ex) {
+                                Platform.runLater(() -> {
+                                    downloadTicketBtn.setText("⬇ Download Ticket");
+                                    downloadTicketBtn.setDisable(false);
+                                    showNotification("Error generating ticket: " + ex.getMessage());
+                                });
+                                ex.printStackTrace();
+                            }
+                        });
+                    });
+
+                    Button closeSuccess = new Button("Done");
+                    closeSuccess.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-cursor: hand;");
+                    closeSuccess.setOnAction(ev -> switchFace(successFace, mainFace));
+
+                    successFace.getChildren().addAll(successIcon, successTitle, successSub, downloadTicketBtn, closeSuccess);
+                    switchFace(participateFace, successFace);
+                    
+                    // Refresh list in background AFTER a delay so the success screen stays visible
+                    javafx.animation.Timeline refreshDelay = new javafx.animation.Timeline(
+                        new javafx.animation.KeyFrame(javafx.util.Duration.seconds(3), ev2 -> refreshEventsList())
+                    );
+                    refreshDelay.play();
                 } else {
                     showNotification("Failed to join event");
                 }
@@ -1349,6 +1582,8 @@ public class EvenementPageView implements ViewInterface {
             formRowField("Special Note", noteField),
             confirmParticipationBtn
         );
+
+        switcher.getChildren().addAll(mainFace, detailsFace, participateFace, editFace, successFace);
 
         // ============ FACE 4: EDIT (Form) ============
         HBox editHead = new HBox();
@@ -1452,8 +1687,16 @@ public class EvenementPageView implements ViewInterface {
             saveEditBtn
         );
 
-        switcher.getChildren().addAll(mainFace, detailsFace, participateFace, editFace);
         card.getChildren().add(switcher);
+
+        // Auto-open details if this card is the target from recommendations
+        if (autoOpenEvent != null && autoOpenEvent.getIdEvent().equals(event.getIdEvent())) {
+            // Schedule with a delay to ensure the card is fully laid out in the scene first
+            javafx.animation.Timeline openDelay = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(150), ev -> switchFace(mainFace, detailsFace))
+            );
+            openDelay.play();
+        }
 
         addHoverLift(card);
         return card;
