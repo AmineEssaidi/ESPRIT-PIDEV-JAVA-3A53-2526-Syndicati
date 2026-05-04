@@ -194,25 +194,27 @@ public class LandingPageView implements ViewInterface {
     }
     
     public void navigateToHome() {
-        currentPageName = "home";
-        if (!darkPanel.getChildren().contains(contentRow)) {
-            darkPanel.getChildren().clear();
-            darkPanel.getChildren().add(contentRow);
-        }
-        
-        // Hide all cached pages
-        for (javafx.scene.Node node : mainContent.getChildren()) {
-            node.setVisible(false);
-            node.setManaged(false);
-        }
-        
-        if (homeContent == null) {
-            homeContent = new HomeContent();
-            mainContent.getChildren().add(homeContent.getRoot());
-        }
-        
-        homeContent.getRoot().setVisible(true);
-        homeContent.getRoot().setManaged(true);
+        showLoadingTransition("home", () -> {
+            currentPageName = "home";
+            if (!darkPanel.getChildren().contains(contentRow)) {
+                darkPanel.getChildren().clear();
+                darkPanel.getChildren().add(contentRow);
+            }
+            
+            // Hide all cached pages
+            for (javafx.scene.Node node : mainContent.getChildren()) {
+                node.setVisible(false);
+                node.setManaged(false);
+            }
+            
+            if (homeContent == null) {
+                homeContent = new HomeContent();
+                mainContent.getChildren().add(homeContent.getRoot());
+            }
+            
+            homeContent.getRoot().setVisible(true);
+            homeContent.getRoot().setManaged(true);
+        });
     }
     
     public void navigateToDashboard() {
@@ -220,15 +222,17 @@ public class LandingPageView implements ViewInterface {
     }
 
     public void enterDashboardMode() {
-        currentPageName = "dashboard";
-        DashboardView dv = NavigationManager.getInstance().getDashboardView();
-        dv.setExitCallback(this::exitDashboardMode);
-        HBox adminRoot = dv.getRoot();
-        adminRoot.setMaxWidth(Double.MAX_VALUE);
-        adminRoot.setMaxHeight(Double.MAX_VALUE);
-        VBox.setVgrow(adminRoot, Priority.ALWAYS);
-        darkPanel.getChildren().clear();
-        darkPanel.getChildren().add(adminRoot);
+        showLoadingTransition("Admin Dashboard", () -> {
+            currentPageName = "dashboard";
+            DashboardView dv = NavigationManager.getInstance().getDashboardView();
+            dv.setExitCallback(this::exitDashboardMode);
+            HBox adminRoot = dv.getRoot();
+            adminRoot.setMaxWidth(Double.MAX_VALUE);
+            adminRoot.setMaxHeight(Double.MAX_VALUE);
+            VBox.setVgrow(adminRoot, Priority.ALWAYS);
+            darkPanel.getChildren().clear();
+            darkPanel.getChildren().add(adminRoot);
+        });
     }
 
     public void exitDashboardMode() {
@@ -239,51 +243,69 @@ public class LandingPageView implements ViewInterface {
     
     public void navigateToPage(String pageName) {
         if (pageName == null) return;
-        String normalizedPage = pageName.toLowerCase();
-        currentPageName = normalizedPage;
-
-        if ("home".equalsIgnoreCase(pageName)) {
-            navigateToHome();
-            return;
-        }
-        if ("dashboard".equalsIgnoreCase(pageName)) {
-            enterDashboardMode();
-            return;
-        }
-
-        if (!darkPanel.getChildren().contains(contentRow)) {
-            darkPanel.getChildren().clear();
-            darkPanel.getChildren().add(contentRow);
-        }
         
-        javafx.scene.Node targetPage = pageCache.computeIfAbsent(normalizedPage, 
-            name -> {
-                ViewInterface view = NavigationManager.getInstance().getView(name);
-                if (view == null) return null;
-                javafx.scene.Node p = view.getRoot();
-                p.setVisible(false);
-                p.setManaged(false);
-                return p;
-            });
-        
-        if (targetPage != null) {
-            if (!mainContent.getChildren().contains(targetPage)) {
-                mainContent.getChildren().add(targetPage);
+        showLoadingTransition(pageName, () -> {
+            String normalizedPage = pageName.toLowerCase();
+            currentPageName = normalizedPage;
+
+            if ("home".equalsIgnoreCase(pageName)) {
+                navigateToHome();
+                return;
+            }
+            if ("dashboard".equalsIgnoreCase(pageName)) {
+                enterDashboardMode();
+                return;
+            }
+
+            if (!darkPanel.getChildren().contains(contentRow)) {
+                darkPanel.getChildren().clear();
+                darkPanel.getChildren().add(contentRow);
             }
             
-            // Fast Visibility Toggle
-            for (javafx.scene.Node node : mainContent.getChildren()) {
-                boolean isTarget = (node == targetPage);
-                node.setVisible(isTarget);
-                node.setManaged(isTarget);
-            }
+            javafx.scene.Node targetPage = pageCache.computeIfAbsent(normalizedPage, 
+                name -> {
+                    ViewInterface view = NavigationManager.getInstance().getView(name);
+                    if (view == null) return null;
+                    javafx.scene.Node p = view.getRoot();
+                    p.setVisible(false);
+                    p.setManaged(false);
+                    return p;
+                });
+            
+            if (targetPage != null) {
+                if (!mainContent.getChildren().contains(targetPage)) {
+                    mainContent.getChildren().add(targetPage);
+                }
+                
+                // Fast Visibility Toggle
+                for (javafx.scene.Node node : mainContent.getChildren()) {
+                    boolean isTarget = (node == targetPage);
+                    node.setVisible(isTarget);
+                    node.setManaged(isTarget);
+                }
 
-            // Trigger async data load for everything except Profile (which is built in bg)
-            ViewInterface view = NavigationManager.getInstance().getView(pageName);
-            if (view != null && !(view instanceof ProfileView)) {
-                Thread.startVirtualThread(view::loadDataAsync);
+                // Trigger async data load for everything except Profile (which is built in bg)
+                ViewInterface view = NavigationManager.getInstance().getView(pageName);
+                if (view != null && !(view instanceof ProfileView)) {
+                    Thread.startVirtualThread(view::loadDataAsync);
+                }
             }
-        }
+        });
+    }
+
+    private void showLoadingTransition(String viewName, Runnable midAction) {
+        com.syndicati.views.frontend.auth.LoadingCinematicView loading = new com.syndicati.views.frontend.auth.LoadingCinematicView(viewName);
+        root.getChildren().add(loading.getRoot());
+        loading.getRoot().toFront();
+        
+        loading.play(() -> {
+            root.getChildren().remove(loading.getRoot());
+        });
+
+        // Small delay to ensure the loading screen is rendered before the UI swap potentially lags the FX thread
+        javafx.animation.PauseTransition shortDelay = new javafx.animation.PauseTransition(javafx.util.Duration.millis(50));
+        shortDelay.setOnFinished(e -> midAction.run());
+        shortDelay.play();
     }
 
     private void applyThemeStyling() {

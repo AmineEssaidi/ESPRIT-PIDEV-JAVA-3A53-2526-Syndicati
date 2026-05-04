@@ -267,31 +267,38 @@ public class MainApplication extends Application {
         }));
 
         primaryStage.setOnCloseRequest(event -> {
-            System.out.println("[SHUTDOWN] Shutting down application...");
+            event.consume(); // Prevent immediate close
+            
+            System.out.println("[SHUTDOWN] Starting cinematic shutdown...");
+            
             // Log shutdown before stopping services so tracer is still live.
-            activityLogController.logPageView("app_shutdown", "Application Shutdown", java.util.Map.of(
+            activityLogController.logPageView("app_shutdown", "Application Shutdown Cinematic", java.util.Map.of(
                 "source", "close_request"
             ));
-            LogAIWorkerService.getInstance().stopWorker();
-            com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
-            com.syndicati.services.mail.AsyncMailerService.shutdown();
-            // Then shutdown database monitoring
-            com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
-            langfuseRuntimeService.stop();
-            anomalyScoringScheduler.stop();
-            DiscordRPCService.getInstance().shutdown();
-            System.out.println("[SUCCESS] All services stopped");
+
+            com.syndicati.views.frontend.auth.ShutdownCinematicView shutdownView = new com.syndicati.views.frontend.auth.ShutdownCinematicView();
+            primaryStage.getScene().setRoot(shutdownView.getRoot());
             
-            // Force exit JVM after a short delay to ensure cleanup
-            Thread.ofVirtual().name("Syndicati-DelayedExit").start(() -> {
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                System.out.println("[SHUTDOWN] Forcing JVM exit...");
+            shutdownView.setOnFinished(() -> {
+                System.out.println("[SHUTDOWN] Finalizing service cleanup...");
+                
+                LogAIWorkerService.getInstance().stopWorker();
+                com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
+                com.syndicati.services.mail.AsyncMailerService.shutdown();
+                
+                com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
+                langfuseRuntimeService.stop();
+                anomalyScoringScheduler.stop();
+                DiscordRPCService.getInstance().shutdown();
+                
+                System.out.println("[SUCCESS] All services stopped. Exiting.");
+                
+                // Final exit
+                javafx.application.Platform.exit();
                 System.exit(0);
             });
+            
+            shutdownView.play();
         });
         
         // Final UI performance hints
