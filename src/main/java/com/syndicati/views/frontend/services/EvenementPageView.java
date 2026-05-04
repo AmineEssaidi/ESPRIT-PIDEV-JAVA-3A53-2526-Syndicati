@@ -48,6 +48,11 @@ import javafx.scene.text.Text;
 import javafx.util.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.syndicati.models.weather.WeatherData;
+import com.syndicati.services.WeatherService;
+import com.syndicati.services.MapService;
+import javafx.scene.web.WebView;
+import javafx.scene.web.WebEngine;
 
 /**
  * Evenement page mirrored from Horizon twig/css structure.
@@ -73,6 +78,16 @@ public class EvenementPageView implements ViewInterface {
     private TextArea descField;
     private TextField placesField;
     private File selectedImageFile = null;
+
+    // Weather & Map Services
+    private final WeatherService weatherService = new WeatherService();
+    private final MapService mapService = new MapService();
+    
+    // Weather & Map UI components for form
+    private VBox weatherPreview;
+    private VBox mapContainer;
+    private WebView mapView;
+    private WebEngine webEngine;
 
     public EvenementPageView() {
         root = new VBox(26);
@@ -244,6 +259,15 @@ public class EvenementPageView implements ViewInterface {
             typeCombo.setValue("social");
             descField.clear();
             placesField.clear();
+            if (weatherPreview != null) {
+                weatherPreview.getChildren().clear();
+                weatherPreview.setVisible(false);
+                weatherPreview.setManaged(false);
+            }
+            if (mapContainer != null) {
+                mapContainer.setVisible(false);
+                mapContainer.setManaged(false);
+            }
         });
 
         mainFace.getChildren().addAll(
@@ -320,6 +344,116 @@ public class EvenementPageView implements ViewInterface {
             }
         });
 
+        // --- Weather & Map Setup ---
+        weatherPreview = new VBox();
+        weatherPreview.setManaged(false);
+        weatherPreview.setVisible(false);
+
+        mapContainer = new VBox();
+        mapContainer.setManaged(false);
+        mapContainer.setVisible(false);
+        mapContainer.setMinHeight(300);
+        mapContainer.setStyle("-fx-border-color: " + borderSoft() + "; -fx-border-width: 1px; -fx-border-radius: 16px; -fx-background-radius: 16px;");
+
+        mapView = new WebView();
+        mapView.setPrefHeight(300);
+        webEngine = mapView.getEngine();
+        
+        String mapHtml = "<!DOCTYPE html><html><head>" +
+                "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />" +
+                "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>" +
+                "<style>#map { height: 100vh; width: 100%; margin: 0; padding: 0; border-radius: 16px; }</style>" +
+                "</head><body><div id=\"map\"></div><script>" +
+                "var map = L.map('map').setView([36.8065, 10.1815], 13);" + 
+                "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);" +
+                "var marker = L.marker([36.8065, 10.1815], {draggable: true}).addTo(map);" +
+                "function updateMarker(pos) {" +
+                "  marker.setLatLng(pos);" +
+                "  map.setView(pos, 13);" +
+                "}" +
+                "marker.on('dragend', function(e) {" +
+                "  var lat = marker.getLatLng().lat;" +
+                "  var lon = marker.getLatLng().lng;" +
+                "  alert('map:click:' + lat + ':' + lon);" +
+                "});" +
+                "map.on('click', function(e) {" +
+                "  var lat = e.latlng.lat;" +
+                "  var lon = e.latlng.lng;" +
+                "  marker.setLatLng(e.latlng);" +
+                "  alert('map:click:' + lat + ':' + lon);" +
+                "});" +
+                "</script></body></html>";
+
+        webEngine.setOnAlert(event -> {
+            String data = event.getData();
+            if (data != null && data.startsWith("map:click:")) {
+                String[] parts = data.substring(10).split(":");
+                if (parts.length == 2) {
+                    try {
+                        handleMapClick(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]));
+                    } catch (Exception ex) {}
+                }
+            }
+        });
+        webEngine.loadContent(mapHtml);
+        mapContainer.getChildren().add(mapView);
+
+        Button checkWeatherBtn = iconButton("☁ Weather");
+        checkWeatherBtn.setOnAction(e -> {
+            if (locationField.getText().trim().isEmpty()) return;
+            Thread.startVirtualThread(() -> {
+                try {
+                    WeatherData wd = weatherService.getCurrentWeather(locationField.getText().trim());
+                    Platform.runLater(() -> {
+                        weatherPreview.getChildren().clear();
+                        HBox wBox = new HBox(10);
+                        wBox.setAlignment(Pos.CENTER_LEFT);
+                        wBox.setPadding(new Insets(10));
+                        wBox.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1px; -fx-border-radius: 12px;");
+                        
+                        try {
+                            ImageView icon = new ImageView(new Image(wd.getIconUrl(), true));
+                            icon.setFitWidth(40); icon.setFitHeight(40);
+                            wBox.getChildren().add(icon);
+                        } catch (Exception imgEx) {}
+                        
+                        VBox det = new VBox(2);
+                        det.getChildren().addAll(
+                            text(Math.round(wd.getTemperature()) + "°C - " + wd.getDescription(), 12, true, tm.getTextColor()),
+                            text("Feels like " + Math.round(wd.getFeelsLike()) + "°C", 11, false, textMuted())
+                        );
+                        wBox.getChildren().add(det);
+                        weatherPreview.getChildren().add(wBox);
+                        weatherPreview.setVisible(true);
+                        weatherPreview.setManaged(true);
+                    });
+                } catch (Exception ex) {
+                    System.err.println("Weather check failed: " + ex.getMessage());
+                }
+            });
+        });
+
+        Button showMapBtn = iconButton("📍 Map");
+        showMapBtn.setOnAction(e -> {
+            boolean visible = !mapContainer.isVisible();
+            mapContainer.setVisible(visible);
+            mapContainer.setManaged(visible);
+            if (visible && !locationField.getText().trim().isEmpty()) {
+                Thread.startVirtualThread(() -> {
+                    try {
+                        double[] coords = mapService.geocode(locationField.getText().trim());
+                        if (coords != null) {
+                            Platform.runLater(() -> {
+                                webEngine.executeScript("updateMarker([" + coords[0] + "," + coords[1] + "])");
+                            });
+                        }
+                    } catch (Exception ex) {
+                        System.err.println("Geocoding failed: " + ex.getMessage());
+                    }
+                });
+            }
+        });
+
         extraFace.getChildren().addAll(
             formHead,
             text("Share your vision with the community", 13, false, textMuted()),
@@ -328,7 +462,7 @@ public class EvenementPageView implements ViewInterface {
                 formRowField("Date", vboxField(datePicker, dateLive)),
                 formRowField("Event Type", vboxField(typeCombo, typeLive))
             ),
-            formRowField("Location", vboxField(locationField, locationLive)),
+            formRowField("Location", new VBox(8, new HBox(10, vboxField(locationField, locationLive), checkWeatherBtn, showMapBtn), weatherPreview, mapContainer)),
             formRowField("Description", vboxField(descField, descLive)),
             twoColRow(
                 formRowField("Total Places", vboxField(placesField, placesLive)),
@@ -995,7 +1129,7 @@ public class EvenementPageView implements ViewInterface {
         
         splitLayout.getChildren().addAll(leftInfo, rightInfo);
         
-        // Map & Weather placeholders
+        // Map & Weather Containers
         VBox mapWeatherBox = new VBox(12);
         mapWeatherBox.setMaxWidth(Double.MAX_VALUE);
         mapWeatherBox.setPadding(new Insets(12));
@@ -1007,27 +1141,80 @@ public class EvenementPageView implements ViewInterface {
             "-fx-background-radius: 20;"
         );
         
-        HBox mapPlaceholder = new HBox();
-        mapPlaceholder.setAlignment(Pos.CENTER);
-        mapPlaceholder.setMinHeight(100);
-        mapPlaceholder.setMaxWidth(Double.MAX_VALUE);
-        mapPlaceholder.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.08) + ";" +
-            "-fx-border-radius: 12;"
-        );
-        mapPlaceholder.getChildren().add(text("📍 Map would appear here", 12, false, textMuted()));
+        VBox weatherContainer = new VBox();
+        weatherContainer.setAlignment(Pos.CENTER_LEFT);
+        weatherContainer.setMinHeight(60);
         
-        HBox weatherPlaceholder = new HBox();
-        weatherPlaceholder.setAlignment(Pos.CENTER);
-        weatherPlaceholder.setMinHeight(80);
-        weatherPlaceholder.setMaxWidth(Double.MAX_VALUE);
-        weatherPlaceholder.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.08) + ";" +
-            "-fx-border-radius: 12;"
-        );
-        weatherPlaceholder.getChildren().add(text("☀️ Weather widget would appear here", 12, false, textMuted()));
+        Thread.startVirtualThread(() -> {
+            try {
+                WeatherData wd = weatherService.getCurrentWeather(event.getLieuEvent());
+                Platform.runLater(() -> {
+                    HBox wBox = new HBox(10);
+                    wBox.setAlignment(Pos.CENTER_LEFT);
+                    wBox.setPadding(new Insets(8));
+                    wBox.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.1) + "; -fx-background-radius: 12px;");
+                    
+                    try {
+                        ImageView icon = new ImageView(new Image(wd.getIconUrl(), true));
+                        icon.setFitWidth(32); icon.setFitHeight(32);
+                        wBox.getChildren().add(icon);
+                    } catch (Exception imgEx) {}
+                    
+                    VBox detailsBox = new VBox(2);
+                    detailsBox.getChildren().addAll(
+                        text(Math.round(wd.getTemperature()) + "°C - " + wd.getDescription(), 12, true, tm.getTextColor()),
+                        text("Local Weather", 10, false, textMuted())
+                    );
+                    wBox.getChildren().add(detailsBox);
+                    weatherContainer.getChildren().add(wBox);
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> weatherContainer.getChildren().add(text("Weather unavailable", 11, false, textMuted())));
+            }
+        });
+
+        VBox mapBox = new VBox();
+        mapBox.setMinHeight(150);
+        mapBox.setStyle("-fx-background-radius: 16; -fx-border-radius: 16; -fx-overflow: hidden; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1;");
         
-        mapWeatherBox.getChildren().addAll(mapPlaceholder, weatherPlaceholder);
+        WebView cardMapView = new WebView();
+        cardMapView.setPrefHeight(150);
+        WebEngine cardWebEngine = cardMapView.getEngine();
+        
+        mapBox.getChildren().add(cardMapView);
+
+        // Fetch coordinates and load map
+        Thread.startVirtualThread(() -> {
+            try {
+                double[] coords = mapService.geocode(event.getLieuEvent());
+                if (coords != null) {
+                    String cardMapHtml = "<!DOCTYPE html><html><head>" +
+                            "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />" +
+                            "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>" +
+                            "<style>#map { height: 100vh; width: 100%; margin: 0; padding: 0; border-radius: 16px; }</style>" +
+                            "</head><body><div id=\"map\"></div><script>" +
+                            "var map = L.map('map', {zoomControl: false, attributionControl: false}).setView([" + coords[0] + "," + coords[1] + "], 14);" + 
+                            "L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);" +
+                            "L.marker([" + coords[0] + "," + coords[1] + "]).addTo(map);" +
+                            "</script></body></html>";
+                    Platform.runLater(() -> cardWebEngine.loadContent(cardMapHtml));
+                } else {
+                    Platform.runLater(() -> {
+                        mapBox.getChildren().clear();
+                        mapBox.setAlignment(Pos.CENTER);
+                        mapBox.getChildren().add(text("Map location not found", 12, false, textMuted()));
+                    });
+                }
+            } catch (Exception ex) {
+                Platform.runLater(() -> {
+                    mapBox.getChildren().clear();
+                    mapBox.setAlignment(Pos.CENTER);
+                    mapBox.getChildren().add(text("Map error", 12, false, textMuted()));
+                });
+            }
+        });
+        
+        mapWeatherBox.getChildren().addAll(weatherContainer, mapBox);
         
         // Description
         Text detailDesc = text(event.getDescriptionEvent() != null ? event.getDescriptionEvent() : "No description provided", 12, false, textSoft());
@@ -1874,5 +2061,60 @@ public class EvenementPageView implements ViewInterface {
 
     @Override
     public void cleanup() {}
+
+    /**
+     * Logic for handling map clicks (called from alert-based bridge)
+     */
+    private void handleMapClick(double lat, double lon) {
+        Thread.startVirtualThread(() -> {
+            try {
+                System.out.println("DEBUG: Map clicked at Lat: " + lat + ", Lon: " + lon);
+                // 1. Get Address
+                String address = mapService.reverseGeocode(lat, lon);
+                System.out.println("DEBUG: Address found: " + address);
+                Platform.runLater(() -> {
+                    locationField.setText(address);
+                    locationField.requestFocus();
+                });
+
+                // 2. Automatically update weather using coordinates
+                Platform.runLater(() -> {
+                    if (weatherPreview != null) {
+                        weatherPreview.getChildren().clear();
+                        weatherPreview.getChildren().add(text("Loading weather...", 11, false, textMuted()));
+                        weatherPreview.setManaged(true);
+                        weatherPreview.setVisible(true);
+                    }
+                });
+
+                WeatherData wd = weatherService.getCurrentWeather(lat, lon);
+                Platform.runLater(() -> {
+                    if (weatherPreview != null) {
+                        weatherPreview.getChildren().clear();
+                        HBox wBox = new HBox(10);
+                        wBox.setAlignment(Pos.CENTER_LEFT);
+                        wBox.setPadding(new Insets(10));
+                        wBox.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1px; -fx-border-radius: 12px;");
+                        
+                        try {
+                            ImageView icon = new ImageView(new Image(wd.getIconUrl(), true));
+                            icon.setFitWidth(40); icon.setFitHeight(40);
+                            wBox.getChildren().add(icon);
+                        } catch (Exception imgEx) {}
+                        
+                        VBox details = new VBox(2);
+                        details.getChildren().addAll(
+                            text(Math.round(wd.getTemperature()) + "°C - " + wd.getDescription(), 12, true, tm.getTextColor()),
+                            text("Feels like " + Math.round(wd.getFeelsLike()) + "°C", 11, false, textMuted())
+                        );
+                        wBox.getChildren().add(details);
+                        weatherPreview.getChildren().add(wBox);
+                    }
+                });
+            } catch (Exception ex) {
+                System.err.println("Map interaction failed: " + ex.getMessage());
+            }
+        });
+    }
 }
 
