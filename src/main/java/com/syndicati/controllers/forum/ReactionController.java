@@ -40,6 +40,47 @@ public class ReactionController {
         return reactionService.publicationStatus(publicationId, user);
     }
 
+    // Aliases for View Synchronization (ID-based)
+    public ReactionStatus getPublicationStatus(Integer publicationId, int userId) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.publicationStatus(publicationId, u);
+    }
+
+    public ReactionActionResult togglePublicationReaction(Integer publicationId, Integer userId, String kind) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.togglePublicationReaction(publicationId, u, kind);
+    }
+
+    public ReactionActionResult reactPublicationEmoji(Integer publicationId, Integer userId, String emoji) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.reactPublicationEmoji(publicationId, u, emoji);
+    }
+
+    public ReactionActionResult reportPublication(Integer publicationId, Integer userId, String reason) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.reportPublication(publicationId, u, reason);
+    }
+
+    public ReactionActionResult togglePublicationReaction(Integer publicationId, User user, String kind) {
+        return reactionService.togglePublicationReaction(publicationId, user, kind);
+    }
+
+    public ReactionActionResult reactPublicationEmoji(Integer publicationId, User user, String emoji) {
+        return reactionService.reactPublicationEmoji(publicationId, user, emoji);
+    }
+
+    public ReactionActionResult reportPublication(Integer publicationId, User user, String reason) {
+        return reactionService.reportPublication(publicationId, user, reason);
+    }
+
+    public ReactionStatus publicationStatus(Integer publicationId, User user) {
+        return reactionService.publicationStatus(publicationId, user);
+    }
+
     public ReactionActionResult commentToggle(Commentaire commentaire, User user, String kind) {
         Integer commentId = commentaire == null ? null : commentaire.getIdCommentaire();
         return reactionService.toggleCommentReaction(commentId, user, kind);
@@ -57,6 +98,47 @@ public class ReactionController {
 
     public ReactionStatus commentStatus(Commentaire commentaire, User user) {
         Integer commentId = commentaire == null ? null : commentaire.getIdCommentaire();
+        return reactionService.commentStatus(commentId, user);
+    }
+
+    // Aliases for View Synchronization (Comment ID-based)
+    public ReactionStatus getCommentStatus(Integer commentId, int userId) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.commentStatus(commentId, u);
+    }
+
+    public ReactionActionResult toggleCommentReaction(Integer commentId, Integer userId, String kind) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.toggleCommentReaction(commentId, u, kind);
+    }
+
+    public ReactionActionResult reactCommentEmoji(Integer commentId, Integer userId, String emoji) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.reactCommentEmoji(commentId, u, emoji);
+    }
+
+    public ReactionActionResult reportComment(Integer commentId, Integer userId, String reason) {
+        User u = new User();
+        u.setIdUser(userId);
+        return reactionService.reportComment(commentId, u, reason);
+    }
+
+    public ReactionActionResult toggleCommentReaction(Integer commentId, User user, String kind) {
+        return reactionService.toggleCommentReaction(commentId, user, kind);
+    }
+
+    public ReactionActionResult reactCommentEmoji(Integer commentId, User user, String emoji) {
+        return reactionService.reactCommentEmoji(commentId, user, emoji);
+    }
+
+    public ReactionActionResult reportComment(Integer commentId, User user, String reason) {
+        return reactionService.reportComment(commentId, user, reason);
+    }
+
+    public ReactionStatus commentStatus(Integer commentId, User user) {
         return reactionService.commentStatus(commentId, user);
     }
 

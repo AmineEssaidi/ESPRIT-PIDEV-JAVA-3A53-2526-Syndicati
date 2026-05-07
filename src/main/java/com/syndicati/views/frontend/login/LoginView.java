@@ -2750,7 +2750,16 @@ public class LoginView implements ViewInterface {
 
         refreshNativeChallenge();
         activityLogController.logAuthAction("LOGIN", "FAILURE", "Failed login attempt for: " + username, java.util.Map.of("username", username));
-        showErrorMessage(result.getMessage());
+
+        if (result.getMessage() != null && result.getMessage().startsWith("This account is disabled.")) {
+            String reason = result.getMessage().replace("This account is disabled. Reason: ", "").trim();
+            if (reason.equals("This account is disabled.") || reason.equals("null") || reason.isEmpty()) {
+                reason = "Violation of terms of service.";
+            }
+            showBannedCinematic(reason);
+        } else {
+            showErrorMessage(result.getMessage());
+        }
     }
 
     private void handleGoogleLogin() {
@@ -2811,6 +2820,17 @@ public class LoginView implements ViewInterface {
                         activityLogController.logAuthAction("LOGIN", "SUCCESS",
                             "User logged in with Google: " + finalUser.getEmailUser(),
                             java.util.Map.of("provider", "google"));
+
+                        if (finalUser.isDisabled()) {
+                            javafx.application.Platform.runLater(() -> {
+                                String reason = finalUser.getDisabledReason();
+                                if (reason == null || reason.isBlank() || reason.equals("null")) {
+                                    reason = "Violation of terms of service.";
+                                }
+                                showBannedCinematic(reason);
+                            });
+                            return;
+                        }
 
                         // ── Only UI work touches Platform.runLater ──
                         javafx.application.Platform.runLater(() -> {
@@ -2957,6 +2977,16 @@ public class LoginView implements ViewInterface {
                 return;
             }
 
+            if (verify.getUser() != null && verify.getUser().isDisabled()) {
+                String reason = verify.getUser().getDisabledReason();
+                if (reason == null || reason.isBlank() || reason.equals("null")) {
+                    reason = "Violation of terms of service.";
+                }
+                showBannedCinematic(reason);
+                close.run();
+                return;
+            }
+
             if (verify.getUser() != null) {
                 SessionManager.getInstance().setCurrentUser(verify.getUser());
                 profileController.profileByUserId(verify.getUser().getIdUser()).ifPresent(profile ->
@@ -3019,6 +3049,124 @@ public class LoginView implements ViewInterface {
             })
         );
         timeline.play();
+    }
+
+    private void showBannedCinematic(String rawReason) {
+        ThemeManager tm = ThemeManager.getInstance();
+
+        String reason = rawReason;
+        String adminEmail = "admin@syndicati.tn";
+        
+        if (rawReason != null && rawReason.contains("[Banned by: ")) {
+            int start = rawReason.indexOf("[Banned by: ");
+            int end = rawReason.indexOf("]", start);
+            if (end > start) {
+                adminEmail = rawReason.substring(start + 12, end).trim();
+                reason = rawReason.substring(0, start).trim();
+            }
+        }
+
+        StackPane overlay = new StackPane();
+        overlay.setPickOnBounds(true);
+        overlay.setStyle("-fx-background-color: rgba(0,0,0,0.85);");
+
+        // Add a blur effect to the background behind the overlay
+        javafx.scene.shape.Rectangle bgFilter = new javafx.scene.shape.Rectangle(root.getWidth(), root.getHeight());
+        bgFilter.widthProperty().bind(root.widthProperty());
+        bgFilter.heightProperty().bind(root.heightProperty());
+        bgFilter.setFill(Color.color(0, 0, 0, 0.4));
+        
+        javafx.scene.effect.BoxBlur blur = new javafx.scene.effect.BoxBlur(10, 10, 3);
+        bgFilter.setEffect(blur);
+        
+        overlay.getChildren().add(bgFilter);
+
+        VBox content = new VBox(20);
+        content.setAlignment(Pos.CENTER);
+        content.setMaxWidth(500);
+
+        StackPane iconBox = new StackPane();
+        javafx.scene.shape.Circle circle = new javafx.scene.shape.Circle(45);
+        circle.setFill(Color.web("rgba(239, 68, 68, 0.15)"));
+        circle.setStroke(Color.web("#ef4444"));
+        circle.setStrokeWidth(3);
+        
+        Text icon = new Text("!");
+        icon.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 50));
+        icon.setFill(Color.web("#ef4444"));
+        
+        iconBox.getChildren().addAll(circle, icon);
+
+        Text title = new Text("Account Banned");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 32));
+        title.setFill(Color.WHITE);
+
+        Text reasonText = new Text("Reason: " + reason);
+        reasonText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 16));
+        reasonText.setFill(Color.web("#f87171"));
+        reasonText.setWrappingWidth(420);
+        reasonText.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        VBox contactBox = new VBox(8);
+        contactBox.setAlignment(Pos.CENTER);
+        contactBox.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-padding: 20; -fx-background-radius: 14; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 14;");
+        
+        Text contactMsg = new Text("If you believe this is an error, please email the administrator:");
+        contactMsg.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
+        contactMsg.setFill(Color.web("rgba(255,255,255,0.7)"));
+        contactMsg.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        
+        Text emailText = new Text(adminEmail);
+        emailText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 16));
+        emailText.setFill(createAccentGradientPaint());
+        
+        contactBox.getChildren().addAll(contactMsg, emailText);
+
+        Button closeBtn = new Button("Return to Login");
+        closeBtn.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        closeBtn.setStyle(primaryButtonStyle(tm));
+        closeBtn.setPrefWidth(220);
+        closeBtn.setPrefHeight(45);
+        closeBtn.setOnAction(e -> {
+            javafx.animation.FadeTransition fadeOut = new javafx.animation.FadeTransition(javafx.util.Duration.millis(300), overlay);
+            fadeOut.setFromValue(1.0);
+            fadeOut.setToValue(0.0);
+            fadeOut.setOnFinished(ev -> root.getChildren().remove(overlay));
+            fadeOut.play();
+        });
+
+        content.getChildren().addAll(iconBox, title, reasonText, contactBox, closeBtn);
+        overlay.getChildren().add(content);
+        
+        overlay.setOpacity(0);
+        content.setTranslateY(30);
+        content.setScaleX(0.9);
+        content.setScaleY(0.9);
+
+        root.getChildren().add(overlay);
+        overlay.toFront();
+
+        javafx.animation.FadeTransition fade = new javafx.animation.FadeTransition(javafx.util.Duration.millis(400), overlay);
+        fade.setToValue(1.0);
+        
+        javafx.animation.TranslateTransition slide = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(400), content);
+        slide.setToY(0);
+        slide.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+        
+        javafx.animation.ScaleTransition scale = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(400), content);
+        scale.setToX(1.0);
+        scale.setToY(1.0);
+        scale.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+
+        javafx.animation.ScaleTransition pulse = new javafx.animation.ScaleTransition(javafx.util.Duration.seconds(1), iconBox);
+        pulse.setFromX(1.0); pulse.setFromY(1.0);
+        pulse.setToX(1.1); pulse.setToY(1.1);
+        pulse.setAutoReverse(true);
+        pulse.setCycleCount(javafx.animation.Animation.INDEFINITE);
+
+        javafx.animation.ParallelTransition pt = new javafx.animation.ParallelTransition(fade, slide, scale);
+        pt.setOnFinished(e -> pulse.play());
+        pt.play();
     }
 
     private void showInfoMessage(String message) {
@@ -3593,6 +3741,24 @@ public class LoginView implements ViewInterface {
                     }
 
                     User authenticatedUser = authenticatedUserOpt.get();
+
+                    if (authenticatedUser.isDisabled()) {
+                        javafx.application.Platform.runLater(() -> {
+                            if (cameraUpdateTimer != null) cameraUpdateTimer.stop();
+                            String reason = authenticatedUser.getDisabledReason();
+                            if (reason == null || reason.isBlank() || reason.equals("null")) {
+                                reason = "Violation of terms of service.";
+                            }
+                            showBannedCinematic(reason);
+                            if (faceIdVerifyButton != null) {
+                                faceIdVerifyButton.setDisable(false);
+                                faceIdVerifyButton.setText("Verify");
+                            }
+                            closeFaceIdPanel();
+                        });
+                        cameraService.stopCapture();
+                        return;
+                    }
                     
                     // Set user in session temporarily for FaceIDService.authenticateWithFaceID()
                     SessionManager.getInstance().setCurrentUser(authenticatedUser);

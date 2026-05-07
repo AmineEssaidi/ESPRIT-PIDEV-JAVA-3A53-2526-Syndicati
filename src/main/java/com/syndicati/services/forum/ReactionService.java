@@ -286,6 +286,24 @@ public class ReactionService {
             ? reactionRepository.countByPublicationAndKind(publicationId, "Dislike")
             : reactionRepository.countByCommentAndKind(commentId, "Dislike"));
 
+        // Individual Emoji Counts
+        Map<String, Integer> emojiCounts = new HashMap<>();
+        if (publicationId != null) {
+            List<Reaction> allPubReactions = reactionRepository.findByPublication(publicationId);
+            for (Reaction r : allPubReactions) {
+                if ("Emoji".equals(r.getKind()) && r.getEmoji() != null) {
+                    emojiCounts.put(r.getEmoji(), emojiCounts.getOrDefault(r.getEmoji(), 0) + 1);
+                }
+            }
+        } else if (commentId != null) {
+            List<Reaction> allCommentReactions = reactionRepository.findByComment(commentId);
+            for (Reaction r : allCommentReactions) {
+                if ("Emoji".equals(r.getKind()) && r.getEmoji() != null) {
+                    emojiCounts.put(r.getEmoji(), emojiCounts.getOrDefault(r.getEmoji(), 0) + 1);
+                }
+            }
+        }
+
         boolean isBookmarked = false;
         List<ReactionPayload> payloads = new ArrayList<>();
 
@@ -296,7 +314,7 @@ public class ReactionService {
             payloads.add(new ReactionPayload(reaction.getKind(), reaction.getEmoji()));
         }
 
-        return new ReactionStatus(payloads, counts, isBookmarked);
+        return new ReactionStatus(payloads, counts, emojiCounts, isBookmarked);
     }
 
     private User buildUser(Integer userId) {
@@ -380,16 +398,18 @@ public class ReactionService {
 
         private final List<ReactionPayload> reactions;
         private final Map<String, Integer> counts;
+        private final Map<String, Integer> emojiCounts;
         private final boolean bookmarked;
 
-        public ReactionStatus(List<ReactionPayload> reactions, Map<String, Integer> counts, boolean bookmarked) {
+        public ReactionStatus(List<ReactionPayload> reactions, Map<String, Integer> counts, Map<String, Integer> emojiCounts, boolean bookmarked) {
             this.reactions = reactions;
             this.counts = counts;
+            this.emojiCounts = emojiCounts;
             this.bookmarked = bookmarked;
         }
 
         public static ReactionStatus empty() {
-            return new ReactionStatus(List.of(), Map.of("Like", 0, "Dislike", 0), false);
+            return new ReactionStatus(List.of(), Map.of("Like", 0, "Dislike", 0), new HashMap<>(), false);
         }
 
         public List<ReactionPayload> getReactions() {
@@ -400,8 +420,28 @@ public class ReactionService {
             return counts;
         }
 
+        public Map<String, Integer> getEmojiCounts() {
+            return emojiCounts;
+        }
+
         public boolean isBookmarked() {
             return bookmarked;
+        }
+
+        public int getLikes() {
+            return counts.getOrDefault("Like", 0);
+        }
+
+        public int getDislikes() {
+            return counts.getOrDefault("Dislike", 0);
+        }
+
+        public boolean isLiked() {
+            return reactions.stream().anyMatch(r -> "Like".equals(r.getKind()));
+        }
+
+        public boolean isDisliked() {
+            return reactions.stream().anyMatch(r -> "Dislike".equals(r.getKind()));
         }
     }
 

@@ -86,6 +86,11 @@ public class Commentaire {
         this.user = user;
     }
 
+    // Aliases for view synchronization
+    public boolean getIsPublic() { return isVisibility(); }
+    public LocalDateTime getDateCommentaire() { return getCreatedAt(); }
+    public String getContenuCommentaire() { return getDescriptionCommentaire(); }
+
     public List<String> validateForCreate() {
         List<String> errors = new ArrayList<>();
 

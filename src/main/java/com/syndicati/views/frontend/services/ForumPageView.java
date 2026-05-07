@@ -10,11 +10,14 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
+import com.syndicati.services.forum.OpenAIModerationService;
+import com.syndicati.services.forum.SentimentAnalysisService;
+import com.syndicati.services.forum.SentimentAnalysisService.SentimentResult;
+import com.syndicati.services.forum.DiscordWebhookService;
 import com.syndicati.services.forum.ReactionService.ReactionActionResult;
 import com.syndicati.services.forum.ReactionService.ReactionPayload;
 import com.syndicati.services.forum.ReactionService.ReactionStatus;
 import com.syndicati.utils.image.ImageLoaderUtil;
-import com.syndicati.services.localization.MyMemoryTranslationService;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import java.io.File;
@@ -28,12 +31,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import javafx.application.Platform;
+import javafx.animation.FadeTransition;
+import javafx.animation.PauseTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.SequentialTransition;
+import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
+import javafx.util.Duration;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar.ButtonData;
@@ -66,25 +75,36 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.Cursor;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import javafx.stage.Window;
 
+/**
+ * Modern Forum Page View with AI Moderation, Sentiment Analysis, and Discord integration.
+ */
 public class ForumPageView implements ViewInterface {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm");
     private static final DateTimeFormatter SHORT_DATE_FMT = DateTimeFormatter.ofPattern("MMM dd");
     private static final List<String> CATEGORIES = List.of(
-        "Announcement", "Suggestion", "Jeux Video", "Informatique", "Nouveauté", "Discussion General", "Culture", "Sport"
-    );
+            "Announcement", "Suggestion", "Jeux Video", "Informatique", "Nouveauté", "Discussion General", "Culture",
+            "Sport");
     private static final List<String> MODERATOR_ROLES = List.of("OWNER", "ADMIN", "SUPERADMIN", "SYNDIC");
     private static final List<String> EMOJIS = List.of("❤️", "😂", "😮", "😢", "😡", "👍", "🔥", "✨");
 
-    private final VBox root = new VBox(18);
+    private final StackPane root = new StackPane();
+    private final VBox mainLayout = new VBox(18);
+    private final VBox notificationBox = new VBox(10);
     private final ThemeManager tm = ThemeManager.getInstance();
     private final SessionManager session = SessionManager.getInstance();
     private final PublicationController publications = new PublicationController();
     private final CommentaireController comments = new CommentaireController();
     private final ReactionController reactions = new ReactionController();
     private final ProfileController profiles = new ProfileController();
+    private final OpenAIModerationService moderationService = new OpenAIModerationService();
+    private final SentimentAnalysisService sentimentService = new SentimentAnalysisService();
+    private final DiscordWebhookService discordService = new DiscordWebhookService();
 
     private final VBox listBox = new VBox(10);
     private final StackPane faceStack = new StackPane();
@@ -93,16 +113,15 @@ public class ForumPageView implements ViewInterface {
     private final VBox readFace = new VBox();
     private final VBox createFace = new VBox();
     private final VBox editFace = new VBox();
-    private final VBox emptyFace = new VBox();
 
     private final StackPane detailHero = new StackPane();
     private final ImageView detailHeroImage = new ImageView();
     private final Rectangle detailHeroClip = new Rectangle();
     private Image currentHeroImage;
 
-    private final Text heroTitle = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("welcome_to_forum"));
+    private final Text heroTitle = new Text("Welcome to the Forum");
     private final Text heroMeta = new Text("");
-    private final Text heroBody = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("forum_hero_body"));
+    private final Text heroBody = new Text("Select a publication from the right panel.");
     private final Text heroCategory = new Text("Discussion General");
     private final HBox ownerActions = new HBox(8);
 
@@ -111,17 +130,23 @@ public class ForumPageView implements ViewInterface {
     private final Button postEmojiButton = new Button("Emoji");
     private final Button postBookmarkButton = new Button("Bookmark");
     private final Button postReportButton = new Button("Report");
+    private Button feelingButton;
     private final Label postLikeCount = new Label("");
     private final Label postDislikeCount = new Label("");
-    private final ProgressBar postRatioBar = new ProgressBar(0);
     private final Label postRatioText = new Label("0%");
+    private Region postLikesBarRegion;
+    private Region postDislikesBarRegion;
 
     private final VBox commentsBox = new VBox(10);
+    private final VBox commentFormContainer = new VBox(10);
+    private final Label announcementHint = new Label("Comments are disabled for this announcement.");
     private final VBox publicationReportPanel = new VBox(8);
     private final VBox publicationEmojiPanel = new VBox(8);
+    private final VBox publicationSentimentPanel = new VBox(8);
     private final Map<Integer, VBox> commentEditPanels = new HashMap<>();
     private final Map<Integer, VBox> commentReportPanels = new HashMap<>();
     private final Map<Integer, VBox> commentEmojiPanels = new HashMap<>();
+    private final Map<Integer, VBox> commentSentimentPanels = new HashMap<>();
     private final Map<Integer, Profile> profileByUserIdCache = new HashMap<>();
     private Commentaire currentCommentForInline;
 
@@ -159,62 +184,28 @@ public class ForumPageView implements ViewInterface {
 
     private Publication current;
     private String currentFilter = "General";
-    private boolean dataLoaded = false;
-
-    private final MyMemoryTranslationService translationService = new MyMemoryTranslationService();
-    private boolean translatePublication = false;
-    private final Map<Integer, Map<String, String>> commentTranslationCache = new HashMap<>();
-    private final Map<Integer, Map<String, TranslationPair>> publicationTranslationCache = new HashMap<>();
-
-    private static class TranslationPair {
-        String title;
-        String body;
-        TranslationPair(String t, String b) { title = t; body = b; }
-    }
-    private final Map<Integer, TranslationPair> pubTranslationPairs = new HashMap<>();
 
     public ForumPageView() {
-        root.setPadding(new Insets(24));
-        root.setStyle("-fx-background-color: transparent;");
-        root.setAlignment(Pos.TOP_CENTER);
+        mainLayout.setPadding(new Insets(24));
+        mainLayout.setStyle("-fx-background-color: transparent;");
+        mainLayout.setAlignment(Pos.TOP_CENTER);
 
-        root.getChildren().addAll(buildHero(), buildSplit());
-        showFace(emptyFace);
-        
-        // Attempt immediate hydration from cache to avoid 'empty shell'
-        loadInitialDataFromCache();
-    }
-    
-    private void loadInitialDataFromCache() {
-        List<Publication> cached = publications.publicationsByCategory("General");
-        if (cached != null && !cached.isEmpty()) {
-            displayPublications(cached);
-            dataLoaded = true;
-        } else {
-            listBox.getChildren().setAll(new Label("Loading discussions..."));
-        }
-    }
+        notificationBox.setPickOnBounds(false);
+        notificationBox.setAlignment(Pos.TOP_RIGHT);
+        notificationBox.setPadding(new Insets(20));
+        notificationBox.setSpacing(10);
+        notificationBox.setPrefWidth(400);
+        notificationBox.setMaxWidth(Region.USE_PREF_SIZE);
 
-    public void loadDataAsync() {
-        if (dataLoaded) return; // Skip if already hydrated during warm-start
-        
-        Thread.startVirtualThread(() -> {
-            try {
-                // Fetch on background thread
-                loadCategory("General");
-                dataLoaded = true;
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    if (listBox.getChildren().isEmpty() || (listBox.getChildren().size() == 1 && listBox.getChildren().get(0) instanceof Label)) {
-                        listBox.getChildren().setAll(new Label("Failed to load forum data."));
-                    }
-                });
-            }
-        });
+        mainLayout.getChildren().addAll(buildHero(), buildSplit());
+        root.getChildren().addAll(mainLayout, notificationBox);
+
+        showFace(readFace);
+        loadCategory("General");
     }
 
     @Override
-    public VBox getRoot() {
+    public StackPane getRoot() {
         return root;
     }
 
@@ -227,29 +218,28 @@ public class ForumPageView implements ViewInterface {
         hero.setPadding(new Insets(34));
         hero.setMaxWidth(1800);
         hero.setStyle(
-            "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #090909 0%, #131313 100%);" +
-            "-fx-background-radius: 48px;" +
-            "-fx-border-color: rgba(255,255,255,0.08);" +
-            "-fx-border-radius: 48px;"
-        );
+                "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #090909 0%, #131313 100%);" +
+                        "-fx-background-radius: 48px;" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-radius: 48px;");
 
         Label badge = new Label("COMMUNITY HUB");
         badge.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.14) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.45) + ";" +
-            "-fx-border-radius: 100px;" +
-            "-fx-background-radius: 100px;" +
-            "-fx-padding: 7 16 7 16;" +
-            "-fx-font-size: 11px;" +
-            "-fx-font-weight: 800;" +
-            "-fx-text-fill: white;"
-        );
+                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.14) + ";" +
+                        "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.45) + ";" +
+                        "-fx-border-radius: 100px;" +
+                        "-fx-background-radius: 100px;" +
+                        "-fx-padding: 7 16 7 16;" +
+                        "-fx-font-size: 11px;" +
+                        "-fx-font-weight: 800;" +
+                        "-fx-text-fill: white;");
 
         Text title = new Text("Voices of Horizon");
         title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 66));
         title.setFill(Color.WHITE);
 
-        Text subtitle = new Text("Join the conversation. Connect with neighbors, share ideas, and shape your community.");
+        Text subtitle = new Text(
+                "Join the conversation. Connect with neighbors, share ideas, and shape your community.");
         subtitle.setWrappingWidth(840);
         subtitle.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 17));
         subtitle.setFill(Color.web("rgba(255,255,255,0.68)"));
@@ -264,11 +254,10 @@ public class ForumPageView implements ViewInterface {
         split.setMaxWidth(1800);
         split.setPrefHeight(860);
         split.setStyle(
-            "-fx-background-color: #0a0a0c;" +
-            "-fx-background-radius: 32px;" +
-            "-fx-border-color: rgba(255,255,255,0.08);" +
-            "-fx-border-radius: 32px;"
-        );
+                "-fx-background-color: #0a0a0c;" +
+                        "-fx-background-radius: 32px;" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-radius: 32px;");
 
         VBox main = buildMainPanel();
         VBox side = buildSidePanel();
@@ -278,8 +267,7 @@ public class ForumPageView implements ViewInterface {
 
         main.setMinWidth(0);
         main.prefWidthProperty().bind(
-            Bindings.max(0, split.widthProperty().subtract(side.widthProperty()))
-        );
+                Bindings.max(0, split.widthProperty().subtract(side.widthProperty())));
         HBox.setHgrow(main, Priority.ALWAYS);
         HBox.setHgrow(side, Priority.NEVER);
         split.getChildren().addAll(main, side);
@@ -290,7 +278,8 @@ public class ForumPageView implements ViewInterface {
         VBox panel = new VBox();
         panel.setMinWidth(0);
         panel.setPadding(new Insets(0));
-        panel.setStyle("-fx-border-color: transparent rgba(255,255,255,0.10) transparent transparent; -fx-border-width: 0 1px 0 0;");
+        panel.setStyle(
+                "-fx-border-color: transparent rgba(255,255,255,0.10) transparent transparent; -fx-border-width: 0 1px 0 0;");
         panel.setMaxWidth(Double.MAX_VALUE);
 
         Rectangle panelClip = new Rectangle();
@@ -298,11 +287,10 @@ public class ForumPageView implements ViewInterface {
         panelClip.heightProperty().bind(panel.heightProperty());
         panel.setClip(panelClip);
 
-        faceStack.getChildren().addAll(readFace, createFace, editFace, emptyFace);
+        faceStack.getChildren().addAll(readFace, createFace, editFace);
         buildReadFace();
         buildCreateFace();
         buildEditFace();
-        buildEmptyFace();
 
         VBox.setVgrow(faceStack, Priority.ALWAYS);
         panel.getChildren().add(faceStack);
@@ -321,7 +309,8 @@ public class ForumPageView implements ViewInterface {
         detailHero.setMinWidth(0);
         detailHero.setMaxWidth(Double.MAX_VALUE);
         detailHero.setClip(detailHeroClip);
-        detailHero.setStyle("-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1a1a2e 0%, #16213e 100%); -fx-border-radius: 24px 0px 0px 24px;");
+        detailHero.setStyle(
+                "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1a1a2e 0%, #16213e 100%); -fx-border-radius: 24px 0px 0px 24px;");
 
         detailHeroClip.setArcWidth(24);
         detailHeroClip.setArcHeight(24);
@@ -340,20 +329,18 @@ public class ForumPageView implements ViewInterface {
         heroBody.setFill(Color.web("rgba(255,255,255,0.90)"));
         heroBody.wrappingWidthProperty().bind(detailHero.widthProperty().subtract(52));
 
-        HBox pubMetaBar = new HBox(12, heroMeta);
-        pubMetaBar.setAlignment(Pos.CENTER_LEFT);
-
         VBox heroOverlay = new VBox(10);
         heroOverlay.setPadding(new Insets(28));
         heroOverlay.setAlignment(Pos.BOTTOM_LEFT);
-        heroOverlay.setStyle("-fx-background-color: linear-gradient(from 0% 100% to 0% 0%, rgba(20,20,30,0.94) 3%, rgba(20,20,30,0.08) 100%);");
+        heroOverlay.setStyle(
+                "-fx-background-color: linear-gradient(from 0% 100% to 0% 0%, rgba(20,20,30,0.94) 3%, rgba(20,20,30,0.08) 100%);");
 
         Label categoryPill = new Label();
         categoryPill.textProperty().bind(heroCategory.textProperty());
         categoryPill.setStyle(categoryStyle(heroCategory.getText()));
         heroCategory.textProperty().addListener((obs, oldVal, newVal) -> categoryPill.setStyle(categoryStyle(newVal)));
 
-        heroOverlay.getChildren().addAll(categoryPill, pubMetaBar, heroTitle);
+        heroOverlay.getChildren().addAll(categoryPill, heroMeta, heroTitle);
         detailHero.getChildren().setAll(detailHeroImage, heroOverlay);
         StackPane.setAlignment(heroOverlay, Pos.BOTTOM_LEFT);
 
@@ -364,7 +351,8 @@ public class ForumPageView implements ViewInterface {
         actionsBar.setPadding(new Insets(12));
         actionsBar.setPrefWidth(Region.USE_COMPUTED_SIZE);
         actionsBar.setMaxWidth(Double.MAX_VALUE);
-        actionsBar.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 14px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 14px;");
+        actionsBar.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 14px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 14px;");
 
         Rectangle actionsBarClip = new Rectangle();
         actionsBarClip.widthProperty().bind(actionsBar.widthProperty());
@@ -374,6 +362,7 @@ public class ForumPageView implements ViewInterface {
         Button createSwitcher = ghostButton("New Post", () -> openCreateFace(false));
         Button editSwitcher = ghostButton("Edit", this::openEditFace);
         Button deleteSwitcher = ghostButton("Delete", this::deleteCurrentPublication);
+        feelingButton = ghostButton("Feeling", this::showSentimentAnalysis);
 
         ownerActions.getChildren().setAll(editSwitcher, deleteSwitcher);
         ownerActions.setManaged(false);
@@ -387,7 +376,7 @@ public class ForumPageView implements ViewInterface {
         postReportButton.setMinWidth(Region.USE_PREF_SIZE);
         postReportButton.setMaxWidth(Region.USE_PREF_SIZE);
 
-        HBox rightActions = new HBox(8, ownerActions, postReportButton);
+        HBox rightActions = new HBox(8, ownerActions, feelingButton, postReportButton);
         rightActions.setAlignment(Pos.CENTER_RIGHT);
         rightActions.setMinWidth(Region.USE_PREF_SIZE);
         rightActions.setMaxWidth(Region.USE_PREF_SIZE);
@@ -395,11 +384,17 @@ public class ForumPageView implements ViewInterface {
 
         reactionCluster.setMinWidth(0);
         reactionCluster.prefWrapLengthProperty().bind(
-            Bindings.max(120, actionsBar.widthProperty().subtract(rightActions.widthProperty()).subtract(40))
-        );
+                actionsBar.widthProperty().subtract(rightActions.widthProperty()).subtract(40));
 
-        actionsBar.setCenter(reactionWrap);
+        actionsBar.setLeft(reactionWrap);
         actionsBar.setRight(rightActions);
+
+        feelingButton.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.06);" +
+                        "-fx-border-color: rgba(255,255,255,0.15);" +
+                        "-fx-border-radius: 12px; -fx-background-radius: 12px;" +
+                        "-fx-text-fill: white; -fx-padding: 8 14 8 14;");
+        feelingButton.setOnAction(e -> showSentimentAnalysis());
 
         VBox publicationBody = new VBox(10, heroBody, actionsBar);
         publicationBody.setPadding(new Insets(22, 0, 10, 0));
@@ -408,7 +403,7 @@ public class ForumPageView implements ViewInterface {
 
         buildPublicationReportPanel();
         buildPublicationEmojiPanel();
-        VBox inlinePanels = new VBox(8, publicationReportPanel, publicationEmojiPanel);
+        VBox inlinePanels = new VBox(8, publicationReportPanel, publicationEmojiPanel, publicationSentimentPanel);
         inlinePanels.setPadding(new Insets(0, 0, 0, 0));
         inlinePanels.setFillWidth(true);
         inlinePanels.setMaxWidth(Double.MAX_VALUE);
@@ -444,52 +439,6 @@ public class ForumPageView implements ViewInterface {
         readFace.getChildren().addAll(detailHero, scroll);
     }
 
-    private void buildEmptyFace() {
-        emptyFace.getChildren().clear();
-        emptyFace.setAlignment(Pos.CENTER);
-        emptyFace.setSpacing(25);
-        emptyFace.setPadding(new Insets(60));
-        emptyFace.setStyle("-fx-background-color: transparent;");
-
-        // Use a large icon or a stylized circle
-        StackPane iconCircle = new StackPane();
-        iconCircle.setMaxSize(180, 180);
-        iconCircle.setMinSize(180, 180);
-        iconCircle.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.04) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 100px;" +
-            "-fx-background-radius: 100px;"
-        );
-
-        Label icon = new Label("💬");
-        icon.setStyle("-fx-font-size: 84px;");
-        iconCircle.getChildren().add(icon);
-
-        VBox textStack = new VBox(12);
-        textStack.setAlignment(Pos.CENTER);
-
-        Text welcome = new Text("Welcome to the Community");
-        welcome.setFill(Color.WHITE);
-        welcome.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 36));
-
-        Text instruction = new Text("Select a discussion from the right panel to join the conversation, or create your own post to share your thoughts with your neighbors.");
-        instruction.setFill(Color.web("rgba(255,255,255,0.55)"));
-        instruction.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 16));
-        instruction.setWrappingWidth(500);
-        instruction.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
-
-        textStack.getChildren().addAll(welcome, instruction);
-
-        Button startBtn = primaryButton("Browse Recent Posts", () -> {
-            // Focus on search or something? For now just a hint
-        });
-        startBtn.setOpacity(0.8);
-
-        emptyFace.getChildren().addAll(iconCircle, textStack, startBtn);
-    }
-
     private FlowPane buildPublicationReactionCluster() {
         styleReactionButton(postLikeButton);
         styleReactionButton(postDislikeButton);
@@ -506,32 +455,45 @@ public class ForumPageView implements ViewInterface {
         HBox likeWrap = reactionCountWrap(postLikeButton, postLikeCount);
         HBox dislikeWrap = reactionCountWrap(postDislikeButton, postDislikeCount);
 
-        postRatioBar.setPrefWidth(110);
-        postRatioBar.setPrefHeight(8);
-        postRatioBar.setStyle("-fx-accent: #4ade80; -fx-control-inner-background: #f87171;");
+        // Custom Ratio Bar Container (Pill shape)
+        HBox ratioBarContainer = new HBox();
+        ratioBarContainer.setPrefSize(110, 6);
+        ratioBarContainer.setMaxSize(110, 6);
+        ratioBarContainer.setAlignment(Pos.CENTER_LEFT);
+        ratioBarContainer.setStyle("-fx-background-radius: 100px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 100px; -fx-border-width: 1; -fx-overflow: hidden;");
+        
+        // Clip to ensure rounded corners work for internal children
+        javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(110, 6);
+        clip.setArcWidth(6);
+        clip.setArcHeight(6);
+        ratioBarContainer.setClip(clip);
+
+        // Green Part (Likes)
+        Region likesBar = new Region();
+        likesBar.setStyle("-fx-background-color: #22c55e;");
+        likesBar.setPrefHeight(6);
+        
+        // Red Part (Dislikes)
+        Region dislikesBar = new Region();
+        dislikesBar.setStyle("-fx-background-color: #ef4444;");
+        dislikesBar.setPrefHeight(6);
+        
+        ratioBarContainer.getChildren().addAll(likesBar, dislikesBar);
+        
+        // Store references to update later
+        this.postLikesBarRegion = likesBar; 
+        this.postDislikesBarRegion = dislikesBar;
+        
         postRatioText.setTextFill(Color.web("rgba(255,255,255,0.72)"));
         postRatioText.setStyle("-fx-font-size: 11px; -fx-font-weight: 700;");
 
-        HBox ratioWrap = new HBox(8, postRatioBar, postRatioText);
+        HBox ratioWrap = new HBox(8, ratioBarContainer, postRatioText);
         ratioWrap.setAlignment(Pos.CENTER_LEFT);
-
-        HBox pubLangBox = new HBox(5);
-        pubLangBox.setAlignment(Pos.CENTER_LEFT);
-        for (String lang : List.of("en", "fr", "ar")) {
-            Button langBtn = new Button(lang.toUpperCase());
-            langBtn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: #94a3b8; " +
-                "-fx-font-size: 10px; -fx-font-weight: 800; -fx-background-radius: 5px; " +
-                "-fx-padding: 3 7 3 7; -fx-cursor: hand; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 5px;"
-            );
-            langBtn.setOnAction(e -> translatePublicationTo(current, lang));
-            pubLangBox.getChildren().add(langBtn);
-        }
 
         FlowPane cluster = new FlowPane();
         cluster.setHgap(8);
         cluster.setVgap(8);
-        cluster.getChildren().addAll(likeWrap, dislikeWrap, ratioWrap, postEmojiButton, postBookmarkButton, pubLangBox);
+        cluster.getChildren().addAll(likeWrap, dislikeWrap, ratioWrap, postEmojiButton, postBookmarkButton);
         cluster.setAlignment(Pos.CENTER_LEFT);
         return cluster;
     }
@@ -541,7 +503,8 @@ public class ForumPageView implements ViewInterface {
 
         VBox card = new VBox(12);
         card.setPadding(new Insets(22));
-        card.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
+        card.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
 
         Text heading = new Text("Create Publication");
         heading.setFill(Color.WHITE);
@@ -573,43 +536,40 @@ public class ForumPageView implements ViewInterface {
         createFileLabel.setStyle("-fx-font-size: 10px;");
 
         HBox imageRow = buildAttachmentZone(
-            () -> {
-                File file = chooseImage();
-                if (file != null) {
-                    createImage = file;
-                    createImageField.setText(file.getName());
-                    createFileLabel.setText(file.getName());
-                    createImagePreview.setImage(new Image(file.toURI().toString(), true));
-                }
-            },
-            () -> {
-                createImage = null;
-                createImageField.clear();
-                createFileLabel.setText("No image selected");
-                createImagePreview.setImage(null);
-            },
-            createFileLabel
-        );
+                () -> {
+                    File file = chooseImage();
+                    if (file != null) {
+                        createImage = file;
+                        createImageField.setText(file.getName());
+                        createFileLabel.setText(file.getName());
+                        createImagePreview.setImage(new Image(file.toURI().toString(), true));
+                    }
+                },
+                () -> {
+                    createImage = null;
+                    createImageField.clear();
+                    createFileLabel.setText("No image selected");
+                    createImagePreview.setImage(null);
+                },
+                createFileLabel);
 
         HBox previewRow = new HBox(8, createImagePreview);
 
         HBox actions = new HBox(8,
-            primaryButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("publish"), this::submitPublication),
-            ghostButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("back"), () -> showFace(readFace))
-        );
+                primaryButton("Publish", this::submitPublication),
+                ghostButton("Back", () -> showFace(readFace)));
 
         card.getChildren().addAll(
-            heading,
-            createTitle,
-            createTitleValidation,
-            createCategory,
-            createCategoryValidation,
-            createDescription,
-            createDescriptionValidation,
-            imageRow,
-            previewRow,
-            actions
-        );
+                heading,
+                createTitle,
+                createTitleValidation,
+                createCategory,
+                createCategoryValidation,
+                createDescription,
+                createDescriptionValidation,
+                imageRow,
+                previewRow,
+                actions);
 
         updateCreateValidationState();
 
@@ -627,9 +587,10 @@ public class ForumPageView implements ViewInterface {
 
         VBox card = new VBox(12);
         card.setPadding(new Insets(22));
-        card.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
+        card.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
 
-        Text heading = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("edit_publication"));
+        Text heading = new Text("Edit Publication");
         heading.setFill(Color.WHITE);
         heading.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 24));
 
@@ -659,45 +620,42 @@ public class ForumPageView implements ViewInterface {
         editFileLabel.setStyle("-fx-font-size: 10px;");
 
         HBox imageRow = buildAttachmentZone(
-            () -> {
-                File file = chooseImage();
-                if (file != null) {
-                    editImage = file;
-                    editImageField.setText(file.getName());
-                    editFileLabel.setText(file.getName());
-                    editNewImagePreview.setImage(new Image(file.toURI().toString(), true));
-                }
-            },
-            () -> {
-                editImage = null;
-                editImageField.clear();
-                editFileLabel.setText("No new image selected");
-                editNewImagePreview.setImage(null);
-            },
-            editFileLabel
-        );
+                () -> {
+                    File file = chooseImage();
+                    if (file != null) {
+                        editImage = file;
+                        editImageField.setText(file.getName());
+                        editFileLabel.setText(file.getName());
+                        editNewImagePreview.setImage(new Image(file.toURI().toString(), true));
+                    }
+                },
+                () -> {
+                    editImage = null;
+                    editImageField.clear();
+                    editFileLabel.setText("No new image selected");
+                    editNewImagePreview.setImage(null);
+                },
+                editFileLabel);
 
         VBox currentWrap = new VBox(4, dimLabel("Current image"), editCurrentImagePreview);
         VBox newWrap = new VBox(4, dimLabel("New image"), editNewImagePreview);
         HBox previews = new HBox(18, currentWrap, newWrap);
 
         HBox actions = new HBox(8,
-            primaryButton("Save", this::submitEditPublication),
-            ghostButton("Back", () -> showFace(readFace))
-        );
+                primaryButton("Save", this::submitEditPublication),
+                ghostButton("Back", () -> showFace(readFace)));
 
         card.getChildren().addAll(
-            heading,
-            editTitle,
-            editTitleValidation,
-            editCategory,
-            editCategoryValidation,
-            editDescription,
-            editDescriptionValidation,
-            imageRow,
-            previews,
-            actions
-        );
+                heading,
+                editTitle,
+                editTitleValidation,
+                editCategory,
+                editCategoryValidation,
+                editDescription,
+                editDescriptionValidation,
+                imageRow,
+                previews,
+                actions);
 
         updateEditValidationState();
 
@@ -715,14 +673,12 @@ public class ForumPageView implements ViewInterface {
         wrap.setPadding(new Insets(18));
         wrap.setFillWidth(true);
         wrap.setMaxWidth(Double.MAX_VALUE);
-        wrap.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-border-color: rgba(255,255,255,0.12); -fx-border-radius: 16px; -fx-background-radius: 16px;");
+        wrap.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.03); -fx-border-color: rgba(255,255,255,0.12); -fx-border-radius: 16px; -fx-background-radius: 16px;");
 
         Text heading = new Text("Discussion");
         heading.setFill(Color.WHITE);
         heading.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 18));
-
-        HBox commentsHeader = new HBox(15, heading);
-        commentsHeader.setAlignment(Pos.CENTER_LEFT);
 
         commentInput.setPromptText("Share your thoughts...");
         commentInput.setPrefRowCount(3);
@@ -736,11 +692,10 @@ public class ForumPageView implements ViewInterface {
         VBox toggleIsland = new VBox(6);
         toggleIsland.setPadding(new Insets(12));
         toggleIsland.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.08) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;"
-        );
+                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.08) + ";" +
+                        "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
+                        "-fx-border-radius: 12px;" +
+                        "-fx-background-radius: 12px;");
 
         Text toggleLabel = new Text("Comment Visibility");
         toggleLabel.setFill(Color.WHITE);
@@ -758,47 +713,41 @@ public class ForumPageView implements ViewInterface {
         Button privateBtn = new Button("Private");
         publicBtn.setPrefWidth(70);
         privateBtn.setPrefWidth(70);
-        
+
         publicBtn.setStyle(
-            "-fx-background-color: " + tm.getAccentHex() + ";" +
-            "-fx-text-fill: white; -fx-font-weight: 700;" +
-            "-fx-background-radius: 10px; -fx-padding: 6 12 6 12;"
-        );
+                "-fx-background-color: " + tm.getAccentHex() + ";" +
+                        "-fx-text-fill: white; -fx-font-weight: 700;" +
+                        "-fx-background-radius: 10px; -fx-padding: 6 12 6 12;");
         privateBtn.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.06);" +
-            "-fx-border-color: rgba(255,255,255,0.15);" +
-            "-fx-border-radius: 10px; -fx-background-radius: 10px;" +
-            "-fx-text-fill: rgba(255,255,255,0.70); -fx-padding: 6 12 6 12;"
-        );
+                "-fx-background-color: rgba(255,255,255,0.06);" +
+                        "-fx-border-color: rgba(255,255,255,0.15);" +
+                        "-fx-border-radius: 10px; -fx-background-radius: 10px;" +
+                        "-fx-text-fill: rgba(255,255,255,0.70); -fx-padding: 6 12 6 12;");
 
         publicBtn.setOnAction(e -> {
             isCommentPublic = true;
             publicBtn.setStyle(
-                "-fx-background-color: " + tm.getAccentHex() + ";" +
-                "-fx-text-fill: white; -fx-font-weight: 700;" +
-                "-fx-background-radius: 10px; -fx-padding: 6 12 6 12;"
-            );
+                    "-fx-background-color: " + tm.getAccentHex() + ";" +
+                            "-fx-text-fill: white; -fx-font-weight: 700;" +
+                            "-fx-background-radius: 10px; -fx-padding: 6 12 6 12;");
             privateBtn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.06);" +
-                "-fx-border-color: rgba(255,255,255,0.15);" +
-                "-fx-border-radius: 10px; -fx-background-radius: 10px;" +
-                "-fx-text-fill: rgba(255,255,255,0.70); -fx-padding: 6 12 6 12;"
-            );
+                    "-fx-background-color: rgba(255,255,255,0.06);" +
+                            "-fx-border-color: rgba(255,255,255,0.15);" +
+                            "-fx-border-radius: 10px; -fx-background-radius: 10px;" +
+                            "-fx-text-fill: rgba(255,255,255,0.70); -fx-padding: 6 12 6 12;");
         });
 
         privateBtn.setOnAction(e -> {
             isCommentPublic = false;
             privateBtn.setStyle(
-                "-fx-background-color: " + tm.getAccentHex() + ";" +
-                "-fx-text-fill: white; -fx-font-weight: 700;" +
-                "-fx-background-radius: 10px; -fx-padding: 6 12 6 12;"
-            );
+                    "-fx-background-color: " + tm.getAccentHex() + ";" +
+                            "-fx-text-fill: white; -fx-font-weight: 700;" +
+                            "-fx-background-radius: 10px; -fx-padding: 6 12 6 12;");
             publicBtn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.06);" +
-                "-fx-border-color: rgba(255,255,255,0.15);" +
-                "-fx-border-radius: 10px; -fx-background-radius: 10px;" +
-                "-fx-text-fill: rgba(255,255,255,0.70); -fx-padding: 6 12 6 12;"
-            );
+                    "-fx-background-color: rgba(255,255,255,0.06);" +
+                            "-fx-border-color: rgba(255,255,255,0.15);" +
+                            "-fx-border-radius: 10px; -fx-background-radius: 10px;" +
+                            "-fx-text-fill: rgba(255,255,255,0.70); -fx-padding: 6 12 6 12;");
         });
 
         toggleSwitch.getChildren().addAll(publicBtn, privateBtn);
@@ -815,28 +764,33 @@ public class ForumPageView implements ViewInterface {
         commentImagePreviews.setStyle("-fx-background-color: transparent;");
 
         HBox imageRow = buildMultiImageAttachmentZone(
-            () -> {
-                File file = chooseImage();
-                if (file != null && !commentImages.contains(file)) {
-                    commentImages.add(file);
-                    commentFileLabel.setText(commentImages.size() + " image" + (commentImages.size() > 1 ? "s" : "") + " selected");
-                    updateImagePreview(commentImages, commentImagePreviews);
-                }
-            },
-            commentFileLabel,
-            commentImagePreviews,
-            commentImages
-        );
+                () -> {
+                    File file = chooseImage();
+                    if (file != null && !commentImages.contains(file)) {
+                        commentImages.add(file);
+                        commentFileLabel.setText(
+                                commentImages.size() + " image" + (commentImages.size() > 1 ? "s" : "") + " selected");
+                        updateImagePreview(commentImages, commentImagePreviews);
+                    }
+                },
+                commentFileLabel,
+                commentImagePreviews,
+                commentImages);
         imageRow.setAlignment(Pos.CENTER_LEFT);
         imageRow.setMaxWidth(Double.MAX_VALUE);
 
         Button send = primaryButton("Post Comment", this::submitComment);
 
-        commentsBox.getChildren().setAll(emptyLabel("No comments yet."));
-        commentsBox.setFillWidth(true);
-        commentsBox.setMaxWidth(Double.MAX_VALUE);
+        commentFormContainer.getChildren().setAll(commentInput, commentValidation, imageRow, commentImagePreviews,
+                toggleIsland, send);
+        commentFormContainer.setFillWidth(true);
 
-        wrap.getChildren().addAll(commentsHeader, commentsBox, commentInput, commentValidation, imageRow, commentImagePreviews, toggleIsland, send);
+        announcementHint.setTextFill(Color.web("rgba(255,255,255,0.5)"));
+        announcementHint.setStyle("-fx-font-size: 13px; -fx-font-style: italic; -fx-padding: 10 0 0 0;");
+        announcementHint.setManaged(false);
+        announcementHint.setVisible(false);
+
+        wrap.getChildren().addAll(heading, commentsBox, commentFormContainer, announcementHint);
         return wrap;
     }
 
@@ -850,1903 +804,1121 @@ public class ForumPageView implements ViewInterface {
 
         Text title = new Text("Discussions");
         title.setFill(Color.WHITE);
-        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 22));
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
 
-        Button newPost = premiumActionButton("New Post", "#9b111e", "➕", () -> openCreateFace(false));
-        Button newAnnouncement = premiumActionButton("Announcement", "#1a1a2e", "📢", () -> openCreateFace(true));
-        
-        boolean moderator = isModerator(session.getCurrentUser());
-        newAnnouncement.setVisible(moderator);
-        newAnnouncement.setManaged(moderator);
+        HBox topActions = new HBox(8,
+                filterGeneral,
+                filterAnnouncements);
+        topActions.setPadding(new Insets(10, 0, 10, 0));
 
-        HBox createButtons = new HBox(10, newPost, newAnnouncement);
-        createButtons.setPadding(new Insets(5, 0, 10, 0));
-        HBox.setHgrow(newPost, Priority.ALWAYS);
-        HBox.setHgrow(newAnnouncement, Priority.ALWAYS);
+        styleFilterButton(filterGeneral, true);
+        styleFilterButton(filterAnnouncements, false);
 
-        filterGeneral.setOnAction(e -> loadCategory("General"));
-        filterAnnouncements.setOnAction(e -> loadCategory("Announcement"));
-        styleFilterButton(filterGeneral);
-        styleFilterButton(filterAnnouncements);
-        
-        HBox filters = new HBox(8, filterGeneral, filterAnnouncements);
-        filters.setPadding(new Insets(0, 0, 10, 0));
-        HBox.setHgrow(filterGeneral, Priority.ALWAYS);
-        HBox.setHgrow(filterAnnouncements, Priority.ALWAYS);
-        updateFilterButtons();
+        filterGeneral.setOnAction(e -> {
+            currentFilter = "General";
+            styleFilterButton(filterGeneral, true);
+            styleFilterButton(filterAnnouncements, false);
+            loadCategory("General");
+        });
 
-        listBox.setMaxWidth(Double.MAX_VALUE);
-        listBox.setPrefWidth(330);
-        listBox.setFillWidth(true);
+        filterAnnouncements.setOnAction(e -> {
+            currentFilter = "Announcement";
+            styleFilterButton(filterGeneral, false);
+            styleFilterButton(filterAnnouncements, true);
+            loadCategory("Announcement");
+        });
 
-        ScrollPane listScroll = new ScrollPane(listBox);
-        listScroll.setFitToWidth(true);
-        listScroll.setHbarPolicy(ScrollBarPolicy.NEVER);
-        listScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        VBox.setVgrow(listScroll, Priority.ALWAYS);
+        Button createSwitcher = ghostButton("+ New Post", () -> openCreateFace(false));
+        createSwitcher.setMaxWidth(Double.MAX_VALUE);
 
-        side.getChildren().addAll(title, createButtons, filters, listScroll);
+        ScrollPane scroll = new ScrollPane(listBox);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollBarPolicy.NEVER);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        side.getChildren().addAll(title, topActions, createSwitcher, scroll);
         return side;
     }
 
-    private void displayPublications(List<Publication> items) {
-        if (items == null) return;
-        List<Publication> sorted = new ArrayList<>(items);
-        sorted.sort((a, b) -> compareDates(b.getDateCreationPub(), a.getDateCreationPub()));
-
-        // Pre-build UI nodes in background thread
-        List<Node> nodes = new ArrayList<>();
-        for (Publication pub : sorted) {
-            nodes.add(publicationItem(pub));
-        }
-
-        Platform.runLater(() -> {
-            listBox.getChildren().clear();
-            listItemsById.clear();
-
-            if (sorted.isEmpty()) {
-                listBox.getChildren().add(emptyLabel("No publications."));
-                clearCurrent();
-                return;
-            }
-
-            listBox.getChildren().setAll(nodes);
-        });
+    private void styleFilterButton(Button btn, boolean active) {
+        btn.setStyle(
+                "-fx-background-color: " + (active ? tm.getAccentHex() : "rgba(255,255,255,0.05)") + ";" +
+                        "-fx-text-fill: " + (active ? "white" : "rgba(255,255,255,0.6)") + ";" +
+                        "-fx-font-size: 11px; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 6 12 6 12;");
     }
 
     private void loadCategory(String category) {
-        currentFilter = category;
-        Platform.runLater(this::updateFilterButtons);
-
-        // DB Call (Background)
-        List<Publication> items = "Announcement".equals(category)
-            ? publications.publicationsByCategory("Announcement")
-            : publications.publicationsByCategory("General");
-        
-        displayPublications(items);
-
-        List<Publication> itemsSorted = new ArrayList<>(items);
-        itemsSorted.sort((a, b) -> compareDates(b.getDateCreationPub(), a.getDateCreationPub()));
-
-        Publication target = current;
-        boolean found = false;
-        if (target != null) {
-            for (Publication item : itemsSorted) {
-                if (Objects.equals(item.getIdPublication(), target.getIdPublication())) {
-                    found = true;
-                    break;
-                }
-            }
+        listBox.getChildren().clear();
+        listItemsById.clear();
+        List<Publication> pubs = publications.publicationsByCategory(category);
+        for (Publication p : pubs) {
+            VBox item = buildListItem(p);
+            listBox.getChildren().add(item);
+            listItemsById.put(p.getIdPublication(), item);
         }
-
-        if (target == null || !found) {
-            if (!itemsSorted.isEmpty()) {
-                target = itemsSorted.get(0);
-            }
+        if (!pubs.isEmpty()) {
+            selectPublication(pubs.get(0));
         }
-        
-        final Publication finalTarget = target;
-        Platform.runLater(() -> selectPublication(finalTarget));
     }
 
-    private Node publicationItem(Publication pub) {
-        VBox item = new VBox(7);
-        item.setPadding(new Insets(12));
-        item.setStyle(inactiveListItemStyle());
-        item.setMinWidth(0);
-        item.setMaxWidth(Double.MAX_VALUE);
-        item.setPrefWidth(Double.MAX_VALUE);
+    private VBox buildListItem(Publication p) {
+        VBox item = new VBox(6);
+        item.setPadding(new Insets(14));
+        item.setCursor(Cursor.HAND);
+        item.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12px;");
 
-        HBox top = new HBox(8);
-        Label pill = new Label(pub.getCategoriePub() == null ? "General" : pub.getCategoriePub());
-        pill.setStyle(categoryStyle(pub.getCategoriePub()));
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        Label dateMini = dimLabel(shortDate(pub.getDateCreationPub()));
-        top.getChildren().addAll(pill, spacer, dateMini);
-
-        Text title = new Text(trim(pub.getTitrePub(), 40));
-        title.setFill(Color.WHITE);
-        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-        title.wrappingWidthProperty().bind(item.widthProperty().subtract(26));
-
-        HBox authorRow = new HBox(8);
-        Label avatar = new Label(initials(pub.getUser()));
-        avatar.setMinSize(32, 32);
-        avatar.setAlignment(Pos.CENTER);
-        avatar.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.10);" +
-            "-fx-background-radius: 16px;" +
-            "-fx-border-color: rgba(255,255,255,0.20);" +
-            "-fx-border-radius: 16px;" +
-            "-fx-text-fill: white; -fx-font-size: 11px; -fx-font-weight: 700;"
-        );
-
-        Text meta = new Text(author(pub.getUser()));
-        meta.setFill(Color.web("rgba(255,255,255,0.65)"));
-        meta.wrappingWidthProperty().bind(item.widthProperty().subtract(86));
-        authorRow.getChildren().addAll(avatar, meta);
-
-        item.getChildren().addAll(top, title, authorRow);
-        item.setOnMouseClicked(e -> {
-            selectPublication(pub);
-            showFace(readFace);
+        item.setOnMouseEntered(e -> item.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.07); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.15); -fx-border-radius: 12px;"));
+        item.setOnMouseExited(e -> {
+            if (current != null && current.getIdPublication().equals(p.getIdPublication())) {
+                item.setStyle(
+                        "-fx-background-color: rgba(255,255,255,0.1); -fx-background-radius: 12px; -fx-border-color: "
+                                + tm.getAccentHex() + "; -fx-border-radius: 12px;");
+            } else {
+                item.setStyle(
+                        "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12px;");
+            }
         });
 
-        if (pub.getIdPublication() != null) {
-            listItemsById.put(pub.getIdPublication(), item);
-        }
+        item.setOnMouseClicked(e -> selectPublication(p));
+
+        Label cat = new Label(p.getCatPublication().toUpperCase());
+        cat.setStyle(
+                "-fx-font-size: 9px; -fx-font-weight: 800; -fx-text-fill: " + tm.getAccentHex() + "; -fx-padding: 0 0 4 0;");
+
+        Text title = new Text(p.getTitrePublication());
+        title.setFill(Color.WHITE);
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
+        title.setWrappingWidth(300);
+
+        String authorName = (p.getUser() != null)
+                ? (p.getUser().getFirstName() + " " + p.getUser().getLastName())
+                : "Anonymous";
+        Label meta = new Label("by " + authorName + " • " + p.getDatePublication().format(SHORT_DATE_FMT));
+        meta.setTextFill(Color.web("rgba(255,255,255,0.5)"));
+        meta.setStyle("-fx-font-size: 11px;");
+
+        HBox row = new HBox(12);
+        row.setAlignment(Pos.CENTER_LEFT);
+        
+        Circle avatar = createAvatar(18, p.getUser());
+        
+        VBox textContent = new VBox(2);
+        textContent.getChildren().addAll(cat, title, meta);
+        HBox.setHgrow(textContent, Priority.ALWAYS);
+        
+        row.getChildren().addAll(avatar, textContent);
+        item.getChildren().add(row);
         return item;
     }
 
-    private void selectPublication(Publication publication) {
-        current = publication;
-        if (publication == null) {
-            Platform.runLater(this::clearCurrent);
+    private void selectPublication(Publication p) {
+        if (current != null && listItemsById.containsKey(current.getIdPublication())) {
+            listItemsById.get(current.getIdPublication()).setStyle(
+                    "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12px;");
+        }
+        current = p;
+        if (listItemsById.containsKey(p.getIdPublication())) {
+            listItemsById.get(p.getIdPublication()).setStyle(
+                    "-fx-background-color: rgba(255,255,255,0.1); -fx-background-radius: 12px; -fx-border-color: "
+                            + tm.getAccentHex() + "; -fx-border-radius: 12px;");
+        }
+
+        refreshPublicationDetail();
+        showFace(readFace);
+    }
+
+    private void refreshPublicationDetail() {
+        if (current == null)
             return;
-        }
 
-        Platform.runLater(() -> {
-            applyPublicationContent(publication);
-            heroCategory.setText(publication.getCategoriePub() == null ? "Discussion General" : publication.getCategoriePub());
-            heroMeta.setText(author(publication.getUser()) + " • " + format(publication.getDateCreationPub()));
+        heroTitle.setText(current.getTitrePublication());
+        heroCategory.setText(current.getCatPublication());
+        heroBody.setText(current.getDescPublication());
 
-            Image image = resolveImage(publication.getImagePub(), "forum_images");
-            setHeroImage(image);
+        String author = (current.getUser() != null)
+                ? (current.getUser().getFirstName() + " " + current.getUser().getLastName())
+                : "Anonymous";
+        heroMeta.setText("Published on " + current.getDatePublication().format(DATE_FMT) + " by " + author);
 
-            updateOwnerActionsVisibility();
-            updateActiveListItem();
-            showFace(readFace);
-        });
-
-        refreshPublicationReactionUI();
-        renderComments(publication);
-    }
-
-    private void applyPublicationContent(Publication pub) {
-        if (pub == null) return;
-        heroTitle.setText(pub.getTitrePub() == null ? "Untitled" : pub.getTitrePub());
-        heroBody.setText(pub.getDescriptionPub() == null ? "" : pub.getDescriptionPub());
-    }
-
-    private void translatePublicationTo(Publication pub, String lang) {
-        if (pub == null) return;
-        
-        Map<String, TranslationPair> cache = publicationTranslationCache.computeIfAbsent(pub.getIdPublication(), k -> new HashMap<>());
-        TranslationPair cached = cache.get(lang);
-        
-        if (cached != null) {
-            heroTitle.setText(cached.title);
-            heroBody.setText(cached.body);
-            return;
-        }
-
-        heroTitle.setText("...");
-        heroBody.setText("Translating to " + lang.toUpperCase() + "...");
-        
-        Thread.startVirtualThread(() -> {
-            String originalTitle = pub.getTitrePub() == null ? "" : pub.getTitrePub();
-            String originalBody = pub.getDescriptionPub() == null ? "" : pub.getDescriptionPub();
-            
-            String transTitle = translationService.translate(originalTitle, lang);
-            String transBody = translationService.translate(originalBody, lang);
-            
-            TranslationPair pair = new TranslationPair(transTitle, transBody);
-            cache.put(lang, pair);
-            
-            Platform.runLater(() -> {
-                if (current != null && Objects.equals(current.getIdPublication(), pub.getIdPublication())) {
-                    heroTitle.setText(transTitle);
-                    heroBody.setText(transBody);
-                }
-            });
-        });
-    }
-
-    private void renderComments(Publication publication) {
-        // DB Call (Background)
-        List<Commentaire> list = comments.commentairesByPublication(publication);
-        
-        Platform.runLater(() -> {
-            commentsBox.getChildren().clear();
-
-            if (list.isEmpty()) {
-                commentsBox.getChildren().add(emptyLabel("No comments yet."));
-                return;
-            }
-
-            for (Commentaire c : list) {
-                commentsBox.getChildren().add(commentCard(c));
-            }
-        });
-    }
-
-    private Node commentCard(Commentaire comment) {
-        VBox card = new VBox(8);
-        card.setPadding(new Insets(12));
-        card.setMaxWidth(Double.MAX_VALUE);
-        card.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 12px;");
-
-        HBox authorRow = new HBox(8);
-        authorRow.setAlignment(Pos.CENTER_LEFT);
-
-        StackPane avatarNode = commentAvatarNode(comment);
-        Text authorText = new Text((comment.isVisibility() ? author(comment.getUser()) : "Anonymous") + " • " + format(comment.getCreatedAt()));
-        authorText.setFill(Color.web("rgba(255,255,255,0.70)"));
-        authorRow.getChildren().addAll(avatarNode, authorText);
-
-        Text body = new Text(safe(comment.getDescriptionCommentaire()));
-        body.setFill(Color.WHITE);
-        body.wrappingWidthProperty().bind(card.widthProperty().subtract(26));
-
-        card.getChildren().addAll(authorRow, body);
-
-        Image img = resolveImage(comment.getImageCommentaire(), "commentaire_images");
-        if (img != null) {
-            ImageView preview = new ImageView(img);
-            preview.setPreserveRatio(true);
-            preview.setFitWidth(340);
-            preview.setFitHeight(220);
-            preview.setSmooth(true);
-            preview.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-border-color: rgba(255,255,255,0.12); -fx-border-radius: 10px;");
-            card.getChildren().add(preview);
-        }
-
-        card.getChildren().add(buildCommentActionBar(comment));
-        
-        VBox editPanelContainer = buildCommentEditPanel(comment);
-        card.getChildren().add(editPanelContainer);
-        
-        VBox reportPanelContainer = buildCommentReportPanel(comment);
-        card.getChildren().add(reportPanelContainer);
-        
-        VBox emojiPanelContainer = buildCommentEmojiPanel(comment);
-        card.getChildren().add(emojiPanelContainer);
-        
-        return card;
-    }
-
-    private StackPane commentAvatarNode(Commentaire comment) {
-        boolean visibleIdentity = comment != null && comment.isVisibility();
-        User commentUser = comment == null ? null : comment.getUser();
-
-        Circle avatarCircle = new Circle(16);
-        avatarCircle.setStroke(Color.color(1, 1, 1, 0.2));
-        avatarCircle.setStrokeWidth(1);
-
-        Label initialsLabel = new Label(visibleIdentity ? initials(commentUser) : "A");
-        initialsLabel.setTextFill(Color.WHITE);
-        initialsLabel.setStyle("-fx-font-size: 11; -fx-font-weight: 700;");
-
-        boolean hasImage = visibleIdentity && applyUserAvatarFill(commentUser, avatarCircle);
-        if (!hasImage) {
-            avatarCircle.setFill(Color.color(1, 1, 1, 0.10));
-        }
-
-        initialsLabel.setVisible(!hasImage);
-        initialsLabel.setManaged(!hasImage);
-
-        StackPane avatarWrap = new StackPane(avatarCircle, initialsLabel);
-        avatarWrap.setMinSize(32, 32);
-        avatarWrap.setPrefSize(32, 32);
-        return avatarWrap;
-    }
-
-    private boolean applyUserAvatarFill(User user, Circle avatarCircle) {
-        if (user == null || user.getIdUser() == null) {
-            return false;
-        }
-
-        Profile profile = profileForUser(user.getIdUser());
-        String avatarPath = profile == null ? null : profile.getAvatar();
-        if (avatarPath == null || avatarPath.isBlank()) {
-            return false;
-        }
-
-        Image img = ImageLoaderUtil.loadProfileAvatar(avatarPath, false);
-        if (img != null && !img.isError()) {
-            avatarCircle.setFill(new ImagePattern(img));
-            return true;
-        }
-
-        return false;
-    }
-
-    private Profile profileForUser(Integer userId) {
-        if (userId == null) {
-            return null;
-        }
-
-        if (profileByUserIdCache.containsKey(userId)) {
-            return profileByUserIdCache.get(userId);
-        }
-
-        Profile profile = profiles.profileByUserId(userId).orElse(null);
-        profileByUserIdCache.put(userId, profile);
-        return profile;
-    }
-
-    private Node buildCommentActionBar(Commentaire comment) {
-        HBox bar = new HBox(8);
-        bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setPadding(new Insets(6, 0, 0, 0));
-
-        Button like = new Button("Like");
-        Button dislike = new Button("Dislike");
-        Button emoji = new Button("Emoji");
-        Button report = new Button("Report");
-
-        styleReactionButton(like);
-        styleReactionButton(dislike);
-        styleReactionButton(emoji);
-        styleReactionButton(report);
-
-        Label likeCount = new Label("");
-        likeCount.setTextFill(Color.web("rgba(255,255,255,0.75)"));
-        likeCount.setStyle("-fx-font-size: 11px;");
-
-        Label dislikeCount = new Label("");
-        dislikeCount.setTextFill(Color.web("rgba(255,255,255,0.75)"));
-        dislikeCount.setStyle("-fx-font-size: 11px;");
-
-        HBox likeWrap = reactionCountWrap(like, likeCount);
-        HBox dislikeWrap = reactionCountWrap(dislike, dislikeCount);
-
-        ProgressBar ratioBar = new ProgressBar(0);
-        ratioBar.setPrefWidth(70);
-        ratioBar.setPrefHeight(6);
-        ratioBar.setStyle("-fx-accent: #4ade80; -fx-control-inner-background: #f87171;");
-        Label ratioText = new Label("0%");
-        ratioText.setTextFill(Color.web("rgba(255,255,255,0.72)"));
-        ratioText.setStyle("-fx-font-size: 10px; -fx-font-weight: 700;");
-
-        HBox ratioWrap = new HBox(6, ratioBar, ratioText);
-        ratioWrap.setAlignment(Pos.CENTER_LEFT);
-
-        User currentUser = session.getCurrentUser();
-        applyCommentReactionUI(reactions.commentStatus(comment, currentUser), like, dislike, emoji, likeCount, dislikeCount, ratioBar, ratioText);
-
-        like.setOnAction(e -> {
-            ReactionActionResult result = reactions.commentToggle(comment, session.getCurrentUser(), "Like");
-            if (!result.isSuccess()) {
-                showInfo("Reaction", result.getMessage());
-                return;
-            }
-            applyCommentReactionUI(result.getStatus(), like, dislike, emoji, likeCount, dislikeCount, ratioBar, ratioText);
-        });
-
-        dislike.setOnAction(e -> {
-            ReactionActionResult result = reactions.commentToggle(comment, session.getCurrentUser(), "Dislike");
-            if (!result.isSuccess()) {
-                showInfo("Reaction", result.getMessage());
-                return;
-            }
-            applyCommentReactionUI(result.getStatus(), like, dislike, emoji, likeCount, dislikeCount, ratioBar, ratioText);
-        });
-
-        emoji.setOnAction(e -> toggleCommentEmojiPanel(comment));
-        report.setOnAction(e -> toggleCommentReportPanel(comment));
-
-        bar.getChildren().addAll(likeWrap, dislikeWrap, ratioWrap, emoji, report);
-
-        // Language Buttons for Comment
-        HBox langBox = new HBox(5);
-        langBox.setAlignment(Pos.CENTER_LEFT);
-        for (String lang : List.of("en", "fr", "ar")) {
-            Button langBtn = new Button(lang.toUpperCase());
-            langBtn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: #94a3b8; " +
-                "-fx-font-size: 9px; -fx-font-weight: 800; -fx-background-radius: 4px; " +
-                "-fx-padding: 2 5 2 5; -fx-cursor: hand; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 4px;"
-            );
-            langBtn.setOnAction(e -> {
-                Map<String, String> cache = commentTranslationCache.computeIfAbsent(comment.getIdCommentaire(), k -> new HashMap<>());
-                String cached = cache.get(lang);
-                
-                Node cardContent = bar.getParent();
-                if (!(cardContent instanceof VBox)) return;
-                VBox card = (VBox) cardContent;
-                Text bodyText = null;
-                
-                // Better way to find body: it's the second child in card (0: authorRow, 1: body)
-                if (card.getChildren().size() > 1 && card.getChildren().get(1) instanceof Text) {
-                    bodyText = (Text) card.getChildren().get(1);
-                }
-
-                if (bodyText == null) return;
-                
-                if (cached != null) {
-                    bodyText.setText(cached);
-                } else {
-                    bodyText.setText("...");
-                    final Text finalBody = bodyText;
-                    Thread.startVirtualThread(() -> {
-                        String trans = translationService.translate(comment.getDescriptionCommentaire(), lang);
-                        cache.put(lang, trans);
-                        Platform.runLater(() -> finalBody.setText(trans));
-                    });
-                }
-            });
-            langBox.getChildren().add(langBtn);
-        }
-        bar.getChildren().add(langBox);
-
-        if (canManageComment(comment)) {
-            Button edit = ghostButton("Edit", () -> toggleCommentEditPanel(comment));
-            Button delete = ghostButton("Delete", () -> deleteComment(comment));
-            bar.getChildren().addAll(edit, delete);
-        }
-
-        return bar;
-    }
-
-    private HBox reactionCountWrap(Button button, Label count) {
-        HBox wrap = new HBox(4, button, count);
-        wrap.setAlignment(Pos.CENTER_LEFT);
-        return wrap;
-    }
-
-    private void applyCommentReactionUI(
-        ReactionStatus status,
-        Button like,
-        Button dislike,
-        Button emoji,
-        Label likeCount,
-        Label dislikeCount,
-        ProgressBar ratioBar,
-        Label ratioText
-    ) {
-        styleReactionButton(like);
-        styleReactionButton(dislike);
-        styleReactionButton(emoji);
-
-        boolean hasLike = hasKind(status, "Like");
-        boolean hasDislike = hasKind(status, "Dislike");
-        String emojiValue = emojiFromStatus(status);
-        boolean hasEmoji = emojiValue != null;
-
-        if (hasLike) {
-            styleReactionButtonActive(like, "#4ade80");
-        } else if (hasDislike) {
-            styleReactionButtonActive(dislike, "#f87171");
-        } else if (hasEmoji) {
-            styleReactionButtonActive(emoji, "#fbbf24");
-        }
-
-        int likes = count(status, "Like");
-        int dislikes = count(status, "Dislike");
-        int total = likes + dislikes;
-
-        likeCount.setText(likes > 0 ? String.valueOf(likes) : "");
-        dislikeCount.setText(dislikes > 0 ? String.valueOf(dislikes) : "");
-
-        double ratio = total > 0 ? (double) likes / total : 0;
-        ratioBar.setProgress(ratio);
-        ratioText.setText(Math.round(ratio * 100) + "%");
-
-        if (hasEmoji) {
-            emoji.setText(emojiValue);
+        String img = current.getImagePublication();
+        if (img != null && !img.isBlank() && !"-".equals(img)) {
+            String fullPath = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator
+                    + img;
+            currentHeroImage = new Image(fullPath, true);
+            detailHeroImage.setImage(currentHeroImage);
+            detailHeroImage.setVisible(true);
+            refreshHeroViewport();
         } else {
-            emoji.setText("Emoji");
-        }
-    }
-
-    private void openCreateFace(boolean announcement) {
-        forceAnnouncementCreate = announcement;
-        createTitle.clear();
-        createDescription.clear();
-        createCategory.setValue(announcement ? "Announcement" : "Discussion General");
-        createCategory.setDisable(announcement);
-        createImageField.clear();
-        createImagePreview.setImage(null);
-        createImage = null;
-        updateCreateValidationState();
-        showFace(createFace);
-    }
-
-    private void openEditFace() {
-        if (current == null) {
-            showInfo("Edit", "Select a publication first.");
-            return;
-        }
-        if (!canEditCurrent()) {
-            showInfo("Permission", "You can edit only your own publication (or admin role).");
-            return;
+            detailHeroImage.setImage(null);
+            detailHeroImage.setVisible(false);
+            currentHeroImage = null;
         }
 
-        editTitle.setText(current.getTitrePub());
-        editDescription.setText(current.getDescriptionPub());
-        editCategory.setValue(current.getCategoriePub());
-        editImageField.clear();
-        editCurrentImagePreview.setImage(resolveImage(current.getImagePub(), "forum_images"));
-        editNewImagePreview.setImage(null);
-        editImage = null;
-        updateEditValidationState();
-        showFace(editFace);
-    }
+        // Ownership
+        User me = session.getCurrentUser();
+        boolean isOwner = me != null && current.getUser() != null
+                && Objects.equals(me.getIdUser(), current.getUser().getIdUser());
+        boolean isMod = me != null && MODERATOR_ROLES.contains(me.getRoleUser());
 
-    private void submitPublication() {
-        User user = session.getCurrentUser();
-        if (user == null) {
-            showInfo("Error", "You must be logged in to publish.");
-            return;
-        }
+        ownerActions.setVisible(isOwner || isMod);
+        ownerActions.setManaged(isOwner || isMod);
 
-        String title = safe(createTitle.getText());
-        String description = safe(createDescription.getText());
-        String category = forceAnnouncementCreate ? "Announcement" : createCategory.getValue();
+        // Reactions
+        refreshPublicationReactions();
 
-        List<String> createErrors = buildPublicationDraft(title, description, category).validateForCreate();
-        if (!createErrors.isEmpty()) {
-            showInfo("Validation", createErrors.getFirst());
-            return;
-        }
+        // Comments
+        loadComments();
+        
+        // Announcement handling
+        boolean isAnnouncement = "Announcement".equalsIgnoreCase(current.getCatPublication());
+        commentFormContainer.setVisible(!isAnnouncement || isMod);
+        commentFormContainer.setManaged(!isAnnouncement || isMod);
+        announcementHint.setVisible(isAnnouncement && !isMod);
+        announcementHint.setManaged(isAnnouncement && !isMod);
 
-        String image = null;
-        try {
-            if (createImage != null) {
-                image = copyUpload(createImage, "forum_images");
-            }
-        } catch (IOException ex) {
-            showInfo("Upload Error", ex.getMessage());
-            return;
-        }
-
-        Integer id = publications.publicationCreate(title, description, category, image, user);
-        if (id != null && id > 0) {
-            loadCategory("Announcement".equals(category) ? "Announcement" : "General");
-            publications.publicationById(id).ifPresent(this::selectPublication);
-            forceAnnouncementCreate = false;
-            showFace(readFace);
-        } else {
-            showInfo("Error", "Unable to create publication.");
-        }
-    }
-
-    private void submitEditPublication() {
-        if (current == null) {
-            return;
-        }
-
-        String title = safe(editTitle.getText());
-        String description = safe(editDescription.getText());
-        String category = editCategory.getValue();
-
-        List<String> editErrors = buildPublicationDraft(title, description, category).validateForCreate();
-        if (!editErrors.isEmpty()) {
-            showInfo("Validation", editErrors.getFirst());
-            return;
-        }
-
-        String image = current.getImagePub();
-        try {
-            if (editImage != null) {
-                image = copyUpload(editImage, "forum_images");
-            }
-        } catch (IOException ex) {
-            showInfo("Upload Error", ex.getMessage());
-            return;
-        }
-
-        boolean ok = publications.publicationUpdate(current.getIdPublication(), title, description, category, image);
-        if (ok) {
-            loadCategory(currentFilter);
-            publications.publicationById(current.getIdPublication()).ifPresent(this::selectPublication);
-            showFace(readFace);
-        } else {
-            showInfo("Error", "Unable to update publication.");
-        }
-    }
-
-    private void deleteCurrentPublication() {
-        if (current == null) {
-            return;
-        }
-        if (!canEditCurrent()) {
-            showInfo("Permission", "You can delete only your own publication (or admin role).");
-            return;
-        }
-
-        boolean confirmed = confirmFancy("Delete Publication", "Delete this publication permanently?");
-        if (!confirmed) {
-            return;
-        }
-
-        boolean ok = publications.publicationDelete(current.getIdPublication());
-        if (ok) {
-            loadCategory(currentFilter);
-            showFace(readFace);
-        } else {
-            showInfo("Error", "Unable to delete publication.");
-        }
-    }
-
-    private void submitComment() {
-        if (current == null) {
-            return;
-        }
-
-        User user = session.getCurrentUser();
-        if (user == null) {
-            showInfo("Error", "You must be logged in to comment.");
-            return;
-        }
-
-        String description = safe(commentInput.getText());
-        String commentError = commentDescriptionError(description);
-        if (commentError != null) {
-            showInfo("Validation", commentError);
-            return;
-        }
-
-        String image = null;
-        try {
-            if (!commentImages.isEmpty()) {
-                // Upload first image as primary
-                image = copyUpload(commentImages.get(0), "commentaire_images");
-            }
-        } catch (IOException ex) {
-            showInfo("Upload Error", ex.getMessage());
-            return;
-        }
-
-        Integer id = comments.commentaireCreate(description, image, isCommentPublic, current, user);
-        if (id != null && id > 0) {
-            commentInput.clear();
-            updateCommentValidationState();
-            commentImageField.clear();
-            commentImages.clear();
-            commentImagePreviews.getChildren().clear();
-            isCommentPublic = true;
-            renderComments(current);
-        } else {
-            showInfo("Error", "Unable to post comment.");
-        }
-    }
-
-    private void editComment(Commentaire comment) {
-        if (comment.getIdCommentaire() == null) {
-            return;
-        }
-
-        Dialog<ButtonType> dialog = styledDialog("Edit Comment");
-        TextArea area = new TextArea(safe(comment.getDescriptionCommentaire()));
-        area.setPrefRowCount(4);
-        tuneInput(area);
-
-        VBox content = new VBox(10, dimLabel("Update your comment"), area);
-        content.setPadding(new Insets(4, 0, 0, 0));
-        dialog.getDialogPane().setContent(content);
-
-        ButtonType save = new ButtonType("Save", ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().setAll(save, ButtonType.CANCEL);
-
-        dialog.showAndWait().ifPresent(result -> {
-            if (result != save) {
-                return;
-            }
-
-            String text = safe(area.getText());
-            String updateError = commentDescriptionError(text);
-            if (updateError != null) {
-                showInfo("Validation", updateError);
-                return;
-            }
-
-            boolean ok = comments.commentaireUpdate(comment.getIdCommentaire(), text, comment.getImageCommentaire(), comment.isVisibility());
-            if (ok) {
-                renderComments(current);
-            } else {
-                showInfo("Error", "Unable to update comment.");
-            }
-        });
-    }
-
-    private void deleteComment(Commentaire comment) {
-        if (comment.getIdCommentaire() == null) {
-            return;
-        }
-        if (!canManageComment(comment)) {
-            showInfo("Permission", "You can delete only your own comment (or admin role).");
-            return;
-        }
-
-        boolean confirmed = confirmFancy("Delete Comment", "Delete this comment permanently?");
-        if (!confirmed) {
-            return;
-        }
-
-        boolean ok = comments.commentaireDelete(comment.getIdCommentaire());
-        if (ok) {
-            renderComments(current);
-        } else {
-            showInfo("Error", "Unable to delete comment.");
-        }
-    }
-
-    private void togglePublicationReportPanel() {
-        if (publicationReportPanel.isManaged()) {
-            publicationReportPanel.setVisible(false);
-            publicationReportPanel.setManaged(false);
-        } else {
-            publicationReportPanel.setVisible(true);
-            publicationReportPanel.setManaged(true);
-        }
-    }
-
-    private VBox buildPublicationReportPanel() {
-        publicationReportPanel.getChildren().clear();
+        // Clear panels
         publicationReportPanel.setVisible(false);
         publicationReportPanel.setManaged(false);
-        publicationReportPanel.setMinWidth(0);
-        publicationReportPanel.setMaxWidth(Double.MAX_VALUE);
-        publicationReportPanel.setPadding(new Insets(10));
-        publicationReportPanel.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 10px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 10px;");
-
-        TextArea reasonInput = new TextArea();
-        reasonInput.setPromptText("Why are you reporting this publication?");
-        reasonInput.setPrefRowCount(3);
-        reasonInput.setMaxWidth(Double.MAX_VALUE);
-        reasonInput.setWrapText(true);
-        tuneInput(reasonInput);
-
-        Button submitBtn = primaryButton("Send Report", () -> {
-            String reason = safe(reasonInput.getText());
-            if (reason.isBlank()) {
-                showInfo("Report", "Please provide a reason.");
-                return;
-            }
-
-            if (current != null && current.getIdPublication() != null) {
-                ReactionActionResult result = reactions.publicationReport(current, session.getCurrentUser(), reason);
-                if (result.isSuccess()) {
-                    showInfo("Report Sent", result.getMessage());
-                    reasonInput.clear();
-                    togglePublicationReportPanel();
-                } else {
-                    showInfo("Report", result.getMessage());
-                }
-            }
-        });
-
-        Button closeBtn = ghostButton("Cancel", this::togglePublicationReportPanel);
-
-        HBox actions = new HBox(8, submitBtn, closeBtn);
-        actions.setMaxWidth(Double.MAX_VALUE);
-        publicationReportPanel.getChildren().addAll(reasonInput, actions);
-        return publicationReportPanel;
-    }
-
-    private void toggleCommentEditPanel(Commentaire comment) {
-        VBox panel = commentEditPanels.get(comment.getIdCommentaire());
-        if (panel != null) {
-            if (Objects.equals(currentCommentForInline, comment) && panel.isManaged()) {
-                panel.setVisible(false);
-                panel.setManaged(false);
-                currentCommentForInline = null;
-            } else {
-                currentCommentForInline = comment;
-                panel.setVisible(true);
-                panel.setManaged(true);
-            }
-        }
-    }
-
-    private void toggleCommentReportPanel(Commentaire comment) {
-        VBox panel = commentReportPanels.get(comment.getIdCommentaire());
-        if (panel != null) {
-            if (Objects.equals(currentCommentForInline, comment) && panel.isManaged()) {
-                panel.setVisible(false);
-                panel.setManaged(false);
-                currentCommentForInline = null;
-            } else {
-                currentCommentForInline = comment;
-                panel.setVisible(true);
-                panel.setManaged(true);
-            }
-        }
-    }
-
-    private void toggleCommentEmojiPanel(Commentaire comment) {
-        VBox panel = commentEmojiPanels.get(comment.getIdCommentaire());
-        if (panel != null) {
-            if (Objects.equals(currentCommentForInline, comment) && panel.isManaged()) {
-                panel.setVisible(false);
-                panel.setManaged(false);
-                currentCommentForInline = null;
-            } else {
-                currentCommentForInline = comment;
-                panel.setVisible(true);
-                panel.setManaged(true);
-            }
-        }
-    }
-
-    private VBox buildCommentReportPanel(Commentaire comment) {
-        VBox panel = new VBox(8);
-        commentReportPanels.put(comment.getIdCommentaire(), panel);
-        
-        panel.setMinWidth(0);
-        panel.setMaxWidth(Double.MAX_VALUE);
-        panel.setPadding(new Insets(10));
-        panel.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 10px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 10px;");
-        panel.setVisible(false);
-        panel.setManaged(false);
-
-        TextArea reasonInput = new TextArea();
-        reasonInput.setPromptText("Why are you reporting this comment?");
-        reasonInput.setPrefRowCount(3);
-        reasonInput.setMaxWidth(Double.MAX_VALUE);
-        reasonInput.setWrapText(true);
-        tuneInput(reasonInput);
-
-        Button submitBtn = primaryButton("Send Report", () -> {
-            String reason = safe(reasonInput.getText());
-            if (reason.isBlank()) {
-                showInfo("Report", "Please provide a reason.");
-                return;
-            }
-
-            ReactionActionResult result = reactions.commentReport(comment, session.getCurrentUser(), reason);
-            if (result.isSuccess()) {
-                showInfo("Report Sent", result.getMessage());
-                reasonInput.clear();
-                toggleCommentReportPanel(comment);
-            } else {
-                showInfo("Report", result.getMessage());
-            }
-        });
-
-        Button closeBtn = ghostButton("Cancel", () -> toggleCommentReportPanel(comment));
-
-        HBox actions = new HBox(8, submitBtn, closeBtn);
-        actions.setMaxWidth(Double.MAX_VALUE);
-        panel.getChildren().addAll(reasonInput, actions);
-        return panel;
-    }
-
-    private void togglePublicationReaction(String kind) {
-        if (current == null || current.getIdPublication() == null) {
-            return;
-        }
-
-        ReactionActionResult result = reactions.publicationToggle(current, session.getCurrentUser(), kind);
-        if (!result.isSuccess()) {
-            showInfo("Reaction", result.getMessage());
-            return;
-        }
-
-        applyPublicationReactionUI(result.getStatus());
-    }
-
-    private void togglePublicationEmojiPanel() {
-        if (publicationEmojiPanel.isManaged()) {
-            publicationEmojiPanel.setVisible(false);
-            publicationEmojiPanel.setManaged(false);
-        } else {
-            publicationEmojiPanel.setVisible(true);
-            publicationEmojiPanel.setManaged(true);
-        }
-    }
-
-    private VBox buildPublicationEmojiPanel() {
-        publicationEmojiPanel.getChildren().clear();
         publicationEmojiPanel.setVisible(false);
         publicationEmojiPanel.setManaged(false);
-        publicationEmojiPanel.setPadding(new Insets(8));
-        publicationEmojiPanel.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 10px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 10px;");
-        publicationEmojiPanel.setSpacing(6);
-
-        HBox emojiRow = new HBox(6);
-        emojiRow.setAlignment(Pos.CENTER_LEFT);
-
-        for (String emoji : EMOJIS) {
-            Label emojiLabel = new Label(emoji);
-            emojiLabel.setFont(new Font(28));
-            emojiLabel.setCursor(Cursor.HAND);
-            emojiLabel.setPadding(new Insets(4));
-            
-            String emojiValue = emoji;
-            emojiLabel.setOnMouseEntered(e -> emojiLabel.setOpacity(0.7));
-            emojiLabel.setOnMouseExited(e -> emojiLabel.setOpacity(1.0));
-            emojiLabel.setOnMouseClicked(e -> {
-                e.consume();
-                if (current != null && current.getIdPublication() != null) {
-                    ReactionActionResult result = reactions.publicationEmoji(current, session.getCurrentUser(), emojiValue);
-                    if (!result.isSuccess()) {
-                        showInfo("Reaction", result.getMessage());
-                        return;
-                    }
-                    applyPublicationReactionUI(result.getStatus());
-                    togglePublicationEmojiPanel();
-                }
-            });
-            emojiRow.getChildren().add(emojiLabel);
-        }
-
-        Button closeBtn = ghostButton("Close", this::togglePublicationEmojiPanel);
-        publicationEmojiPanel.getChildren().addAll(emojiRow, closeBtn);
-        return publicationEmojiPanel;
-    }
-
-    private VBox buildCommentEmojiPanel(Commentaire comment) {
-        VBox panel = new VBox(8);
-        commentEmojiPanels.put(comment.getIdCommentaire(), panel);
-        
-        panel.setVisible(false);
-        panel.setManaged(false);
-        panel.setPadding(new Insets(8));
-        panel.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 10px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 10px;");
-        panel.setSpacing(6);
-
-        HBox emojiRow = new HBox(6);
-        emojiRow.setAlignment(Pos.CENTER_LEFT);
-
-        for (String emoji : EMOJIS) {
-            Label emojiLabel = new Label(emoji);
-            emojiLabel.setFont(new Font(28));
-            emojiLabel.setCursor(Cursor.HAND);
-            emojiLabel.setPadding(new Insets(4));
-            
-            String emojiValue = emoji;
-            emojiLabel.setOnMouseEntered(e -> emojiLabel.setOpacity(0.7));
-            emojiLabel.setOnMouseExited(e -> emojiLabel.setOpacity(1.0));
-            emojiLabel.setOnMouseClicked(e -> {
-                e.consume();
-                ReactionActionResult result = reactions.commentEmoji(comment, session.getCurrentUser(), emojiValue);
-                if (!result.isSuccess()) {
-                    showInfo("Reaction", result.getMessage());
-                    return;
-                }
-                toggleCommentEmojiPanel(comment);
-            });
-            emojiRow.getChildren().add(emojiLabel);
-        }
-
-        Button closeBtn = ghostButton("Close", () -> toggleCommentEmojiPanel(comment));
-        panel.getChildren().addAll(emojiRow, closeBtn);
-        return panel;
-    }
-
-    private VBox buildCommentEditPanel(Commentaire comment) {
-        VBox panel = new VBox(8);
-        commentEditPanels.put(comment.getIdCommentaire(), panel);
-        
-        panel.setMinWidth(0);
-        panel.setMaxWidth(Double.MAX_VALUE);
-        panel.setPadding(new Insets(10));
-        panel.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 10px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 10px;");
-        panel.setVisible(false);
-        panel.setManaged(false);
-
-        TextArea editInput = new TextArea(safe(comment.getDescriptionCommentaire()));
-        editInput.setPromptText("Update your comment...");
-        editInput.setPrefRowCount(3);
-        editInput.setMaxWidth(Double.MAX_VALUE);
-        editInput.setWrapText(true);
-        tuneInput(editInput);
-
-        Button saveBtn = primaryButton("Save", () -> {
-            String newText = safe(editInput.getText());
-            if (newText.isBlank()) {
-                showInfo("Edit", "Comment cannot be empty.");
-                return;
-            }
-
-            boolean success = comments.commentaireUpdate(comment.getIdCommentaire(), newText, comment.getImageCommentaire(), comment.isVisibility());
-            if (success) {
-                comment.setDescriptionCommentaire(newText);
-                showInfo("Comment", "Updated successfully.");
-                toggleCommentEditPanel(comment);
-                if (current != null) {
-                    renderComments(current);
-                }
-            } else {
-                showInfo("Edit", "Unable to update comment.");
-            }
-        });
-
-        Button closeBtn = ghostButton("Cancel", () -> toggleCommentEditPanel(comment));
-
-        HBox actions = new HBox(8, saveBtn, closeBtn);
-        actions.setMaxWidth(Double.MAX_VALUE);
-        panel.getChildren().addAll(editInput, actions);
-        return panel;
-    }
-
-    private void refreshPublicationReactionUI() {
-        if (current == null || current.getIdPublication() == null) {
-            return;
-        }
-
-        // DB Call (Background)
-        ReactionStatus status = reactions.publicationStatus(current, session.getCurrentUser());
-        Platform.runLater(() -> applyPublicationReactionUI(status));
-    }
-
-    private void applyPublicationReactionUI(ReactionStatus status) {
-        if (status == null) {
-            status = ReactionStatus.empty();
-        }
-
-        styleReactionButton(postLikeButton);
-        styleReactionButton(postDislikeButton);
-        styleReactionButton(postEmojiButton);
-        styleReactionButton(postBookmarkButton);
-
-        boolean hasLike = hasKind(status, "Like");
-        boolean hasDislike = hasKind(status, "Dislike");
-        String emojiValue = emojiFromStatus(status);
-        boolean hasEmoji = emojiValue != null;
-
-        if (hasLike) {
-            styleReactionButtonActive(postLikeButton, "#4ade80");
-        } else if (hasDislike) {
-            styleReactionButtonActive(postDislikeButton, "#f87171");
-        } else if (hasEmoji) {
-            styleReactionButtonActive(postEmojiButton, "#fbbf24");
-        }
-
-        if (status.isBookmarked()) {
-            styleReactionButtonActive(postBookmarkButton, "#93c5fd");
-            postBookmarkButton.setText("Bookmarked");
-        } else {
-            postBookmarkButton.setText("Bookmark");
-        }
-
-        int likes = count(status, "Like");
-        int dislikes = count(status, "Dislike");
-        int total = likes + dislikes;
-
-        postLikeCount.setText(likes > 0 ? String.valueOf(likes) : "");
-        postDislikeCount.setText(dislikes > 0 ? String.valueOf(dislikes) : "");
-
-        double ratio = total > 0 ? (double) likes / total : 0;
-        postRatioBar.setProgress(ratio);
-        postRatioText.setText(Math.round(ratio * 100) + "%");
-
-        if (hasEmoji) {
-            postEmojiButton.setText(emojiValue);
-        } else {
-            postEmojiButton.setText("Emoji");
-        }
-    }
-
-    private void styleReactionButton(Button button) {
-        button.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-border-color: rgba(255,255,255,0.16);" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-text-fill: rgba(255,255,255,0.92);" +
-            "-fx-padding: 6 12 6 12;"
-        );
-    }
-
-    private boolean hasKind(ReactionStatus status, String kind) {
-        if (status == null || kind == null) {
-            return false;
-        }
-        for (ReactionPayload payload : status.getReactions()) {
-            if (kind.equals(payload.getKind())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String emojiFromStatus(ReactionStatus status) {
-        if (status == null) {
-            return null;
-        }
-        for (ReactionPayload payload : status.getReactions()) {
-            if ("Emoji".equals(payload.getKind()) && payload.getEmoji() != null && !payload.getEmoji().isBlank()) {
-                return payload.getEmoji();
-            }
-        }
-        return null;
-    }
-
-    private int count(ReactionStatus status, String kind) {
-        if (status == null || status.getCounts() == null || kind == null) {
-            return 0;
-        }
-        Integer value = status.getCounts().get(kind);
-        return value == null ? 0 : value;
-    }
-
-    private void styleReactionButtonActive(Button button, String colorHex) {
-        button.setStyle(
-            "-fx-background-color: " + rgba(colorHex, 0.18) + ";" +
-            "-fx-border-color: " + rgba(colorHex, 0.55) + ";" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-text-fill: " + colorHex + ";" +
-            "-fx-font-weight: 700;" +
-            "-fx-padding: 6 12 6 12;"
-        );
-    }
-
-    private String rgba(String hex, double alpha) {
-        if (hex == null || !hex.startsWith("#") || (hex.length() != 7 && hex.length() != 4)) {
-            return "rgba(255,255,255," + alpha + ")";
-        }
-
-        int r;
-        int g;
-        int b;
-        if (hex.length() == 7) {
-            r = Integer.parseInt(hex.substring(1, 3), 16);
-            g = Integer.parseInt(hex.substring(3, 5), 16);
-            b = Integer.parseInt(hex.substring(5, 7), 16);
-        } else {
-            r = Integer.parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
-            g = Integer.parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
-            b = Integer.parseInt(hex.substring(3, 4) + hex.substring(3, 4), 16);
-        }
-
-        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
-    }
-
-    private void setHeroImage(Image image) {
-        currentHeroImage = image;
-        detailHeroImage.setImage(image);
-        refreshHeroViewport();
     }
 
     private void refreshHeroViewport() {
-        if (currentHeroImage == null) {
-            detailHeroImage.setViewport(null);
+        if (currentHeroImage == null || detailHeroImage.getImage() == null)
             return;
-        }
 
-        double boxW = detailHero.getWidth();
-        double boxH = detailHero.getHeight();
+        double viewW = detailHero.getWidth();
+        double viewH = detailHero.getHeight();
+        if (viewW <= 0 || viewH <= 0)
+            return;
+
         double imgW = currentHeroImage.getWidth();
         double imgH = currentHeroImage.getHeight();
 
-        if (boxW <= 1 || boxH <= 1 || imgW <= 1 || imgH <= 1) {
+        double viewAspect = viewW / viewH;
+        double imgAspect = imgW / imgH;
+
+        double sw, sh, sx, sy;
+        if (imgAspect > viewAspect) {
+            sh = imgH;
+            sw = sh * viewAspect;
+            sy = 0;
+            sx = (imgW - sw) / 2;
+        } else {
+            sw = imgW;
+            sh = sw / viewAspect;
+            sx = 0;
+            sy = (imgH - sh) / 2;
+        }
+
+        detailHeroImage.setViewport(new Rectangle2D(sx, sy, sw, sh));
+        detailHeroImage.setFitWidth(viewW);
+        detailHeroImage.setFitHeight(viewH);
+    }
+
+    private void refreshPublicationReactions() {
+        ReactionStatus rs = reactions.getPublicationStatus(current.getIdPublication(),
+                session.getCurrentUser() != null ? session.getCurrentUser().getIdUser() : -1);
+
+        postLikeCount.setText(String.valueOf(rs.getLikes()));
+        postDislikeCount.setText(String.valueOf(rs.getDislikes()));
+
+        updateReactionButtonStyle(postLikeButton, rs.isLiked(), "#22c55e");
+        updateReactionButtonStyle(postDislikeButton, rs.isDisliked(), "#ef4444");
+        updateReactionButtonStyle(postBookmarkButton, rs.isBookmarked(), "#f59e0b");
+
+        // Ratio bar update
+        int total = rs.getLikes() + rs.getDislikes();
+        double ratio = (total == 0) ? 0 : (double) rs.getLikes() / total;
+        postRatioText.setText((int) (ratio * 100) + "%");
+        
+        if (postLikesBarRegion != null && postDislikesBarRegion != null) {
+            double greenWidth = 110 * ratio;
+            postLikesBarRegion.setPrefWidth(greenWidth);
+            postDislikesBarRegion.setPrefWidth(110 - greenWidth);
+        }
+    }
+
+    private void updateReactionButtonStyle(Button btn, boolean active, String colorHex) {
+        if (active) {
+            btn.setStyle(
+                    "-fx-background-color: " + tm.toRgba(colorHex, 0.2) + ";" +
+                            "-fx-border-color: " + colorHex + ";" +
+                            "-fx-text-fill: " + colorHex + ";" +
+                            "-fx-font-size: 12px; -fx-font-weight: 800; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 8 16 8 16;");
+        } else {
+            btn.setStyle(
+                    "-fx-background-color: rgba(255,255,255,0.05);" +
+                            "-fx-border-color: rgba(255,255,255,0.12);" +
+                            "-fx-text-fill: rgba(255,255,255,0.7);" +
+                            "-fx-font-size: 12px; -fx-font-weight: 600; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 8 16 8 16;");
+        }
+    }
+
+    private void togglePublicationReaction(String type) {
+        if (session.getCurrentUser() == null) {
+            showNotification("Auth Required", "Please log in to react.", "#f59e0b");
             return;
         }
 
-        double boxRatio = boxW / boxH;
-        double imgRatio = imgW / imgH;
-
-        double vpX;
-        double vpY;
-        double vpW;
-        double vpH;
-
-        if (imgRatio > boxRatio) {
-            vpH = imgH;
-            vpW = imgH * boxRatio;
-            vpX = (imgW - vpW) / 2.0;
-            vpY = 0;
+        ReactionActionResult res = reactions.togglePublicationReaction(current.getIdPublication(),
+                session.getCurrentUser().getIdUser(), type);
+        if (res.isSuccess()) {
+            refreshPublicationReactions();
         } else {
-            vpW = imgW;
-            vpH = imgW / boxRatio;
-            vpX = 0;
-            vpY = (imgH - vpH) / 2.0;
+            showNotification("Error", res.getMessage(), "#ef4444");
         }
-
-        detailHeroImage.setViewport(new Rectangle2D(vpX, vpY, vpW, vpH));
-        detailHeroImage.setFitWidth(boxW);
-        detailHeroImage.setFitHeight(boxH);
     }
 
-    private void showFace(VBox face) {
-        readFace.setVisible(false);
-        readFace.setManaged(false);
-        createFace.setVisible(false);
-        createFace.setManaged(false);
-        editFace.setVisible(false);
-        editFace.setManaged(false);
-        emptyFace.setVisible(false);
-        emptyFace.setManaged(false);
-
-        face.setVisible(true);
-        face.setManaged(true);
+    private void togglePublicationEmojiPanel() {
+        publicationEmojiPanel.setVisible(!publicationEmojiPanel.isVisible());
+        publicationEmojiPanel.setManaged(publicationEmojiPanel.isVisible());
     }
 
-    private boolean canEditCurrent() {
-        User currentUser = session.getCurrentUser();
-        if (currentUser == null || current == null || current.getUser() == null) {
-            return false;
-        }
+    private void buildPublicationEmojiPanel() {
+        publicationEmojiPanel.getChildren().clear();
+        publicationEmojiPanel.setVisible(false);
+        publicationEmojiPanel.setManaged(false);
+        publicationEmojiPanel.setPadding(new Insets(10));
+        publicationEmojiPanel.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 12px;");
 
-        if (Objects.equals(currentUser.getIdUser(), current.getUser().getIdUser())) {
-            return true;
-        }
-
-        String role = currentUser.getRoleUser();
-        return role != null && MODERATOR_ROLES.contains(role);
-    }
-
-    private boolean canDeleteCurrent() {
-        User currentUser = session.getCurrentUser();
-        if (currentUser == null || current == null || current.getUser() == null) {
-            return false;
-        }
-
-        // Only allow delete if user is the owner AND has admin role
-        if (Objects.equals(currentUser.getIdUser(), current.getUser().getIdUser())) {
-            String role = currentUser.getRoleUser();
-            return role != null && MODERATOR_ROLES.contains(role);
-        }
-
-        return false;
-    }
-
-    private boolean canManageComment(Commentaire comment) {
-        User currentUser = session.getCurrentUser();
-        if (currentUser == null || comment == null || comment.getUser() == null) {
-            return false;
-        }
-
-        if (Objects.equals(currentUser.getIdUser(), comment.getUser().getIdUser())) {
-            return true;
-        }
-
-        String role = currentUser.getRoleUser();
-        return role != null && MODERATOR_ROLES.contains(role);
-    }
-
-    private void updateFilterButtons() {
-        String activeStyle = 
-            "-fx-background-color: white;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: black;" +
-            "-fx-font-weight: 800;" +
-            "-fx-font-size: 13px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(255,255,255,0.2), 10, 0, 0, 0);";
+        FlowPane emojis = new FlowPane(15, 15);
+        for (String emoji : EMOJIS) {
+            String hex = Integer.toHexString(emoji.codePointAt(0));
+            // Special case for heart
+            if (emoji.equals("❤️")) hex = "2764";
             
-        String inactiveStyle = 
-            "-fx-background-color: rgba(255,255,255,0.04);" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: rgba(255,255,255,0.6);" +
-            "-fx-font-weight: 700;" +
-            "-fx-font-size: 13px;" +
-            "-fx-border-color: rgba(255,255,255,0.08);" +
-            "-fx-border-radius: 12px;";
+            String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
+            
+            ImageView iv = new ImageView(new Image(url, true));
+            iv.setFitWidth(32);
+            iv.setFitHeight(32);
+            iv.setPreserveRatio(true);
+            
+            Button eb = new Button();
+            eb.setGraphic(iv);
+            eb.setStyle("-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 5;");
+            
+            ScaleTransition pulse = new ScaleTransition(Duration.millis(200), eb);
+            pulse.setToX(1.3);
+            pulse.setToY(1.3);
+            
+            eb.setOnMouseEntered(e -> {
+                eb.setStyle("-fx-background-color: rgba(255,255,255,0.15); -fx-background-radius: 12px; -fx-cursor: hand;");
+                pulse.setRate(1);
+                pulse.play();
+            });
+            eb.setOnMouseExited(e -> {
+                eb.setStyle("-fx-background-color: transparent; -fx-cursor: hand;");
+                pulse.setRate(-1);
+                pulse.play();
+            });
+            
+            eb.setOnAction(e -> {
+                reactions.reactPublicationEmoji(current.getIdPublication(), session.getCurrentUser().getIdUser(),
+                        emoji);
+                refreshPublicationReactions();
+                publicationEmojiPanel.setVisible(false);
+                publicationEmojiPanel.setManaged(false);
+            });
+            emojis.getChildren().add(eb);
+        }
+        publicationEmojiPanel.getChildren().add(emojis);
+    }
 
-        if ("General".equals(currentFilter)) {
-            filterGeneral.setStyle(activeStyle);
-            filterAnnouncements.setStyle(inactiveStyle);
-        } else {
-            filterGeneral.setStyle(inactiveStyle);
-            filterAnnouncements.setStyle(activeStyle);
+    private void togglePublicationReportPanel() {
+        publicationReportPanel.setVisible(!publicationReportPanel.isVisible());
+        publicationReportPanel.setManaged(publicationReportPanel.isVisible());
+    }
+
+    private void buildPublicationReportPanel() {
+        publicationReportPanel.getChildren().clear();
+        publicationReportPanel.setVisible(false);
+        publicationReportPanel.setManaged(false);
+        publicationReportPanel.setPadding(new Insets(10));
+        publicationReportPanel.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: #ef444433; -fx-border-radius: 12px;");
+
+        TextArea reason = new TextArea();
+        reason.setPromptText("Reason for reporting...");
+        reason.setPrefRowCount(2);
+        tuneInput(reason);
+
+        HBox btns = new HBox(8,
+                primaryButton("Submit Report", () -> {
+                    reactions.togglePublicationReaction(current.getIdPublication(),
+                            session.getCurrentUser().getIdUser(), "Report:" + reason.getText());
+                    showNotification("Report Sent", "Moderators will review this post.", "#ef4444");
+                    publicationReportPanel.setVisible(false);
+                    publicationReportPanel.setManaged(false);
+                    reason.clear();
+                }),
+                ghostButton("Cancel", () -> {
+                    publicationReportPanel.setVisible(false);
+                    publicationReportPanel.setManaged(false);
+                }));
+
+        publicationReportPanel.getChildren().addAll(new Label("Report Publication"), reason, btns);
+    }
+
+    private void loadComments() {
+        commentsBox.getChildren().clear();
+        commentEditPanels.clear();
+        commentReportPanels.clear();
+        commentEmojiPanels.clear();
+
+        List<Commentaire> list = comments.commentsByPublication(current.getIdPublication());
+        User me = session.getCurrentUser();
+        Integer myId = me != null ? me.getIdUser() : -1;
+
+        for (Commentaire c : list) {
+            if (!c.getIsPublic() && !MODERATOR_ROLES.contains(me.getRoleUser()) && !c.getUser().getIdUser().equals(myId) && !current.getUser().getIdUser().equals(myId)) {
+                continue;
+            }
+            commentsBox.getChildren().add(buildCommentItem(c));
         }
     }
 
-    private Button premiumActionButton(String text, String color, String emoji, Runnable action) {
+    private Node buildCommentItem(Commentaire c) {
+        VBox item = new VBox(8);
+        item.setPadding(new Insets(14));
+        item.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.02); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.06); -fx-border-radius: 12px;");
+
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        Circle avatar = createAvatar(16, c.getUser());
+
+        String authorName = (c.getUser() != null)
+                ? (c.getUser().getFirstName() + " " + c.getUser().getLastName())
+                : "Anonymous";
+        Label author = new Label(authorName);
+        author.setStyle("-fx-font-weight: bold; -fx-text-fill: white; -fx-font-size: 13px;");
+
+        Label date = new Label(c.getDateCommentaire().format(DATE_FMT));
+        date.setStyle("-fx-font-size: 10px; -fx-text-fill: rgba(255,255,255,0.4);");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        header.getChildren().addAll(avatar, author, date, spacer);
+
+        if (!c.getIsPublic()) {
+            Label privateBadge = new Label("PRIVATE");
+            privateBadge.setStyle("-fx-font-size: 9px; -fx-font-weight: bold; -fx-text-fill: #f59e0b; -fx-padding: 2 6; -fx-background-color: #f59e0b11; -fx-background-radius: 4px;");
+            header.getChildren().add(privateBadge);
+        }
+
+        Text body = new Text(c.getContenuCommentaire());
+        body.setFill(Color.web("rgba(255,255,255,0.9)"));
+        body.setFont(Font.font(13));
+        body.setWrappingWidth(700);
+
+        VBox content = new VBox(8, body);
+
+        if (c.getImageCommentaire() != null && !c.getImageCommentaire().isBlank() && !"-".equals(c.getImageCommentaire())) {
+            String[] imgs = c.getImageCommentaire().split(",");
+            FlowPane imgGrid = new FlowPane(8, 8);
+            for (String imgPath : imgs) {
+                if (imgPath.isBlank()) continue;
+                String fullPath = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator + imgPath;
+                ImageView iv = new ImageView(new Image(fullPath, 160, 160, true, true));
+                iv.setStyle("-fx-background-radius: 8px; -fx-border-radius: 8px;");
+                imgGrid.getChildren().add(iv);
+            }
+            content.getChildren().add(imgGrid);
+        }
+
+        // Inline Panels (Edit/Report/Emoji)
+        VBox editPanel = buildCommentEditPanel(c);
+        VBox reportPanel = buildCommentReportPanel(c);
+        VBox emojiPanel = buildCommentEmojiPanel(c);
+        VBox sentimentPanel = new VBox(8);
+        sentimentPanel.setVisible(false);
+        sentimentPanel.setManaged(false);
+        
+        commentEditPanels.put(c.getIdCommentaire(), editPanel);
+        commentReportPanels.put(c.getIdCommentaire(), reportPanel);
+        commentEmojiPanels.put(c.getIdCommentaire(), emojiPanel);
+        commentSentimentPanels.put(c.getIdCommentaire(), sentimentPanel);
+
+        // Action Row
+        HBox actions = buildCommentActionRow(c);
+
+        item.getChildren().addAll(header, content, editPanel, reportPanel, emojiPanel, sentimentPanel, actions);
+        return item;
+    }
+
+    private HBox buildCommentActionRow(Commentaire c) {
+        HBox actions = new HBox(12);
+        actions.setAlignment(Pos.CENTER_LEFT);
+        actions.setPadding(new Insets(4, 0, 0, 0));
+
+        ReactionStatus rs = reactions.getCommentStatus(c.getIdCommentaire(),
+                session.getCurrentUser() != null ? session.getCurrentUser().getIdUser() : -1);
+
+        Button like = commentActionButton("Like (" + rs.getLikes() + ")", rs.isLiked(), "#22c55e");
+        Button dislike = commentActionButton("Dislike (" + rs.getDislikes() + ")", rs.isDisliked(), "#ef4444");
+        Button emoji = commentActionButton("Emoji", false, tm.getAccentHex());
+        Button report = commentActionButton("Report", false, "#ef4444");
+        Button feeling = commentActionButton("Feeling", false, tm.getAccentHex());
+
+        like.setOnAction(e -> {
+            reactions.toggleCommentReaction(c.getIdCommentaire(), session.getCurrentUser().getIdUser(), "Like");
+            loadComments();
+        });
+        dislike.setOnAction(e -> {
+            reactions.toggleCommentReaction(c.getIdCommentaire(), session.getCurrentUser().getIdUser(), "Dislike");
+            loadComments();
+        });
+        emoji.setOnAction(e -> toggleCommentEmojiPanel(c.getIdCommentaire()));
+        report.setOnAction(e -> toggleCommentReportPanel(c.getIdCommentaire()));
+        feeling.setOnAction(e -> showCommentSentimentAnalysis(c));
+
+        actions.getChildren().addAll(like, dislike, emoji, report, feeling);
+
+        User me = session.getCurrentUser();
+        boolean isOwner = me != null && c.getUser() != null && Objects.equals(me.getIdUser(), c.getUser().getIdUser());
+        boolean isMod = me != null && MODERATOR_ROLES.contains(me.getRoleUser());
+
+        if (isOwner || isMod) {
+            Button edit = commentActionButton("Edit", false, tm.getAccentHex());
+            Button delete = commentActionButton("Delete", false, "#ef4444");
+            edit.setOnAction(e -> toggleCommentEditPanel(c.getIdCommentaire()));
+            delete.setOnAction(e -> deleteComment(c));
+            actions.getChildren().addAll(edit, delete);
+        }
+
+        return actions;
+    }
+
+    private Button commentActionButton(String text, boolean active, String colorHex) {
         Button btn = new Button(text);
-        btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setCursor(Cursor.HAND);
-        btn.setPadding(new Insets(14, 15, 14, 15));
-        
-        String baseStyle = 
-            "-fx-background-color: linear-gradient(to bottom right, " + color + ", " + tm.toRgba(color, 0.8) + ");" +
-            "-fx-background-radius: 16px;" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 14px;" +
-            "-fx-font-weight: 900;" +
-            "-fx-effect: dropshadow(gaussian, " + tm.toRgba(color, 0.3) + ", 15, 0, 0, 4);";
-            
-        btn.setStyle(baseStyle);
-        btn.setOnAction(e -> action.run());
-        
-        btn.setOnMouseEntered(e -> {
-            btn.setStyle(baseStyle + "-fx-scale-x: 1.02; -fx-scale-y: 1.02; -fx-effect: dropshadow(gaussian, " + tm.toRgba(color, 0.5) + ", 20, 0, 0, 6);");
-        });
+        if (active) {
+            btn.setStyle(
+                    "-fx-background-color: transparent; -fx-text-fill: " + colorHex
+                            + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+        } else {
+            btn.setStyle(
+                    "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.4); -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+        }
+        btn.setOnMouseEntered(e -> btn.setStyle(
+                "-fx-background-color: transparent; -fx-text-fill: " + colorHex
+                        + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;"));
         btn.setOnMouseExited(e -> {
-            btn.setStyle(baseStyle);
+            if (!active)
+                btn.setStyle(
+                        "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.4); -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
         });
-        
         return btn;
     }
 
-    private void styleFilterButton(Button btn) {
-        btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setCursor(Cursor.HAND);
-        btn.setPadding(new Insets(10, 12, 10, 12));
+    private VBox buildCommentEditPanel(Commentaire c) {
+        VBox panel = new VBox(8);
+        panel.setVisible(false);
+        panel.setManaged(false);
+        panel.setPadding(new Insets(10));
+        panel.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 8px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 8px;");
+
+        TextArea input = new TextArea(c.getContenuCommentaire());
+        input.setPrefRowCount(2);
+        tuneInput(input);
+
+        CheckBox publicToggle = new CheckBox("Public Visibility");
+        publicToggle.setSelected(c.getIsPublic());
+        publicToggle.setStyle("-fx-text-fill: white; -fx-font-size: 11px;");
+
+        HBox btns = new HBox(8,
+                primaryButton("Update", () -> {
+                    comments.commentUpdate(c.getIdCommentaire(), input.getText(), c.getImageCommentaire(),
+                            publicToggle.isSelected());
+                    loadComments();
+                }),
+                ghostButton("Cancel", () -> toggleCommentEditPanel(c.getIdCommentaire())));
+
+        panel.getChildren().addAll(input, publicToggle, btns);
+        return panel;
     }
 
-    private Button primaryButton(String label, Runnable action) {
-        Button button = new Button(label);
-        button.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.80) + ";" +
-            "-fx-text-fill: white; -fx-font-weight: 700;" +
-            "-fx-background-radius: 12px; -fx-padding: 8 14 8 14;"
-        );
-        button.setOnAction(e -> action.run());
-        return button;
+    private VBox buildCommentReportPanel(Commentaire c) {
+        VBox panel = new VBox(8);
+        panel.setVisible(false);
+        panel.setManaged(false);
+        panel.setPadding(new Insets(10));
+        panel.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 8px; -fx-border-color: #ef444433; -fx-border-radius: 8px;");
+
+        TextArea reason = new TextArea();
+        reason.setPromptText("Reason for reporting...");
+        reason.setPrefRowCount(2);
+        tuneInput(reason);
+
+        HBox btns = new HBox(8,
+                primaryButton("Submit Report", () -> {
+                    reactions.toggleCommentReaction(c.getIdCommentaire(), session.getCurrentUser().getIdUser(),
+                            "Report:" + reason.getText());
+                    showNotification("Report Sent", "Moderators will review this comment.", "#ef4444");
+                    toggleCommentReportPanel(c.getIdCommentaire());
+                }),
+                ghostButton("Cancel", () -> toggleCommentReportPanel(c.getIdCommentaire())));
+
+        panel.getChildren().addAll(new Label("Report Comment"), reason, btns);
+        return panel;
     }
 
-    private HBox buildAttachmentZone(Runnable onBrowse, Runnable onRemove, Label fileLabel) {
-        Label uploadIcon = new Label("📎");
-        uploadIcon.setStyle("-fx-font-size: 18px;");
-        
-        VBox attachmentZone = new VBox(6);
-        attachmentZone.setAlignment(Pos.CENTER);
-        attachmentZone.setPrefHeight(70);
-        attachmentZone.setCursor(Cursor.HAND);
-        attachmentZone.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.06) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.40) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-style: dashed;"
-        );
-        
-        Text uploadText = new Text("Click to upload image");
-        uploadText.setFill(Color.web("rgba(255,255,255,0.60)"));
-        uploadText.setStyle("-fx-font-size: 11px;");
-        
-        attachmentZone.getChildren().addAll(uploadIcon, uploadText, fileLabel);
-        attachmentZone.setOnMouseClicked(e -> onBrowse.run());
-        attachmentZone.setOnMouseEntered(e -> attachmentZone.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.60) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-style: dashed;"
-        ));
-        attachmentZone.setOnMouseExited(e -> attachmentZone.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.06) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.40) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-style: dashed;"
-        ));
-        
-        Button remove = ghostButton("Remove", onRemove);
-        
-        HBox row = new HBox(8, attachmentZone, remove);
-        row.setAlignment(Pos.CENTER_LEFT);
-        HBox.setHgrow(attachmentZone, Priority.ALWAYS);
-        return row;
-    }
+    private VBox buildCommentEmojiPanel(Commentaire c) {
+        VBox panel = new VBox(8);
+        panel.setVisible(false);
+        panel.setManaged(false);
+        panel.setPadding(new Insets(10));
+        panel.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 8px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 8px;");
 
-    private HBox buildMultiImageAttachmentZone(Runnable onBrowse, Label fileLabel, FlowPane previewPane, List<File> images) {
-        Label uploadIcon = new Label("📎");
-        uploadIcon.setStyle("-fx-font-size: 18px;");
-        
-        VBox attachmentZone = new VBox(6);
-        attachmentZone.setAlignment(Pos.CENTER);
-        attachmentZone.setPrefHeight(70);
-        attachmentZone.setCursor(Cursor.HAND);
-        attachmentZone.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.06) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.40) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-style: dashed;"
-        );
-        
-        Text uploadText = new Text("Click to add images");
-        uploadText.setFill(Color.web("rgba(255,255,255,0.60)"));
-        uploadText.setStyle("-fx-font-size: 11px;");
-        
-        attachmentZone.getChildren().addAll(uploadIcon, uploadText, fileLabel);
-        attachmentZone.setOnMouseClicked(e -> onBrowse.run());
-        attachmentZone.setOnMouseEntered(e -> attachmentZone.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.60) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-style: dashed;"
-        ));
-        attachmentZone.setOnMouseExited(e -> attachmentZone.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.06) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.40) + ";" +
-            "-fx-border-width: 2px;" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-style: dashed;"
-        ));
-        
-        HBox row = new HBox(8, attachmentZone);
-        row.setAlignment(Pos.CENTER_LEFT);
-        HBox.setHgrow(attachmentZone, Priority.ALWAYS);
-        return row;
-    }
-
-    private void updateImagePreview(List<File> images, FlowPane previewPane) {
-        previewPane.getChildren().clear();
-        for (File file : images) {
-            VBox imageCard = new VBox(4);
-            imageCard.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03);" +
-                "-fx-border-color: rgba(255,255,255,0.10);" +
-                "-fx-border-radius: 8px;" +
-                "-fx-background-radius: 8px;" +
-                "-fx-padding: 4;"
-            );
+        FlowPane emojis = new FlowPane(12, 12);
+        for (String emoji : EMOJIS) {
+            String hex = Integer.toHexString(emoji.codePointAt(0));
+            if (emoji.equals("❤️")) hex = "2764";
+            String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
             
-            ImageView img = new ImageView(new Image(file.toURI().toString(), true));
-            img.setFitWidth(80);
-            img.setFitHeight(80);
-            img.setPreserveRatio(true);
+            ImageView iv = new ImageView(new Image(url, true));
+            iv.setFitWidth(28);
+            iv.setFitHeight(28);
+            iv.setPreserveRatio(true);
             
-            Button removeBtn = ghostButton("×", () -> {
-                images.remove(file);
-                updateImagePreview(images, previewPane);
+            Button eb = new Button();
+            eb.setGraphic(iv);
+            eb.setStyle("-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 4;");
+            
+            ScaleTransition pulse = new ScaleTransition(Duration.millis(200), eb);
+            pulse.setToX(1.25);
+            pulse.setToY(1.25);
+            
+            eb.setOnMouseEntered(e -> {
+                eb.setStyle("-fx-background-color: rgba(255,255,255,0.12); -fx-background-radius: 10px; -fx-cursor: hand;");
+                pulse.setRate(1);
+                pulse.play();
             });
-            removeBtn.setStyle(
-                "-fx-background-color: rgba(200,0,0,0.70);" +
-                "-fx-text-fill: white; -fx-font-weight: 700;" +
-                "-fx-background-radius: 6px; -fx-padding: 2 6 2 6;" +
-                "-fx-font-size: 16px;"
-            );
-            removeBtn.setMaxWidth(Double.MAX_VALUE);
+            eb.setOnMouseExited(e -> {
+                eb.setStyle("-fx-background-color: transparent; -fx-cursor: hand;");
+                pulse.setRate(-1);
+                pulse.play();
+            });
             
-            imageCard.getChildren().addAll(img, removeBtn);
-            VBox.setVgrow(img, Priority.ALWAYS);
-            previewPane.getChildren().add(imageCard);
+            eb.setOnAction(e -> {
+                reactions.reactCommentEmoji(c.getIdCommentaire(), session.getCurrentUser().getIdUser(), emoji);
+                loadComments();
+            });
+            emojis.getChildren().add(eb);
+        }
+        panel.getChildren().add(emojis);
+        return panel;
+    }
+
+    private void toggleCommentEditPanel(int id) {
+        VBox p = commentEditPanels.get(id);
+        p.setVisible(!p.isVisible());
+        p.setManaged(p.isVisible());
+    }
+
+    private void toggleCommentReportPanel(int id) {
+        VBox p = commentReportPanels.get(id);
+        p.setVisible(!p.isVisible());
+        p.setManaged(p.isVisible());
+    }
+
+    private void toggleCommentEmojiPanel(int id) {
+        VBox p = commentEmojiPanels.get(id);
+        p.setVisible(!p.isVisible());
+        p.setManaged(p.isVisible());
+    }
+
+    private void deleteComment(Commentaire c) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete Comment");
+        alert.setHeaderText("Are you sure you want to delete this comment?");
+        alert.showAndWait().ifPresent(res -> {
+            if (res == ButtonType.OK) {
+                comments.commentDelete(c.getIdCommentaire());
+                loadComments();
+            }
+        });
+    }
+
+    private void submitComment() {
+        if (session.getCurrentUser() == null) {
+            showNotification("Auth Required", "Please log in to comment.", "#f59e0b");
+            return;
+        }
+
+        String text = commentInput.getText().trim();
+        if (text.isEmpty()) {
+            commentValidation.setText("Comment cannot be empty");
+            commentValidation.setTextFill(Color.web("#ef4444"));
+            return;
+        }
+
+        // Moderation
+        if (moderationService.isFlagged(text)) {
+            showNotification("Moderation", "Your comment contains inappropriate content.", "#ef4444");
+            return;
+        }
+
+        // Image upload
+        StringBuilder imgPaths = new StringBuilder();
+        for (File f : commentImages) {
+            try {
+                String path = copyFileToUploads(f);
+                if (imgPaths.length() > 0)
+                    imgPaths.append(",");
+                imgPaths.append(path);
+            } catch (IOException e) {
+            }
+        }
+
+        comments.commentCreate(text, imgPaths.toString(), current, session.getCurrentUser(), isCommentPublic);
+        commentInput.clear();
+        commentImages.clear();
+        commentImagePreviews.getChildren().clear();
+        loadComments();
+        showNotification("Success", "Comment posted.", "#22c55e");
+    }
+
+    private void openCreateFace(boolean isAnnouncement) {
+        forceAnnouncementCreate = isAnnouncement;
+        createTitle.clear();
+        createDescription.clear();
+        createImage = null;
+        createImageField.clear();
+        createImagePreview.setImage(null);
+        createCategory.setValue(isAnnouncement ? "Announcement" : "Discussion General");
+        showFace(createFace);
+    }
+
+    private void submitPublication() {
+        String title = createTitle.getText().trim();
+        String desc = createDescription.getText().trim();
+        String cat = createCategory.getValue();
+
+        if (title.length() < 5 || desc.length() < 10) {
+            showNotification("Validation", "Check fields length.", "#ef4444");
+            return;
+        }
+
+        // Moderation
+        if (moderationService.isFlagged(title + " " + desc)) {
+            showNotification("Moderation", "Inappropriate content detected.", "#ef4444");
+            return;
+        }
+
+        String imgPath = "-";
+        if (createImage != null) {
+            try {
+                imgPath = copyFileToUploads(createImage);
+            } catch (IOException e) {
+            }
+        }
+
+        Integer id = publications.publicationCreate(title, desc, cat, imgPath, session.getCurrentUser());
+        if (id != null && id > 0) {
+            // Discord announcement
+            if ("Announcement".equalsIgnoreCase(cat)) {
+                discordService.sendAnnouncement("📢 **NEW ANNOUNCEMENT**\n\n**" + title + "**\n" + desc, createImage);
+            }
+
+            loadCategory(currentFilter);
+            showFace(readFace);
+            showNotification("Success", "Publication created.", "#22c55e");
         }
     }
 
-    private Button ghostButton(String label, Runnable action) {
-        Button button = new Button(label);
-        button.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.06);" +
-            "-fx-border-color: rgba(255,255,255,0.15);" +
-            "-fx-border-radius: 12px; -fx-background-radius: 12px;" +
-            "-fx-text-fill: white; -fx-padding: 8 14 8 14;"
-        );
-        button.setOnAction(e -> action.run());
-        return button;
+    private void openEditFace() {
+        if (current == null)
+            return;
+        editTitle.setText(current.getTitrePublication());
+        editDescription.setText(current.getDescPublication());
+        editCategory.setValue(current.getCatPublication());
+        editImage = null;
+        editImageField.clear();
+        editNewImagePreview.setImage(null);
+
+        if (current.getImagePublication() != null && !"-".equals(current.getImagePublication())) {
+            String path = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator
+                    + current.getImagePublication();
+            editCurrentImagePreview.setImage(new Image(path, true));
+        } else {
+            editCurrentImagePreview.setImage(null);
+        }
+        showFace(editFace);
     }
 
-    private String copyUpload(File source, String folder) throws IOException {
-        File dir = new File(System.getProperty("user.dir") + File.separator + "uploads" + File.separator + folder);
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IOException("Unable to create upload folder");
+    private void submitEditPublication() {
+        String title = editTitle.getText().trim();
+        String desc = editDescription.getText().trim();
+        String cat = editCategory.getValue();
+
+        String imgPath = current.getImagePublication();
+        if (editImage != null) {
+            try {
+                imgPath = copyFileToUploads(editImage);
+            } catch (IOException e) {
+            }
         }
+
+        publications.publicationUpdate(current.getIdPublication(), title, desc, cat, imgPath);
+        loadCategory(currentFilter);
+        showFace(readFace);
+        showNotification("Success", "Publication updated.", "#22c55e");
+    }
+
+    private void deleteCurrentPublication() {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete Publication");
+        alert.setHeaderText("Delete '" + current.getTitrePublication() + "'?");
+        alert.showAndWait().ifPresent(res -> {
+            if (res == ButtonType.OK) {
+                publications.publicationDelete(current.getIdPublication());
+                loadCategory(currentFilter);
+            }
+        });
+    }
+
+    private void showSentimentAnalysis() {
+        if (current == null) return;
+        
+        if (publicationSentimentPanel.isVisible()) {
+            publicationSentimentPanel.setVisible(false);
+            publicationSentimentPanel.setManaged(false);
+            return;
+        }
+
+        publicationSentimentPanel.getChildren().clear();
+        publicationSentimentPanel.setPadding(new Insets(14));
+        publicationSentimentPanel.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: " + tm.getAccentHex() + "33; -fx-border-radius: 12px;");
+        
+        Label loading = new Label("Analyzing feelings...");
+        loading.setTextFill(Color.web(tm.getAccentHex()));
+        publicationSentimentPanel.getChildren().add(loading);
+        publicationSentimentPanel.setVisible(true);
+        publicationSentimentPanel.setManaged(true);
+
+        String textToAnalyze = current.getTitrePublication() + ". " + current.getDescPublication();
+        sentimentService.analyzeContent(textToAnalyze).thenAccept(result -> {
+            javafx.application.Platform.runLater(() -> {
+                if (publicationSentimentPanel == null) return;
+                if (!result.success) {
+                    publicationSentimentPanel.getChildren().setAll(new Label("Analysis Failed: " + result.explanation));
+                    return;
+                }
+                fillSentimentPanel(publicationSentimentPanel, result);
+            });
+        });
+    }
+
+    private void fillSentimentPanel(VBox panel, SentimentResult result) {
+        String color = result.sentiment.toLowerCase().contains("pos") ? "#4ade80" : 
+                       (result.sentiment.toLowerCase().contains("neg") ? "#f87171" : "#fbbf24");
+        
+        VBox layout = new VBox(10);
+        layout.setAlignment(Pos.TOP_LEFT);
+
+        HBox header = new HBox(12);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        // AI Icon/Indicator
+        Label aiIcon = new Label("✨");
+        aiIcon.setStyle("-fx-font-size: 18px;");
+        
+        VBox titleBox = new VBox(2);
+        Label titleLabel = new Label("AI SENTIMENT ANALYSIS");
+        titleLabel.setStyle("-fx-font-weight: 900; -fx-font-size: 10px; -fx-text-fill: " + color + "; -fx-letter-spacing: 1px;");
+        Label sentimentLabel = new Label(result.sentiment.toUpperCase());
+        sentimentLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white;");
+        titleBox.getChildren().addAll(titleLabel, sentimentLabel);
+        
+        header.getChildren().addAll(aiIcon, titleBox);
+
+        double confidenceVal = 0.5;
+        try { confidenceVal = Double.parseDouble(result.confidence.replace("%", "")) / 100.0; } catch(Exception e){}
+        
+        HBox confidenceBox = new HBox(10);
+        confidenceBox.setAlignment(Pos.CENTER_LEFT);
+        ProgressBar pb = new ProgressBar(confidenceVal);
+        pb.setPrefWidth(150);
+        pb.setPrefHeight(6);
+        pb.setStyle("-fx-accent: " + color + ";");
+        Label confLabel = new Label(result.confidence + " confidence");
+        confLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: rgba(255,255,255,0.5);");
+        confidenceBox.getChildren().addAll(pb, confLabel);
+
+        Text explanation = new Text(result.explanation);
+        explanation.setFill(Color.web("rgba(255,255,255,0.7)"));
+        explanation.setFont(Font.font(13));
+        explanation.setWrappingWidth(700);
+
+        layout.getChildren().addAll(header, confidenceBox, explanation);
+        panel.getChildren().setAll(layout);
+    }
+
+
+    private void showCommentSentimentAnalysis(Commentaire comment) {
+        VBox panel = commentSentimentPanels.get(comment.getIdCommentaire());
+        if (panel == null) return;
+        
+        if (panel.isVisible()) {
+            panel.setVisible(false);
+            panel.setManaged(false);
+            return;
+        }
+
+        panel.getChildren().clear();
+        panel.setPadding(new Insets(10));
+        panel.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10px; -fx-border-color: " + tm.getAccentHex() + "22; -fx-border-radius: 10px;");
+        
+        Label loading = new Label("Analyzing comment...");
+        loading.setTextFill(Color.web(tm.getAccentHex()));
+        panel.getChildren().add(loading);
+        panel.setVisible(true);
+        panel.setManaged(true);
+
+        sentimentService.analyzeContent(comment.getContenuCommentaire()).thenAccept(result -> {
+            javafx.application.Platform.runLater(() -> {
+                if (panel == null) return;
+                if (!result.success) {
+                    panel.getChildren().setAll(new Label("Analysis Failed: " + result.explanation));
+                    return;
+                }
+                fillSentimentPanel(panel, result);
+            });
+        });
+    }
+
+    // Helper UI Builders
+    private void showFace(VBox face) {
+        readFace.setVisible(face == readFace);
+        createFace.setVisible(face == createFace);
+        editFace.setVisible(face == editFace);
+
+        readFace.setManaged(face == readFace);
+        createFace.setManaged(face == createFace);
+        editFace.setManaged(face == editFace);
+    }
+
+    private void showNotification(String title, String message, String colorHex) {
+        VBox box = new VBox(4);
+        box.setPadding(new Insets(16));
+        box.setPrefWidth(320);
+        box.setStyle("-fx-background-color: rgba(20,20,30,0.95); -fx-background-radius: 12px; -fx-border-color: "
+                + colorHex + "; -fx-border-radius: 12px;");
+
+        Label t = new Label(title);
+        t.setStyle("-fx-font-weight: bold; -fx-text-fill: white; -fx-font-size: 14px;");
+        Label m = new Label(message);
+        m.setWrapText(true);
+        m.setStyle("-fx-text-fill: rgba(255,255,255,0.7); -fx-font-size: 12px;");
+
+        box.getChildren().addAll(t, m);
+        notificationBox.getChildren().add(0, box);
+
+        box.setOpacity(0);
+        box.setTranslateX(100);
+
+        FadeTransition fi = new FadeTransition(Duration.millis(300), box);
+        fi.setToValue(1);
+        TranslateTransition ti = new TranslateTransition(Duration.millis(300), box);
+        ti.setToX(0);
+
+        PauseTransition p = new PauseTransition(Duration.seconds(4));
+
+        FadeTransition fo = new FadeTransition(Duration.millis(300), box);
+        fo.setToValue(0);
+        fo.setOnFinished(e -> notificationBox.getChildren().remove(box));
+
+        new SequentialTransition(new SequentialTransition(fi, ti), p, fo).play();
+    }
+
+    private String copyFileToUploads(File source) throws IOException {
+        String uploadsPath = System.getProperty("user.dir") + File.separator + "uploads";
+        File dir = new File(uploadsPath);
+        if (!dir.exists())
+            dir.mkdirs();
 
         String name = System.currentTimeMillis() + "_" + source.getName();
         File dest = new File(dir, name);
         Files.copy(source.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        return folder + "/" + name;
+        return name;
     }
 
     private File chooseImage() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Select Image");
-        chooser.getExtensionFilters().addAll(
-            new FileChooser.ExtensionFilter("Images", "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"),
-            new FileChooser.ExtensionFilter("All Files", "*.*")
-        );
-
-        Window window = root.getScene() == null ? null : root.getScene().getWindow();
-        return chooser.showOpenDialog(window);
+        FileChooser fc = new FileChooser();
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+        return fc.showOpenDialog(root.getScene().getWindow());
     }
 
-    private void clearCurrent() {
-        current = null;
-        updateActiveListItem();
-        showFace(emptyFace);
-    }
-
-    private Node emptyLabel(String value) {
-        Label label = new Label(value);
-        label.setTextFill(Color.web("rgba(255,255,255,0.70)"));
-        return label;
-    }
-
-    private String author(User user) {
-        if (user == null) {
-            return "Unknown";
-        }
-
-        String first = user.getFirstName() == null ? "" : user.getFirstName();
-        String last = user.getLastName() == null ? "" : user.getLastName();
-        String full = (first + " " + last).trim();
-
-        if (!full.isBlank()) {
-            return full;
-        }
-        return user.getEmailUser() == null ? "Unknown" : user.getEmailUser();
-    }
-
-    private String initials(User user) {
-        if (user == null) {
-            return "U";
-        }
-
-        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
-        String last = user.getLastName() == null ? "" : user.getLastName().trim();
-
-        StringBuilder result = new StringBuilder();
-        if (!first.isEmpty()) {
-            result.append(Character.toUpperCase(first.charAt(0)));
-        }
-        if (!last.isEmpty()) {
-            result.append(Character.toUpperCase(last.charAt(0)));
-        }
-
-        if (result.length() == 0) {
-            return "U";
-        }
-        return result.toString();
-    }
-
-    private String trim(String value, int max) {
-        if (value == null) {
-            return "";
-        }
-        if (value.length() <= max) {
-            return value;
-        }
-        return value.substring(0, max - 3) + "...";
-    }
-
-    private String format(LocalDateTime value) {
-        if (value == null) {
-            return "";
-        }
-        return value.format(DATE_FMT);
-    }
-
-    private String shortDate(LocalDateTime value) {
-        if (value == null) {
-            return "";
-        }
-        return value.format(SHORT_DATE_FMT);
-    }
-
-    private int compareDates(LocalDateTime left, LocalDateTime right) {
-        if (left == null && right == null) {
-            return 0;
-        }
-        if (left == null) {
-            return -1;
-        }
-        if (right == null) {
-            return 1;
-        }
-        return left.compareTo(right);
-    }
-
-    private String safe(String value) {
-        return value == null ? "" : value.trim();
-    }
-
-    private String inactiveListItemStyle() {
-        return "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.08); -fx-border-radius: 16px;";
-    }
-
-    private String activeListItemStyle() {
-        return "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.17) + "; -fx-background-radius: 16px; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.90) + "; -fx-border-radius: 16px;";
-    }
-
-    private void updateActiveListItem() {
-        for (VBox item : listItemsById.values()) {
-            item.setStyle(inactiveListItemStyle());
-        }
-
-        if (current != null && current.getIdPublication() != null) {
-            VBox active = listItemsById.get(current.getIdPublication());
-            if (active != null) {
-                active.setStyle(activeListItemStyle());
-            }
+    private void updateImagePreview(List<File> files, FlowPane pane) {
+        pane.getChildren().clear();
+        for (File f : files) {
+            ImageView iv = new ImageView(new Image(f.toURI().toString(), 100, 100, true, true));
+            iv.setStyle("-fx-background-radius: 8px; -fx-border-radius: 8px;");
+            pane.getChildren().add(iv);
         }
     }
 
-    private String categoryStyle(String category) {
-        String base = "-fx-padding: 4 8 4 8; -fx-font-size: 10px; -fx-font-weight: 800; -fx-background-radius: 8px; -fx-border-radius: 8px;";
-        if (category == null) {
-            return base + "-fx-text-fill: white; -fx-background-color: rgba(255,255,255,0.1); -fx-border-color: rgba(255,255,255,0.2);";
-        }
-
-        switch (category) {
-            case "Announcement":
-                return base + "-fx-text-fill: #ff8080; -fx-background-color: rgba(255,50,50,0.2); -fx-border-color: rgba(255,50,50,0.4);";
-            case "Suggestion":
-                return base + "-fx-text-fill: #80ffaa; -fx-background-color: rgba(50,255,100,0.15); -fx-border-color: rgba(50,255,100,0.3);";
-            case "Jeux Video":
-                return base + "-fx-text-fill: #d080ff; -fx-background-color: rgba(150,50,255,0.2); -fx-border-color: rgba(150,50,255,0.4);";
-            case "Informatique":
-                return base + "-fx-text-fill: #80c0ff; -fx-background-color: rgba(50,150,255,0.2); -fx-border-color: rgba(50,150,255,0.4);";
-            case "Nouveauté":
-                return base + "-fx-text-fill: #ffd680; -fx-background-color: rgba(255,200,50,0.2); -fx-border-color: rgba(255,200,50,0.4);";
-            case "Culture":
-                return base + "-fx-text-fill: #d4a0ff; -fx-background-color: rgba(200,100,255,0.2); -fx-border-color: rgba(200,100,255,0.4);";
-            case "Sport":
-                return base + "-fx-text-fill: #7fe0c0; -fx-background-color: rgba(50,200,150,0.2); -fx-border-color: rgba(50,200,150,0.4);";
-            default:
-                return base + "-fx-text-fill: #9cc5ff; -fx-background-color: rgba(100,200,255,0.15); -fx-border-color: rgba(100,200,255,0.3);";
-        }
+    private void tuneInput(Node n) {
+        n.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05);" +
+                        "-fx-text-fill: white;" +
+                        "-fx-prompt-text-fill: rgba(255,255,255,0.4);" +
+                        "-fx-background-radius: 10px;" +
+                        "-fx-border-color: rgba(255,255,255,0.1);" +
+                        "-fx-border-radius: 10px;");
+        n.focusedProperty().addListener((obs, oldV, newV) -> {
+            if (newV)
+                n.setStyle(n.getStyle() + "-fx-border-color: " + tm.getAccentHex() + ";");
+            else
+                n.setStyle(n.getStyle() + "-fx-border-color: rgba(255,255,255,0.1);");
+        });
     }
 
-    private Label dimLabel(String text) {
-        Label label = new Label(text);
-        label.setTextFill(Color.web("rgba(255,255,255,0.62)"));
-        return label;
+    private Button primaryButton(String text, Runnable action) {
+        Button b = new Button(text);
+        b.setStyle(
+                "-fx-background-color: " + tm.getAccentHex() + ";" +
+                        "-fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10 20 10 20; -fx-cursor: hand;");
+        b.setOnAction(e -> action.run());
+        return b;
     }
 
-    private void preparePreview(ImageView preview, double width, double height) {
-        preview.setFitWidth(width);
-        preview.setFitHeight(height);
-        preview.setPreserveRatio(true);
-        preview.setSmooth(true);
-        preview.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-border-color: rgba(255,255,255,0.12); -fx-border-radius: 10px;");
+    private Button ghostButton(String text, Runnable action) {
+        Button b = new Button(text);
+        b.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05);" +
+                        "-fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10 20 10 20; -fx-cursor: hand; -fx-border-color: rgba(255,255,255,0.2); -fx-border-radius: 10px;");
+        b.setOnAction(e -> action.run());
+        return b;
     }
 
-    private void tuneInput(Node node) {
-        node.setStyle(
-            "-fx-background-color: rgba(0,0,0,0.42);" +
-            "-fx-control-inner-background: rgba(0,0,0,0.42);" +
-            "-fx-border-color: rgba(255,255,255,0.14);" +
-            "-fx-border-radius: 12px;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-prompt-text-fill: rgba(255,255,255,0.55);" +
-            "-fx-text-fill: white;"
-        );
+    private void styleReactionButton(Button b) {
+        b.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05);" +
+                        "-fx-border-color: rgba(255,255,255,0.12);" +
+                        "-fx-text-fill: rgba(255,255,255,0.7);" +
+                        "-fx-font-size: 12px; -fx-font-weight: 600; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 8 16 8 16; -fx-cursor: hand;");
     }
 
-    private void styleValidationLabel(Label label, String text, boolean valid) {
-        label.setText(text);
-        label.setTextFill(valid ? Color.web(tm.getAccentHex()) : Color.web("#ff3b30"));
-        label.setStyle("-fx-font-size: 11px; -fx-font-weight: 600;");
+    private HBox reactionCountWrap(Button b, Label l) {
+        HBox h = new HBox(6, b, l);
+        h.setAlignment(Pos.CENTER_LEFT);
+        l.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: rgba(255,255,255,0.6);");
+        return h;
     }
 
-    private boolean isPublicationFormValid(String title, String description, String category) {
-        return buildPublicationDraft(title, description, category).validateForCreate().isEmpty();
+    private String categoryStyle(String cat) {
+        String color = "#6366f1";
+        if ("Announcement".equals(cat))
+            color = "#f59e0b";
+        else if ("Suggestion".equals(cat))
+            color = "#22c55e";
+
+        return "-fx-background-color: " + tm.toRgba(color, 0.15) + ";" +
+                "-fx-text-fill: " + color + ";" +
+                "-fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 10 4 10; -fx-background-radius: 6px;";
+    }
+
+    private void styleValidationLabel(Label l, String text, boolean valid) {
+        l.setText(text);
+        l.setStyle("-fx-font-size: 10px; -fx-text-fill: " + (valid ? "#22c55e" : "#ef4444") + ";");
     }
 
     private void updateCreateValidationState() {
-        String title = safe(createTitle.getText());
-        String description = safe(createDescription.getText());
-        String category = forceAnnouncementCreate ? "Announcement" : createCategory.getValue();
-
-        String titleError = publicationFieldError(title, description, category, "Title ");
-        String categoryError = publicationFieldError(title, description, category, "Category ");
-        String descriptionError = publicationFieldError(title, description, category, "Description ");
-
-        styleValidationLabel(
-            createTitleValidation,
-            titleError == null ? "✓ Title looks good" : titleError,
-            titleError == null
-        );
-        styleValidationLabel(
-            createCategoryValidation,
-            categoryError == null ? "✓ Category selected" : categoryError,
-            categoryError == null
-        );
-        styleValidationLabel(
-            createDescriptionValidation,
-            descriptionError == null ? "✓ Description looks good" : descriptionError,
-            descriptionError == null
-        );
+        styleValidationLabel(createTitleValidation, "Title must be at least 5 chars", createTitle.getText().length() >= 5);
+        styleValidationLabel(createDescriptionValidation, "Description must be at least 10 chars",
+                createDescription.getText().length() >= 10);
     }
 
     private void updateEditValidationState() {
-        String title = safe(editTitle.getText());
-        String description = safe(editDescription.getText());
-        String category = editCategory.getValue();
-
-        String titleError = publicationFieldError(title, description, category, "Title ");
-        String categoryError = publicationFieldError(title, description, category, "Category ");
-        String descriptionError = publicationFieldError(title, description, category, "Description ");
-
-        styleValidationLabel(
-            editTitleValidation,
-            titleError == null ? "✓ Title looks good" : titleError,
-            titleError == null
-        );
-        styleValidationLabel(
-            editCategoryValidation,
-            categoryError == null ? "✓ Category selected" : categoryError,
-            categoryError == null
-        );
-        styleValidationLabel(
-            editDescriptionValidation,
-            descriptionError == null ? "✓ Description looks good" : descriptionError,
-            descriptionError == null
-        );
+        styleValidationLabel(editTitleValidation, "Title must be at least 5 chars", editTitle.getText().length() >= 5);
+        styleValidationLabel(editDescriptionValidation, "Description must be at least 10 chars",
+                editDescription.getText().length() >= 10);
     }
 
     private void updateCommentValidationState() {
-        String description = safe(commentInput.getText());
-        if (description.isEmpty()) {
-            commentValidation.setText("Type your comment (minimum 5 characters)");
-            commentValidation.setTextFill(Color.web("rgba(255,255,255,0.62)"));
-            return;
+        if (commentInput.getText().trim().isEmpty()) {
+            styleValidationLabel(commentValidation, "Comment is empty", false);
+        } else {
+            styleValidationLabel(commentValidation, "Looks good", true);
         }
-
-        String error = commentDescriptionError(description);
-        if (error != null) {
-            commentValidation.setText(error);
-            commentValidation.setTextFill(Color.web("#ff3b30"));
-            return;
-        }
-
-        commentValidation.setText("✓ Comment looks good");
-        commentValidation.setTextFill(Color.web(tm.getAccentHex()));
     }
 
-    private Publication buildPublicationDraft(String title, String description, String category) {
-        Publication draft = new Publication();
-        draft.setTitrePub(title == null ? "" : title.trim());
-        draft.setDescriptionPub(description == null ? "" : description.trim());
-        draft.setCategoriePub(category);
-        draft.setDateCreationPub(LocalDateTime.now());
-        draft.setUser(validationUser());
-        return draft;
+    private void preparePreview(ImageView iv, double w, double h) {
+        iv.setFitWidth(w);
+        iv.setFitHeight(h);
+        iv.setPreserveRatio(true);
+        iv.setStyle("-fx-background-radius: 12px; -fx-border-radius: 12px;");
     }
 
-    private String publicationFieldError(String title, String description, String category, String prefix) {
-        List<String> errors = buildPublicationDraft(title, description, category).validateForCreate();
-        for (String error : errors) {
-            if (error.startsWith(prefix)) {
-                return error;
-            }
-        }
-        return null;
+    private Label dimLabel(String t) {
+        Label l = new Label(t);
+        l.setStyle("-fx-font-size: 11px; -fx-text-fill: rgba(255,255,255,0.4);");
+        return l;
     }
 
-    private String commentDescriptionError(String description) {
-        Commentaire draft = new Commentaire();
-        draft.setDescriptionCommentaire(description == null ? "" : description.trim());
-        Publication publication = new Publication();
-        publication.setIdPublication(current != null && current.getIdPublication() != null ? current.getIdPublication() : 1);
-        draft.setPublication(publication);
-        draft.setUser(validationUser());
-        for (String error : draft.validateForCreate()) {
-            if (error.startsWith("Comment text ")) {
-                return error;
-            }
-        }
-        return null;
+    private HBox buildAttachmentZone(Runnable add, Runnable clear, Label status) {
+        HBox zone = new HBox(10);
+        zone.setAlignment(Pos.CENTER_LEFT);
+        Button addBtn = ghostButton("📎 Add Image", add);
+        Button clearBtn = ghostButton("Clear", clear);
+        zone.getChildren().addAll(addBtn, clearBtn, status);
+        return zone;
     }
 
-    private User validationUser() {
-        User user = session.getCurrentUser();
-        if (user != null && user.getIdUser() != null && user.getIdUser() > 0) {
-            return user;
-        }
-        User placeholder = new User();
-        placeholder.setIdUser(1);
-        return placeholder;
+    private HBox buildMultiImageAttachmentZone(Runnable add, Label status, FlowPane previews, List<File> files) {
+        HBox zone = new HBox(10);
+        zone.setAlignment(Pos.CENTER_LEFT);
+        Button addBtn = ghostButton("📎 Attach Images", add);
+        Button clearBtn = ghostButton("Clear All", () -> {
+            files.clear();
+            previews.getChildren().clear();
+            status.setText("No images selected");
+        });
+        zone.getChildren().addAll(addBtn, clearBtn, status);
+        return zone;
     }
 
-    private void updateOwnerActionsVisibility() {
-        boolean can = canDeleteCurrent();
-        ownerActions.setVisible(can);
-        ownerActions.setManaged(can);
-    }
+    private Circle createAvatar(double radius, User user) {
+        Circle circle = new Circle(radius);
+        circle.setFill(Color.web("rgba(255,255,255,0.1)"));
+        circle.setStroke(Color.web("rgba(255,255,255,0.05)"));
+        circle.setStrokeWidth(1);
 
-    private boolean isModerator(User user) {
-        if (user == null) {
-            return false;
-        }
-        String role = user.getRoleUser();
-        return role != null && MODERATOR_ROLES.contains(role);
-    }
+        if (user == null) return circle;
 
-    private Image resolveImage(String dbValue, String fallbackFolder) {
-        if (dbValue == null || dbValue.isBlank()) {
-            return null;
-        }
-
-        String raw = dbValue.trim().replace("\\", "/");
-        try {
-            if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("file:/")) {
-                Image web = new Image(raw, true);
-                return web.isError() ? null : web;
-            }
-
-            File pathAsFile = new File(raw);
-            if (pathAsFile.exists()) {
-                Image img = new Image(pathAsFile.toURI().toString(), true);
-                return img.isError() ? null : img;
-            }
-
-            File uploadsRoot = new File(System.getProperty("user.dir") + File.separator + "uploads");
-            List<File> candidates = List.of(
-                new File(uploadsRoot, raw),
-                new File(uploadsRoot, fallbackFolder + File.separator + raw),
-                new File(uploadsRoot, "forum_images" + File.separator + raw),
-                new File(uploadsRoot, "commentaire_images" + File.separator + raw)
-            );
-
-            for (File candidate : candidates) {
-                if (candidate.exists()) {
-                    Image img = new Image(candidate.toURI().toString(), true);
-                    if (!img.isError()) {
-                        return img;
-                    }
+        Profile p = profileByUserIdCache.computeIfAbsent(user.getIdUser(), id -> profiles.profileByUserId(id).orElse(null));
+        if (p != null && p.getAvatar() != null && !p.getAvatar().isBlank() && !"-".equals(p.getAvatar())) {
+            Image img = com.syndicati.utils.image.ImageLoaderUtil.loadProfileAvatar(p.getAvatar());
+            if (img != null) {
+                if (img.isError()) {
+                    // Skip if error
+                } else if (img.getProgress() < 1.0) {
+                    img.progressProperty().addListener((obs, oldV, newV) -> {
+                        if (newV.doubleValue() >= 1.0 && !img.isError()) {
+                            javafx.application.Platform.runLater(() -> {
+                                try {
+                                    circle.setFill(new ImagePattern(img));
+                                } catch (Exception ignored) {}
+                            });
+                        }
+                    });
+                } else {
+                    circle.setFill(new ImagePattern(img));
                 }
             }
-        } catch (Exception ignored) {
         }
-
-        return null;
-    }
-
-    private Dialog<ButtonType> styledDialog(String title) {
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle(title);
-        dialog.setHeaderText(null);
-
-        if (root.getScene() != null && root.getScene().getWindow() != null) {
-            dialog.initOwner(root.getScene().getWindow());
-        }
-
-        DialogPane pane = dialog.getDialogPane();
-        pane.setStyle(
-            "-fx-background-color: #12141b;" +
-            "-fx-border-color: rgba(255,255,255,0.10);" +
-            "-fx-border-width: 1;" +
-            "-fx-font-family: 'Segoe UI';"
-        );
-
-        return dialog;
-    }
-
-    private boolean confirmFancy(String title, String message) {
-        Dialog<ButtonType> dialog = styledDialog(title);
-        Label content = new Label(message);
-        content.setWrapText(true);
-        content.setTextFill(Color.web("rgba(255,255,255,0.92)"));
-        dialog.getDialogPane().setContent(content);
-
-        ButtonType yes = new ButtonType("Delete", ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().setAll(yes, ButtonType.CANCEL);
-
-        return dialog.showAndWait().filter(result -> result == yes).isPresent();
-    }
-
-    private String promptReason(String title, String placeholder) {
-        Dialog<ButtonType> dialog = styledDialog(title);
-        TextArea area = new TextArea();
-        area.setPrefRowCount(4);
-        area.setPromptText(placeholder);
-        tuneInput(area);
-
-        VBox content = new VBox(10, dimLabel("Provide a short reason"), area);
-        dialog.getDialogPane().setContent(content);
-
-        ButtonType submit = new ButtonType("Submit", ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().setAll(submit, ButtonType.CANCEL);
-
-        return dialog.showAndWait().filter(result -> result == submit).map(result -> safe(area.getText())).orElse(null);
-    }
-
-    private void showInfo(String title, String content) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION, content, ButtonType.OK);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-
-        if (root.getScene() != null && root.getScene().getWindow() != null) {
-            alert.initOwner(root.getScene().getWindow());
-        }
-        alert.showAndWait();
+        return circle;
     }
 }

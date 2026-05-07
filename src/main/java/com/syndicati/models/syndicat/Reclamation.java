@@ -103,6 +103,9 @@ public class Reclamation {
         this.user = user;
     }
 
+    // Aliases for view synchronization
+    public String getTitreReclamation() { return getTitreReclamations(); }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }

@@ -62,26 +62,30 @@ public class ReponseService {
         return repository.create(reponse);
     }
 
-    public boolean update(Integer id, String titre, String message) {
+    public boolean update(Integer id, String titre, String message, String image) {
         if (id == null || id <= 0) {
             return false;
         }
-
+    
         Optional<Reponse> existing = repository.findById(id);
         if (existing.isEmpty()) {
             return false;
         }
-
+    
         Reponse rep = existing.get();
-
+    
         if (titre != null && !titre.isBlank()) {
             rep.setTitreReponse(titre);
         }
-
+    
         if (message != null && !message.isBlank()) {
             rep.setMessageReponse(message);
         }
-
+    
+        if (image != null && !image.isBlank()) {
+            rep.setImageReponse(image);
+        }
+    
         rep.setUpdatedAt(LocalDateTime.now());
         return repository.update(rep);
     }

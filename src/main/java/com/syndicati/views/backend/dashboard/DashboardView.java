@@ -56,8 +56,18 @@ public class DashboardView implements ViewInterface {
     private final HBox root;
     String activeSection = "general";
     private final Map<String, Button> sectionButtons = new HashMap<>();
+    private final Map<String, VBox> viewCache = new HashMap<>();
     VBox contentArea;
     Runnable exitCallback;
+
+    private VBox getCachedView(String key, java.util.function.Supplier<VBox> builder) {
+        if (viewCache.containsKey(key)) {
+            return viewCache.get(key);
+        }
+        VBox view = builder.get();
+        viewCache.put(key, view);
+        return view;
+    }
     private final Runnable accentRefreshListener;
     boolean sidebarExpanded = true;
     Popup profilePopup;
@@ -105,7 +115,7 @@ public class DashboardView implements ViewInterface {
         
         // Only refresh the content if necessary, but try to preserve state
         if (contentArea != null) {
-            contentArea.getChildren().setAll(buildSection(activeSection));
+            contentArea.getChildren().setAll(getCachedView("SECTION_" + activeSection, () -> buildSection(activeSection)));
         }
     }
 
@@ -349,7 +359,7 @@ public class DashboardView implements ViewInterface {
 
         activeSection = section;
         sectionButtons.forEach((k, b) -> styleSidebarItem(b, k.equals(section)));
-        contentArea.getChildren().setAll(buildSection(section));
+        contentArea.getChildren().setAll(getCachedView("SECTION_" + section, () -> buildSection(section)));
         
         // Log sensitive access
         if ("users".equals(section)) {
@@ -371,7 +381,7 @@ public class DashboardView implements ViewInterface {
 
         contentArea = new VBox(0);
         contentArea.setFillWidth(true);
-        contentArea.getChildren().add(buildSection(activeSection));
+        contentArea.getChildren().add(getCachedView("SECTION_" + activeSection, () -> buildSection(activeSection)));
 
         ScrollPane scroll = new ScrollPane(contentArea);
         scroll.setFitToWidth(true);
@@ -407,17 +417,17 @@ public class DashboardView implements ViewInterface {
         VBox moduleContent = new VBox(20); moduleContent.setFillWidth(true);
 
         HBox topStatsBar = mainSwitcher(key -> {
-            moduleContent.getChildren().setAll(
+            moduleContent.getChildren().setAll(getCachedView("GEN_MODULE_" + key, () ->
                 "Users".equals(key)     ? buildUsersStatsDashboard() :
                 "Forum".equals(key)     ? buildForumStatsDashboard() :
                 "Syndicat".equals(key)  ? buildSyndicatStatsDashboard() :
                 "Residence".equals(key) ? buildResidenceStatsDashboard() :
                 "Evenement".equals(key) ? buildEvenementStatsDashboard() :
                 buildGeneralStatsModule()
-            );
+            ));
         });
 
-        moduleContent.getChildren().add(buildGeneralStatsModule());
+        moduleContent.getChildren().add(getCachedView("GEN_MODULE_General", this::buildGeneralStatsModule));
         s.getChildren().addAll(topStatsBar, moduleContent);
         return s;
     }
@@ -430,15 +440,15 @@ public class DashboardView implements ViewInterface {
         subContent.setFillWidth(true);
 
         HBox subBar = subTabBar(new String[]{"Overview", "Engagement", "System", "Activity"}, key -> {
-            subContent.getChildren().setAll(
+            subContent.getChildren().setAll(getCachedView("STATS_" + key, () ->
                 "Engagement".equals(key) ? buildEngagementContent() :
                 "System".equals(key)     ? buildSystemContent()     :
                 "Activity".equals(key)   ? buildActivityLogContent() :
                 buildGeneralOverview()
-            );
+            ));
         });
 
-        subContent.getChildren().add(buildGeneralOverview());
+        subContent.getChildren().add(getCachedView("STATS_Overview", this::buildGeneralOverview));
         wrap.getChildren().addAll(subBar, subContent);
         return wrap;
     }
@@ -616,10 +626,10 @@ public class DashboardView implements ViewInterface {
             "\u23F1",
             new String[]{"Overview", "Timeline", "Signals", "Security AI"},
             key -> switch (key) {
-                case "Timeline" -> activityTimelinePane();
-                case "Signals" -> activitySignalsPane();
-                case "Security AI" -> activitySecurityAiPane();
-                default -> activityOverviewPane();
+                case "Timeline" -> getCachedView("ACT_Timeline", this::activityTimelinePane);
+                case "Signals" -> getCachedView("ACT_Signals", this::activitySignalsPane);
+                case "Security AI" -> getCachedView("ACT_Security", this::activitySecurityAiPane);
+                default -> getCachedView("ACT_Overview", this::activityOverviewPane);
             }
         );
     }
@@ -628,111 +638,125 @@ public class DashboardView implements ViewInterface {
         VBox wrap = new VBox(16);
         wrap.setFillWidth(true);
 
-        List<AnomalyResult> anomalies = analyticsController.getRecentAnomalies(8);
-        List<SuspiciousActivity> suspiciousUsers = analyticsController.getSuspiciousUsers(8);
-        List<Map<String, Object>> featureUsage = analyticsController.getFeatureUsage(6);
+        Label loadingLabel = new Label("Loading Security AI insights...");
+        loadingLabel.setTextFill(textMutedColor());
+        wrap.getChildren().add(loadingLabel);
 
-        int highAnomalies = 0;
-        int criticalUsers = 0;
-        double peakRisk = 0.0;
+        Thread.startVirtualThread(() -> {
+            try {
+                List<AnomalyResult> anomalies = analyticsController.getRecentAnomalies(8);
+                List<SuspiciousActivity> suspiciousUsers = analyticsController.getSuspiciousUsers(8);
+                List<Map<String, Object>> featureUsage = analyticsController.getFeatureUsage(6);
 
-        for (AnomalyResult anomaly : anomalies) {
-            if (anomaly.getAnomalyScore() >= 0.80) {
-                highAnomalies++;
+                javafx.application.Platform.runLater(() -> {
+                    wrap.getChildren().clear();
+
+                    int highAnomalies = 0;
+                    int criticalUsers = 0;
+                    double peakRisk = 0.0;
+
+                    for (AnomalyResult anomaly : anomalies) {
+                        if (anomaly.getAnomalyScore() >= 0.80) {
+                            highAnomalies++;
+                        }
+                    }
+
+                    for (SuspiciousActivity suspicious : suspiciousUsers) {
+                        if (suspicious.getRiskScore() != null) {
+                            double risk = suspicious.getRiskScore().getOverallRiskScore();
+                            peakRisk = Math.max(peakRisk, risk);
+                            String severity = safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
+                            if ("CRITICAL".equalsIgnoreCase(severity) || "HIGH".equalsIgnoreCase(severity)) {
+                                criticalUsers++;
+                            }
+                        }
+                    }
+
+                    HBox cards = new HBox(16);
+                    addStatCards(
+                        cards,
+                        new String[]{"ANM", "SUS", "RISK", "FEAT"},
+                        new String[]{"Recent Anomalies", "High-Risk Users", "Peak Risk Score", "Tracked Features"},
+                        new String[]{
+                            String.valueOf(anomalies.size()),
+                            String.valueOf(criticalUsers),
+                            formatScore(peakRisk),
+                            String.valueOf(featureUsage.size())
+                        },
+                        new String[]{"#ef4444", "#f59e0b", "#a78bfa", "#34d399"}
+                    );
+
+                    VBox anomaliesCard = sectionCard();
+                    anomaliesCard.getChildren().add(t("Recent LogAI Anomalies", boldFont(), FontWeight.BOLD, 18));
+                    if (anomalies.isEmpty()) {
+                        anomaliesCard.getChildren().add(buildRowCard("#60a5fa", "No anomaly records yet", "-", null, 8));
+                    } else {
+                        for (AnomalyResult anomaly : anomalies) {
+                            String userText = anomaly.getUserDisplayName() == null ? "anonymous" : anomaly.getUserDisplayName();
+                            String title = safeDefault(anomaly.getEventType(), "UNKNOWN_EVENT") + " - " + userText;
+                            String value = safeDefault(anomaly.getAnomalyLabel(), "ANOMALY") + " • score " + formatScore(anomaly.getAnomalyScore());
+                            anomaliesCard.getChildren().add(buildRowCard(anomalyColor(anomaly.getAnomalyScore()), title, value, null, 8));
+                        }
+                    }
+
+                    VBox suspiciousCard = sectionCard();
+                    suspiciousCard.getChildren().add(t("Suspicious Users (7 days)", boldFont(), FontWeight.BOLD, 18));
+                    if (suspiciousUsers.isEmpty()) {
+                        suspiciousCard.getChildren().add(buildRowCard("#34d399", "No suspicious users detected", "-", null, 8));
+                    } else {
+                        for (SuspiciousActivity suspicious : suspiciousUsers) {
+                            String title = "User #" + safe(suspicious.getUserId() == null ? null : String.valueOf(suspicious.getUserId()))
+                                + " • " + safe(suspicious.getUserEmail());
+                            String severity = suspicious.getRiskScore() == null ? "SAFE" : safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
+                            double riskScore = suspicious.getRiskScore() == null ? 0.0 : suspicious.getRiskScore().getOverallRiskScore();
+                            String value = severity + " • risk " + formatScore(riskScore) + " • failures " + suspicious.getFailureCount();
+                            suspiciousCard.getChildren().add(buildRowCard(severityColor(severity), title, value, null, 8));
+                        }
+                    }
+
+                    VBox featureCard = sectionCard();
+                    featureCard.getChildren().add(t("Feature Usage (Top)", boldFont(), FontWeight.BOLD, 18));
+                    if (featureUsage.isEmpty()) {
+                        featureCard.getChildren().add(buildRowCard("#60a5fa", "No feature usage data", "-", null, 8));
+                    } else {
+                        int index = 1;
+                        for (Map<String, Object> row : featureUsage) {
+                            String feature = safe(row.get("feature") == null ? null : String.valueOf(row.get("feature")));
+                            String count = safe(row.get("count") == null ? null : String.valueOf(row.get("count"))) + " events";
+                            featureCard.getChildren().add(buildRowCard(index <= 2 ? "#a78bfa" : "#34d399", feature, count, String.valueOf(index), 10));
+                            index++;
+                        }
+                    }
+
+                    VBox noteCard = sectionCard();
+                    String noteText = "\u2022 High anomalies (>=0.80): " + highAnomalies
+                        + "\n\u2022 Data source: AnalyticsController (anomalies, suspicious users, feature usage)"
+                        + "\n\u2022 Recommendation: review HIGH/CRITICAL users and correlated timelines.";
+                    Text note = t(noteText, lightFont(), FontWeight.NORMAL, 13);
+                    note.setFill(textMutedColor());
+                    noteCard.getChildren().addAll(t("AI Security Notes", boldFont(), FontWeight.BOLD, 16), note);
+
+                    HBox upper = new HBox(16, anomaliesCard, suspiciousCard);
+                    HBox.setHgrow(anomaliesCard, Priority.ALWAYS);
+                    HBox.setHgrow(suspiciousCard, Priority.ALWAYS);
+
+                    HBox lower = new HBox(16, featureCard, noteCard);
+                    HBox.setHgrow(featureCard, Priority.ALWAYS);
+                    HBox.setHgrow(noteCard, Priority.ALWAYS);
+
+                    wrap.getChildren().addAll(cards, upper, lower);
+
+                    // Honeypot: A hidden button that looks like a critical system reset
+                    Button honeypot = new Button("System Reset All Logs");
+                    honeypot.setOpacity(0.01); // Almost invisible to humans
+                    honeypot.setPrefSize(1, 1); // Tiny but clickable by bots
+                    honeypot.setOnAction(_ -> activityLogController.logHoneypotClick("security_ai_reset_bait", java.util.Map.of()));
+                    wrap.getChildren().add(honeypot);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        }
-
-        for (SuspiciousActivity suspicious : suspiciousUsers) {
-            if (suspicious.getRiskScore() != null) {
-                double risk = suspicious.getRiskScore().getOverallRiskScore();
-                peakRisk = Math.max(peakRisk, risk);
-                String severity = safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
-                if ("CRITICAL".equalsIgnoreCase(severity) || "HIGH".equalsIgnoreCase(severity)) {
-                    criticalUsers++;
-                }
-            }
-        }
-
-        HBox cards = new HBox(16);
-        addStatCards(
-            cards,
-            new String[]{"ANM", "SUS", "RISK", "FEAT"},
-            new String[]{"Recent Anomalies", "High-Risk Users", "Peak Risk Score", "Tracked Features"},
-            new String[]{
-                String.valueOf(anomalies.size()),
-                String.valueOf(criticalUsers),
-                formatScore(peakRisk),
-                String.valueOf(featureUsage.size())
-            },
-            new String[]{"#ef4444", "#f59e0b", "#a78bfa", "#34d399"}
-        );
-
-        VBox anomaliesCard = sectionCard();
-        anomaliesCard.getChildren().add(t("Recent LogAI Anomalies", boldFont(), FontWeight.BOLD, 18));
-        if (anomalies.isEmpty()) {
-            anomaliesCard.getChildren().add(buildRowCard("#60a5fa", "No anomaly records yet", "-", null, 8));
-        } else {
-            for (AnomalyResult anomaly : anomalies) {
-                String userText = anomaly.getUserDisplayName() == null ? "anonymous" : anomaly.getUserDisplayName();
-                String title = safeDefault(anomaly.getEventType(), "UNKNOWN_EVENT") + " - " + userText;
-                String value = safeDefault(anomaly.getAnomalyLabel(), "ANOMALY") + " • score " + formatScore(anomaly.getAnomalyScore());
-                anomaliesCard.getChildren().add(buildRowCard(anomalyColor(anomaly.getAnomalyScore()), title, value, null, 8));
-            }
-        }
-
-        VBox suspiciousCard = sectionCard();
-        suspiciousCard.getChildren().add(t("Suspicious Users (7 days)", boldFont(), FontWeight.BOLD, 18));
-        if (suspiciousUsers.isEmpty()) {
-            suspiciousCard.getChildren().add(buildRowCard("#34d399", "No suspicious users detected", "-", null, 8));
-        } else {
-            for (SuspiciousActivity suspicious : suspiciousUsers) {
-                String title = "User #" + safe(suspicious.getUserId() == null ? null : String.valueOf(suspicious.getUserId()))
-                    + " • " + safe(suspicious.getUserEmail());
-                String severity = suspicious.getRiskScore() == null ? "SAFE" : safeDefault(suspicious.getRiskScore().getSeverity(), "SAFE");
-                double riskScore = suspicious.getRiskScore() == null ? 0.0 : suspicious.getRiskScore().getOverallRiskScore();
-                String value = severity + " • risk " + formatScore(riskScore) + " • failures " + suspicious.getFailureCount();
-                suspiciousCard.getChildren().add(buildRowCard(severityColor(severity), title, value, null, 8));
-            }
-        }
-
-        VBox featureCard = sectionCard();
-        featureCard.getChildren().add(t("Feature Usage (Top)", boldFont(), FontWeight.BOLD, 18));
-        if (featureUsage.isEmpty()) {
-            featureCard.getChildren().add(buildRowCard("#60a5fa", "No feature usage data", "-", null, 8));
-        } else {
-            int index = 1;
-            for (Map<String, Object> row : featureUsage) {
-                String feature = safe(row.get("feature") == null ? null : String.valueOf(row.get("feature")));
-                String count = safe(row.get("count") == null ? null : String.valueOf(row.get("count"))) + " events";
-                featureCard.getChildren().add(buildRowCard(index <= 2 ? "#a78bfa" : "#34d399", feature, count, String.valueOf(index), 10));
-                index++;
-            }
-        }
-
-        VBox noteCard = sectionCard();
-        String noteText = "\u2022 High anomalies (>=0.80): " + highAnomalies
-            + "\n\u2022 Data source: AnalyticsController (anomalies, suspicious users, feature usage)"
-            + "\n\u2022 Recommendation: review HIGH/CRITICAL users and correlated timelines.";
-        Text note = t(noteText, lightFont(), FontWeight.NORMAL, 13);
-        note.setFill(textMutedColor());
-        noteCard.getChildren().addAll(t("AI Security Notes", boldFont(), FontWeight.BOLD, 16), note);
-
-        HBox upper = new HBox(16, anomaliesCard, suspiciousCard);
-        HBox.setHgrow(anomaliesCard, Priority.ALWAYS);
-        HBox.setHgrow(suspiciousCard, Priority.ALWAYS);
-
-        HBox lower = new HBox(16, featureCard, noteCard);
-        HBox.setHgrow(featureCard, Priority.ALWAYS);
-        HBox.setHgrow(noteCard, Priority.ALWAYS);
-
-        wrap.getChildren().addAll(cards, upper, lower);
-
-        // Honeypot: A hidden button that looks like a critical system reset
-        Button honeypot = new Button("System Reset All Logs");
-        honeypot.setOpacity(0.01); // Almost invisible to humans
-        honeypot.setPrefSize(1, 1); // Tiny but clickable by bots
-        honeypot.setOnAction(_ -> activityLogController.logHoneypotClick("security_ai_reset_bait", java.util.Map.of()));
-        wrap.getChildren().add(honeypot);
+        });
 
         return wrap;
     }
@@ -775,97 +799,129 @@ public class DashboardView implements ViewInterface {
         VBox wrap = new VBox(16);
         wrap.setFillWidth(true);
 
-        Map<String, Integer> stats = dashboardAdminService.activityHeartbeat();
-        HBox cards = new HBox(16);
-        addStatCards(cards,
-            new String[]{"USR", "ACT", "CLK", "WKY"},
-            new String[]{"Active Today", "Interactions Today", "Page Views", "Weekly Activity"},
-            new String[]{
-                String.valueOf(stats.getOrDefault("active_today", 0)),
-                String.valueOf(stats.getOrDefault("interactions_today", 0)),
-                String.valueOf(stats.getOrDefault("page_views", 0)),
-                String.valueOf(stats.getOrDefault("active_week", 0))
-            },
-            new String[]{"#60a5fa", "#34d399", "#a78bfa", "#fbbf24"}
-        );
+        Label loadingLabel = new Label("Loading activity overview...");
+        loadingLabel.setTextFill(textMutedColor());
+        wrap.getChildren().add(loadingLabel);
 
-        HBox grid = new HBox(16);
-        VBox chart = buildActivityChart();
-        HBox.setHgrow(chart, Priority.ALWAYS);
-        VBox topUsers = buildTopUsers();
-        topUsers.setPrefWidth(300);
-        topUsers.setMinWidth(300);
-        topUsers.setMaxWidth(300);
-        grid.getChildren().addAll(chart, topUsers);
+        Thread.startVirtualThread(() -> {
+            try {
+                Map<String, Integer> stats = dashboardAdminService.activityHeartbeat();
+                javafx.application.Platform.runLater(() -> {
+                    wrap.getChildren().clear();
 
-        wrap.getChildren().addAll(cards, grid);
+                    HBox cards = new HBox(16);
+                    addStatCards(cards,
+                        new String[]{"USR", "ACT", "CLK", "WKY"},
+                        new String[]{"Active Today", "Interactions Today", "Page Views", "Weekly Activity"},
+                        new String[]{
+                            String.valueOf(stats.getOrDefault("active_today", 0)),
+                            String.valueOf(stats.getOrDefault("interactions_today", 0)),
+                            String.valueOf(stats.getOrDefault("page_views", 0)),
+                            String.valueOf(stats.getOrDefault("active_week", 0))
+                        },
+                        new String[]{"#60a5fa", "#34d399", "#a78bfa", "#fbbf24"}
+                    );
+
+                    HBox grid = new HBox(16);
+                    VBox chart = buildActivityChart();
+                    HBox.setHgrow(chart, Priority.ALWAYS);
+                    VBox topUsers = buildTopUsers();
+                    topUsers.setPrefWidth(300);
+                    topUsers.setMinWidth(300);
+                    topUsers.setMaxWidth(300);
+                    grid.getChildren().addAll(chart, topUsers);
+
+                    wrap.getChildren().addAll(cards, grid);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         return wrap;
     }
 
     private VBox activityTimelinePane() {
-        List<com.syndicati.models.log.AppEventLog> logs = dashboardAdminService.recentActivityLogs(200);
-        List<String[]> rows = new ArrayList<>();
-
-        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("MMM dd HH:mm");
-        for (com.syndicati.models.log.AppEventLog log : logs) {
-            String subject = safe(log.getEntityType());
-            String event = safe(log.getEventType());
-            String level = safeDefault(log.getLevel(), "INFO");
-            String outcome = safeDefault(log.getOutcome(), "UNKNOWN");
-            String actor = log.getUser() == null ? "Anonymous" : (safe(log.getUser().getFirstName()) + " " + safe(log.getUser().getLastName())).trim();
-            String metadata = shortMetadata(log.getMetadataJson());
-            String when = log.getEventTimestamp() != null
-                ? log.getEventTimestamp().format(dateFmt)
-                : (log.getCreatedAt() == null ? "-" : log.getCreatedAt().format(dateFmt));
-            String trace = blankOrDash(log.getTraceId());
-            String session = blankOrDash(log.getSessionId());
-            String risk = log.getRiskScore() == null ? "-" : log.getRiskScore().toPlainString();
-            String duration = log.getDurationMs() == null ? "-" : log.getDurationMs() + " ms";
-            rows.add(new String[]{event, level, outcome, subject, actor, trace, session, risk, duration, metadata, when});
-        }
-
-        DashboardTableQueryEngine.QueryState state = new DashboardTableQueryEngine.QueryState(12);
-        TextField searchField = activitySearchField("Search logs by event, entity, user or metadata...");
-        Button sortPill = pillAction("Order: A-Z", false);
-        HBox filterRow = new HBox(6);
-        filterRow.setAlignment(Pos.CENTER_LEFT);
-        HBox headerControls = new HBox(8, searchField, sortPill, filterRow);
-        headerControls.setAlignment(Pos.CENTER_LEFT);
-        VBox tableHost = new VBox();
-
-        String[][] filters = new String[][]{
-            {"PAGE_VIEW", "Page View"},
-            {"UI_CLICK", "UI Click"},
-            {"FAILURE", "Failure"},
-            {"ERROR", "Error"},
-            {"all", "All"}
-        };
-        for (String[] filter : filters) {
-            String key = filter[0];
-            Button button = pillAction(filter[1], false);
-            button.setOnAction(e -> {
-                state.filterKey = key.equals(state.filterKey) ? "all" : key;
-                state.page = 1;
-                renderActivityTable(rows, state, tableHost, headerControls);
-            });
-            filterRow.getChildren().add(button);
-        }
-
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
-            state.searchTerm = newVal == null ? "" : newVal;
-            state.page = 1;
-            renderActivityTable(rows, state, tableHost, headerControls);
-        });
-
-        sortPill.setOnAction(e -> {
-            state.ascending = !state.ascending;
-            renderActivityTable(rows, state, tableHost, headerControls);
-        });
-
-        renderActivityTable(rows, state, tableHost, headerControls);
-
-        VBox wrap = new VBox(14, headerControls, tableHost);
+        VBox wrap = new VBox(14);
         wrap.setFillWidth(true);
+
+        Label loadingLabel = new Label("Loading timeline logs...");
+        loadingLabel.setTextFill(textMutedColor());
+        wrap.getChildren().add(loadingLabel);
+
+        Thread.startVirtualThread(() -> {
+            try {
+                List<com.syndicati.models.log.AppEventLog> logs = dashboardAdminService.recentActivityLogs(200);
+
+                javafx.application.Platform.runLater(() -> {
+                    wrap.getChildren().clear();
+                    List<String[]> rows = new ArrayList<>();
+
+                    DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("MMM dd HH:mm");
+                    for (com.syndicati.models.log.AppEventLog log : logs) {
+                        String subject = safe(log.getEntityType());
+                        String event = safe(log.getEventType());
+                        String level = safeDefault(log.getLevel(), "INFO");
+                        String outcome = safeDefault(log.getOutcome(), "UNKNOWN");
+                        String actor = log.getUser() == null ? "Anonymous" : (safe(log.getUser().getFirstName()) + " " + safe(log.getUser().getLastName())).trim();
+                        String metadata = shortMetadata(log.getMetadataJson());
+                        String when = log.getEventTimestamp() != null
+                            ? log.getEventTimestamp().format(dateFmt)
+                            : (log.getCreatedAt() == null ? "-" : log.getCreatedAt().format(dateFmt));
+                        String trace = blankOrDash(log.getTraceId());
+                        String session = blankOrDash(log.getSessionId());
+                        String risk = log.getRiskScore() == null ? "-" : log.getRiskScore().toPlainString();
+                        String duration = log.getDurationMs() == null ? "-" : log.getDurationMs() + " ms";
+                        rows.add(new String[]{event, level, outcome, subject, actor, trace, session, risk, duration, metadata, when});
+                    }
+
+                    DashboardTableQueryEngine.QueryState state = new DashboardTableQueryEngine.QueryState(12);
+                    TextField searchField = activitySearchField("Search logs by event, entity, user or metadata...");
+                    Button sortPill = pillAction("Order: A-Z", false);
+                    HBox filterRow = new HBox(6);
+                    filterRow.setAlignment(Pos.CENTER_LEFT);
+                    HBox headerControls = new HBox(8, searchField, sortPill, filterRow);
+                    headerControls.setAlignment(Pos.CENTER_LEFT);
+                    VBox tableHost = new VBox();
+
+                    String[][] filters = new String[][]{
+                        {"PAGE_VIEW", "Page View"},
+                        {"UI_CLICK", "UI Click"},
+                        {"FAILURE", "Failure"},
+                        {"ERROR", "Error"},
+                        {"all", "All"}
+                    };
+                    for (String[] filter : filters) {
+                        String key = filter[0];
+                        Button button = pillAction(filter[1], false);
+                        button.setOnAction(e -> {
+                            state.filterKey = key.equals(state.filterKey) ? "all" : key;
+                            state.page = 1;
+                            renderActivityTable(rows, state, tableHost, headerControls);
+                        });
+                        filterRow.getChildren().add(button);
+                    }
+
+                    searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+                        state.searchTerm = newVal == null ? "" : newVal;
+                        state.page = 1;
+                        renderActivityTable(rows, state, tableHost, headerControls);
+                    });
+
+                    sortPill.setOnAction(e -> {
+                        state.ascending = !state.ascending;
+                        renderActivityTable(rows, state, tableHost, headerControls);
+                    });
+
+                    renderActivityTable(rows, state, tableHost, headerControls);
+
+                    wrap.getChildren().addAll(headerControls, tableHost);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         return wrap;
     }
 
@@ -956,34 +1012,57 @@ public class DashboardView implements ViewInterface {
 
     private VBox activitySignalsPane() {
         VBox wrap = new VBox(16);
+        wrap.setFillWidth(true);
 
-        HBox rows = new HBox(16);
-        VBox pagesCard = activitySignalCard("Top Pages");
-        VBox clicksCard = activitySignalCard("Top Clicks");
-        VBox devicesCard = activitySignalCard("Device Breakdown");
+        Label loadingLabel = new Label("Loading signals...");
+        loadingLabel.setTextFill(textMutedColor());
+        wrap.getChildren().add(loadingLabel);
 
-        fillRankRows(pagesCard, dashboardAdminService.topPages(), true);
-        fillClickRows(clicksCard, dashboardAdminService.topClicks());
-        fillDeviceRows(devicesCard, dashboardAdminService.deviceBreakdown());
+        Thread.startVirtualThread(() -> {
+            try {
+                List<String[]> topPages = dashboardAdminService.topPages();
+                List<String[]> topClicks = dashboardAdminService.topClicks();
+                List<String[]> deviceBreakdown = dashboardAdminService.deviceBreakdown();
+                List<String[]> outcomeBreakdown = dashboardAdminService.outcomeBreakdown();
+                List<String[]> levelBreakdown = dashboardAdminService.levelBreakdown();
+                List<String[]> riskSignals = dashboardAdminService.riskSignals(5);
 
-        rows.getChildren().addAll(pagesCard, clicksCard, devicesCard);
-        HBox.setHgrow(pagesCard, Priority.ALWAYS);
-        HBox.setHgrow(clicksCard, Priority.ALWAYS);
-        HBox.setHgrow(devicesCard, Priority.ALWAYS);
+                javafx.application.Platform.runLater(() -> {
+                    wrap.getChildren().clear();
 
-        HBox advanced = new HBox(16);
-        VBox outcomesCard = activitySignalCard("Outcomes (30d)");
-        VBox levelsCard = activitySignalCard("Levels (30d)");
-        VBox riskCard = activitySignalCard("Risk Signals");
-        fillRankRows(outcomesCard, dashboardAdminService.outcomeBreakdown(), false);
-        fillRankRows(levelsCard, dashboardAdminService.levelBreakdown(), false);
-        fillRiskRows(riskCard, dashboardAdminService.riskSignals(5));
-        advanced.getChildren().addAll(outcomesCard, levelsCard, riskCard);
-        HBox.setHgrow(outcomesCard, Priority.ALWAYS);
-        HBox.setHgrow(levelsCard, Priority.ALWAYS);
-        HBox.setHgrow(riskCard, Priority.ALWAYS);
+                    HBox rows = new HBox(16);
+                    VBox pagesCard = activitySignalCard("Top Pages");
+                    VBox clicksCard = activitySignalCard("Top Clicks");
+                    VBox devicesCard = activitySignalCard("Device Breakdown");
 
-        wrap.getChildren().addAll(rows, advanced);
+                    fillRankRows(pagesCard, topPages, true);
+                    fillClickRows(clicksCard, topClicks);
+                    fillDeviceRows(devicesCard, deviceBreakdown);
+
+                    rows.getChildren().addAll(pagesCard, clicksCard, devicesCard);
+                    HBox.setHgrow(pagesCard, Priority.ALWAYS);
+                    HBox.setHgrow(clicksCard, Priority.ALWAYS);
+                    HBox.setHgrow(devicesCard, Priority.ALWAYS);
+
+                    HBox advanced = new HBox(16);
+                    VBox outcomesCard = activitySignalCard("Outcomes (30d)");
+                    VBox levelsCard = activitySignalCard("Levels (30d)");
+                    VBox riskCard = activitySignalCard("Risk Signals");
+                    fillRankRows(outcomesCard, outcomeBreakdown, false);
+                    fillRankRows(levelsCard, levelBreakdown, false);
+                    fillRiskRows(riskCard, riskSignals);
+                    advanced.getChildren().addAll(outcomesCard, levelsCard, riskCard);
+                    HBox.setHgrow(outcomesCard, Priority.ALWAYS);
+                    HBox.setHgrow(levelsCard, Priority.ALWAYS);
+                    HBox.setHgrow(riskCard, Priority.ALWAYS);
+
+                    wrap.getChildren().addAll(rows, advanced);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
         return wrap;
     }
 
@@ -1862,8 +1941,15 @@ public class DashboardView implements ViewInterface {
             case "Maintenance":
                 s.viewTitle = "Maintenance Details";
                 s.viewSubtitle = "Full analysis & conditions";
+                s.editTitle = "Edit Maintenance";
+                s.editSubtitle = "Update conditions and recommendations";
+                s.addTitle = "Add Maintenance";
+                s.addSubtitle = "Create a new maintenance record";
                 s.cancelLabel = "Back to List";
-                s.viewDeleteLabel = null;
+                s.saveEditLabel = "Update Maintenance";
+                s.saveAddLabel = "Create Maintenance";
+                s.addButtonLabel = "Add Maintenance";
+                s.viewDeleteLabel = "Delete";
                 break;
             case "Evenements":
                 s.viewTitle = "Event Details";

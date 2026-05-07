@@ -140,6 +140,28 @@ public class ReactionRepository {
         });
     }
 
+    public List<Reaction> findByComment(Integer commentId) {
+        if (!isValidId(commentId)) {
+            return List.of();
+        }
+
+        String sql = "SELECT * FROM reaction WHERE commentaire_id = ?";
+        return selectMany(sql, ps -> {
+            ps.setInt(1, commentId);
+        });
+    }
+
+    public List<Reaction> findByPublication(Integer publicationId) {
+        if (!isValidId(publicationId)) {
+            return List.of();
+        }
+
+        String sql = "SELECT * FROM reaction WHERE publication_id = ?";
+        return selectMany(sql, ps -> {
+            ps.setInt(1, publicationId);
+        });
+    }
+
     public List<Reaction> findByUserAndPublicationAndKinds(Integer userId, Integer publicationId, List<String> kinds) {
         if (!isValidId(userId) || !isValidId(publicationId) || kinds == null || kinds.isEmpty()) {
             return List.of();

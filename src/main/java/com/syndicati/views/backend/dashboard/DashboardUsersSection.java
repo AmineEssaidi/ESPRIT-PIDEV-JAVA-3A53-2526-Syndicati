@@ -29,9 +29,10 @@ final class DashboardUsersSection {
         return view.moduleModeView(
             "Users",
             "\uD83D\uDC65",
-            new String[]{"Users", "Profile", "Onboarding"},
+            new String[]{"Users", "Profile", "Onboarding", "User Bans"},
             key -> "Profile".equals(key) ? usersProfilePane(view) :
                    "Onboarding".equals(key) ? usersOnboardingPane(view) :
+                   "User Bans".equals(key) ? usersBansPane(view) :
                    usersTablePane(view)
         );
     }
@@ -600,5 +601,170 @@ final class DashboardUsersSection {
         styleQueryPill(view, sortPill, queryState.ascending);
         String filterLabel = scope.isEmpty() ? "Step" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
         sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
+    }
+
+    private static VBox usersBansPane(DashboardView view) {
+        VBox wrap = new VBox(14);
+        List<User> allUsers = view.dashboardAdminService().users();
+
+        int totalBans = 0;
+        int recentBans = 0;
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        for (User u : allUsers) {
+            if (u.isDisabled()) {
+                totalBans++;
+                if (u.getDisabledAt() != null && u.getDisabledAt().isAfter(sevenDaysAgo)) {
+                    recentBans++;
+                }
+            }
+        }
+
+        HBox stats = new HBox(16);
+        stats.setFillHeight(true);
+        view.addStatCards(stats,
+            new String[]{"BAN", "REC", "TOT", "ACT"},
+            new String[]{"Total Bans", "Recent Bans", "Total Users", "Active Users"},
+            new String[]{String.valueOf(totalBans), String.valueOf(recentBans), String.valueOf(allUsers.size()), String.valueOf(allUsers.size() - totalBans)},
+            new String[]{"#ef4444", "#f97316", "#fbbf24", "#3b82f6"}
+        );
+
+        TextField searchField = new TextField();
+        searchField.setPromptText("Search users by name, email, or reason...");
+        searchField.setPrefWidth(300);
+        searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
+        searchField.setStyle(
+            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
+            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
+            "-fx-border-width:1;" +
+            "-fx-border-radius:10px;" +
+            "-fx-background-radius:10px;" +
+            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
+            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
+        );
+
+        HBox headerControls = new HBox(8, searchField);
+        headerControls.setAlignment(Pos.CENTER_LEFT);
+
+        VBox listHost = new VBox(8);
+        javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(listHost);
+        scroll.setFitToWidth(true);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        scroll.setPrefHeight(600);
+
+        Runnable renderList = () -> {
+            listHost.getChildren().clear();
+            String term = searchField.getText() == null ? "" : searchField.getText().toLowerCase();
+
+            for (User u : allUsers) {
+                String fullName = ((u.getFirstName() == null ? "" : u.getFirstName()) + " " + (u.getLastName() == null ? "" : u.getLastName())).trim();
+                String email = u.getEmailUser() == null ? "" : u.getEmailUser();
+                String reason = u.getDisabledReason() == null ? "" : u.getDisabledReason();
+
+                if (!term.isEmpty() && !fullName.toLowerCase().contains(term) && !email.toLowerCase().contains(term) && !reason.toLowerCase().contains(term)) {
+                    continue;
+                }
+
+                VBox cardWrap = new VBox(0);
+                cardWrap.setStyle(
+                    "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.03)" : "rgba(15,23,42,0.02)") + ";" +
+                    "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)") + ";" +
+                    "-fx-border-width:1; -fx-border-radius:10px; -fx-background-radius:10px;"
+                );
+
+                HBox mainRow = new HBox(16);
+                mainRow.setAlignment(Pos.CENTER_LEFT);
+                mainRow.setPadding(new javafx.geometry.Insets(12, 16, 12, 16));
+
+                VBox infoBox = new VBox(4);
+                Text nameText = new Text(fullName.isEmpty() ? "User #" + u.getIdUser() : fullName);
+                nameText.setFont(Font.font(view.boldFont(), FontWeight.BOLD, 14));
+                nameText.setFill(Color.web(view.isDark() ? "white" : "#111827"));
+                
+                Text emailText = new Text(email);
+                emailText.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
+                emailText.setFill(Color.web(view.isDark() ? "rgba(255,255,255,0.6)" : "rgba(15,23,42,0.6)"));
+                infoBox.getChildren().addAll(nameText, emailText);
+
+                javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
+                HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
+
+                Text statusPill = new Text(u.isDisabled() ? "BANNED" : "ACTIVE");
+                statusPill.setFont(Font.font(view.boldFont(), FontWeight.BOLD, 10));
+                statusPill.setFill(Color.web(u.isDisabled() ? "#ef4444" : "#10b981"));
+                
+                Button toggleBtn = new Button(u.isDisabled() ? "Unban User" : "Ban User");
+                toggleBtn.setStyle(
+                    "-fx-background-color:" + (u.isDisabled() ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)") + ";" +
+                    "-fx-text-fill:" + (u.isDisabled() ? "#10b981" : "#ef4444") + ";" +
+                    "-fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;"
+                );
+
+                mainRow.getChildren().addAll(infoBox, spacer, statusPill, toggleBtn);
+
+                VBox morphBox = new VBox(10);
+                morphBox.setPadding(new javafx.geometry.Insets(0, 16, 16, 16));
+                morphBox.setManaged(false);
+                morphBox.setVisible(false);
+
+                TextField reasonField = new TextField();
+                reasonField.setPromptText("Enter ban reason...");
+                reasonField.setStyle(searchField.getStyle());
+
+                Button saveBanBtn = new Button("Confirm Ban");
+                saveBanBtn.setStyle("-fx-background-color:#ef4444; -fx-text-fill:white; -fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;");
+
+                morphBox.getChildren().addAll(reasonField, saveBanBtn);
+
+                toggleBtn.setOnAction(e -> {
+                    if (u.isDisabled()) {
+                        // Unban immediately
+                        if (view.dashboardAdminService().revokeBan(u.getIdUser())) {
+                            u.setDisabled(false);
+                            u.setDisabledReason(null);
+                            u.setDisabledAt(null);
+                            statusPill.setText("ACTIVE");
+                            statusPill.setFill(Color.web("#10b981"));
+                            toggleBtn.setText("Ban User");
+                            toggleBtn.setStyle("-fx-background-color:rgba(239,68,68,0.1); -fx-text-fill:#ef4444; -fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;");
+                            morphBox.setManaged(false);
+                            morphBox.setVisible(false);
+                        }
+                    } else {
+                        // Toggle morph box
+                        boolean isShowing = morphBox.isVisible();
+                        morphBox.setVisible(!isShowing);
+                        morphBox.setManaged(!isShowing);
+                        if (!isShowing) reasonField.requestFocus();
+                    }
+                });
+
+                saveBanBtn.setOnAction(e -> {
+                    String r = reasonField.getText();
+                    if (view.dashboardAdminService().applyBan(u.getIdUser(), r)) {
+                        u.setDisabled(true);
+                        // We keep the local reason clean without the tag for the admin's view
+                        u.setDisabledReason(r == null || r.isBlank() ? "Violation of terms of service." : r);
+                        u.setDisabledAt(LocalDateTime.now());
+                        statusPill.setText("BANNED");
+                        statusPill.setFill(Color.web("#ef4444"));
+                        toggleBtn.setText("Unban User");
+                        toggleBtn.setStyle("-fx-background-color:rgba(16,185,129,0.1); -fx-text-fill:#10b981; -fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;");
+                        morphBox.setManaged(false);
+                        morphBox.setVisible(false);
+                        reasonField.clear();
+                    }
+                });
+
+                cardWrap.getChildren().addAll(mainRow, morphBox);
+                listHost.getChildren().add(cardWrap);
+            }
+        };
+
+        searchField.textProperty().addListener((obs, oldV, newV) -> renderList.run());
+        renderList.run();
+
+        VBox contentBox = new VBox(16, headerControls, scroll);
+        wrap.getChildren().addAll(stats, contentBox);
+        return wrap;
     }
 }

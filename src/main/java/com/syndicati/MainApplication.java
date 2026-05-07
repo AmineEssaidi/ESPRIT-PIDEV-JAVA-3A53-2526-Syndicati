@@ -32,6 +32,7 @@ import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.controllers.forum.PublicationController;
 import com.syndicati.controllers.evenement.EvenementController;
+import com.syndicati.services.forum.SentimentAnalysisService;
 
 /**
  * Main JavaFX Application - Syndicati desktop client
@@ -67,6 +68,7 @@ public class MainApplication extends Application {
         primaryStage.setTitle("Syndicati");
         primaryStage.initStyle(StageStyle.TRANSPARENT);
         primaryStage.setResizable(true);
+        primaryStage.getIcons().add(new javafx.scene.image.Image(getClass().getResourceAsStream("/app_logo/syndicati.png"), 256, 256, true, true));
         primaryStage.setMinWidth(1500);
         primaryStage.setMinHeight(800);
 
@@ -244,6 +246,7 @@ public class MainApplication extends Application {
                 InsightFaceService.getInstance().initialize();
                 DiscordRPCService.getInstance().initialize();
                 MessagingSocketServer.getInstance().start();
+                SentimentAnalysisService.startMicroservice();
                 
                 activityLogController.logPageView("app_startup", "Application Startup", java.util.Map.of(
                     "source", "main_application",
@@ -258,6 +261,7 @@ public class MainApplication extends Application {
         Runtime.getRuntime().addShutdownHook(Thread.ofPlatform().unstarted(() -> {
             LogAIWorkerService.getInstance().stopWorker();
             com.syndicati.services.ai.AgentService.shutdown();
+            SentimentAnalysisService.stopMicroservice();
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
             com.syndicati.services.DatabaseService.getInstance().shutdown();
@@ -284,6 +288,7 @@ public class MainApplication extends Application {
                 
                 LogAIWorkerService.getInstance().stopWorker();
                 com.syndicati.services.ai.AgentService.getInstance().stopPythonWorker();
+                SentimentAnalysisService.stopMicroservice();
                 com.syndicati.services.mail.AsyncMailerService.shutdown();
                 
                 com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();

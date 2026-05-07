@@ -11,6 +11,8 @@ import com.syndicati.controllers.forum.CommentaireController;
 import com.syndicati.controllers.forum.ReactionController;
 import com.syndicati.controllers.evenement.EvenementController;
 import com.syndicati.controllers.evenement.ParticipationController;
+import com.syndicati.controllers.residence.MaintenanceController;
+import com.syndicati.controllers.residence.ResidenceController;
 import com.syndicati.models.log.AppEventLog;
 import com.syndicati.models.log.data.AppEventLogRepository;
 import com.syndicati.models.user.Onboarding;
@@ -21,6 +23,9 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Reaction;
 import com.syndicati.models.evenement.Evenement;
 import com.syndicati.models.evenement.Participation;
+import com.syndicati.models.residence.Apartment;
+import com.syndicati.models.residence.Maintenance;
+import com.syndicati.models.residence.Residence;
 import com.syndicati.services.DatabaseService;
 import com.syndicati.utils.session.SessionManager;
 import javafx.scene.Node;
@@ -56,6 +61,8 @@ public class DashboardAdminService {
     private final ReactionController reactionController;
     private final EvenementController evenementController;
     private final ParticipationController participationController;
+    private final ResidenceController residenceController;
+    private final MaintenanceController maintenanceController;
     private final AppEventLogRepository appEventLogRepository;
     private final DatabaseService databaseService;
 
@@ -69,6 +76,8 @@ public class DashboardAdminService {
         this.reactionController = new ReactionController();
         this.evenementController = new EvenementController();
         this.participationController = new ParticipationController();
+        this.residenceController = new ResidenceController();
+        this.maintenanceController = new MaintenanceController();
         this.appEventLogRepository = new AppEventLogRepository();
         this.databaseService = DatabaseService.getInstance();
     }
@@ -354,6 +363,9 @@ public class DashboardAdminService {
         if ("User".equalsIgnoreCase(entityLabel)) {
             return saveUser(mode, originalRowData, fields);
         }
+        if ("User Ban".equalsIgnoreCase(entityLabel)) {
+            return saveUserBan(mode, originalRowData, fields);
+        }
         if ("Profile".equalsIgnoreCase(entityLabel)) {
             return saveProfile(mode, originalRowData, fields);
         }
@@ -375,12 +387,24 @@ public class DashboardAdminService {
         if ("Event".equalsIgnoreCase(entityLabel)) {
             return saveEvenement(mode, originalRowData, fields);
         }
+        if ("Residence".equalsIgnoreCase(entityLabel)) {
+            return saveResidence(mode, originalRowData, fields);
+        }
+        if ("Appartement".equalsIgnoreCase(entityLabel)) {
+            return saveAppartement(mode, originalRowData, fields);
+        }
+        if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
+            return saveMaintenanceTicket(mode, originalRowData, fields);
+        }
         return false;
     }
 
     public boolean deleteEntity(String entityLabel, String[] rowData) {
         if ("User".equalsIgnoreCase(entityLabel)) {
             return deleteUser(rowData);
+        }
+        if ("User Ban".equalsIgnoreCase(entityLabel)) {
+            return unbanUser(rowData);
         }
         if ("Profile".equalsIgnoreCase(entityLabel)) {
             return deleteProfile(rowData);
@@ -399,6 +423,15 @@ public class DashboardAdminService {
         }
         if ("Event".equalsIgnoreCase(entityLabel)) {
             return deleteEvenement(rowData);
+        }
+        if ("Residence".equalsIgnoreCase(entityLabel)) {
+            return deleteResidence(rowData);
+        }
+        if ("Appartement".equalsIgnoreCase(entityLabel)) {
+            return deleteAppartement(rowData);
+        }
+        if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
+            return deleteMaintenanceTicket(rowData);
         }
         return false;
     }
@@ -447,7 +480,17 @@ public class DashboardAdminService {
             existing.setEmailUser(email);
             existing.setRoleUser(role);
             existing.setVerified(verified);
+            
+            boolean oldDisabled = existing.isDisabled();
             existing.setDisabled(disabled);
+            if (disabled && !oldDisabled) {
+                existing.setDisabledAt(LocalDateTime.now());
+                existing.setDisabledReason(null);
+            } else if (!disabled && oldDisabled) {
+                existing.setDisabledAt(null);
+                existing.setDisabledReason(null);
+            }
+            
             if (existing.getPasswordUser() == null || existing.getPasswordUser().isBlank()) {
                 existing.setPasswordUser("ChangeMe#2026");
             }
@@ -456,6 +499,98 @@ public class DashboardAdminService {
 
         return false;
     }
+
+    private boolean saveUserBan(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        String email = safe(values.get("Email"));
+        String reason = safe(values.get("Ban Reason"));
+        String statusText = safe(values.get("Status"));
+
+        if ("-".equals(email)) {
+            return false;
+        }
+
+        if ("edit".equals(mode)) {
+            String oldEmail = (originalRowData != null && originalRowData.length > 1) ? originalRowData[1] : email;
+            Optional<User> existingOpt = userController.userByEmail(oldEmail);
+            if (existingOpt.isEmpty()) {
+                existingOpt = userController.userByEmail(email);
+            }
+            if (existingOpt.isEmpty()) {
+                return false;
+            }
+
+            User existing = existingOpt.get();
+            boolean disabled = "DISABLED".equalsIgnoreCase(statusText);
+
+            if (disabled) {
+                existing.setDisabled(true);
+                existing.setDisabledReason("-".equals(reason) ? null : reason);
+                if (existing.getDisabledAt() == null) {
+                    existing.setDisabledAt(LocalDateTime.now());
+                }
+            } else {
+                existing.setDisabled(false);
+                existing.setDisabledReason(null);
+                existing.setDisabledAt(null);
+            }
+
+            return userController.userEdit(existing);
+        }
+
+        return false;
+    }
+
+    private boolean unbanUser(String[] rowData) {
+        if (rowData == null || rowData.length < 2) {
+            return false;
+        }
+        String email = rowData[1];
+        Optional<User> existing = userController.userByEmail(email);
+        if (existing.isPresent()) {
+            User user = existing.get();
+            return revokeBan(user.getIdUser());
+        }
+        return false;
+    }
+
+    public boolean applyBan(int userId, String reason) {
+        Optional<User> userOpt = userController.userById(userId);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            user.setDisabled(true);
+            
+            User currentUser = com.syndicati.utils.session.SessionManager.getInstance().getCurrentUser();
+            String adminEmail = currentUser != null ? currentUser.getEmailUser() : "admin@syndicati.tn";
+            
+            String cleanReason = reason == null || reason.isBlank() ? "Violation of terms of service." : reason;
+            if (cleanReason.contains(" [Banned by: ")) {
+                cleanReason = cleanReason.substring(0, cleanReason.indexOf(" [Banned by: ")).trim();
+            }
+            
+            String finalReason = cleanReason + " [Banned by: " + adminEmail + "]";
+            
+            user.setDisabledReason(finalReason);
+            if (user.getDisabledAt() == null) {
+                user.setDisabledAt(LocalDateTime.now());
+            }
+            return userController.userEdit(user);
+        }
+        return false;
+    }
+
+    public boolean revokeBan(int userId) {
+        Optional<User> userOpt = userController.userById(userId);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            user.setDisabled(false);
+            user.setDisabledReason(null);
+            user.setDisabledAt(null);
+            return userController.userEdit(user);
+        }
+        return false;
+    }
+
 
     private String normalizeUserRoleForPersistence(String rawRole) {
         if (rawRole == null || rawRole.isBlank() || "-".equals(rawRole.trim())) {
@@ -1022,6 +1157,178 @@ public class DashboardAdminService {
         return evenementController.evenementDelete(targetOpt.get().getIdEvent());
     }
 
+    private boolean saveResidence(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+        String name = safe(values.get("Residence"));
+        String address = safe(values.get("Address"));
+        Integer units = parseIntOrNull(values.get("Units"), null);
+        Integer floors = parseIntOrNull(values.get("Floors"), null);
+        String blocks = safe(values.get("Blocks"));
+
+        if ("-".equals(name) || "-".equals(address)) {
+            return false;
+        }
+
+        if ("add".equals(mode)) {
+            Integer createdId = residenceController.residenceCreate(
+                name,
+                address,
+                null,
+                units,
+                floors,
+                "-".equals(blocks) ? null : blocks
+            );
+            return createdId != null && createdId > 0;
+        }
+
+        if ("edit".equals(mode)) {
+            Integer id = rowId(originalRowData);
+            if (id == null) {
+                return false;
+            }
+            return residenceController.residenceUpdate(
+                id,
+                name,
+                address,
+                null,
+                units,
+                floors,
+                "-".equals(blocks) ? null : blocks
+            );
+        }
+
+        return false;
+    }
+
+    private boolean deleteResidence(String[] rowData) {
+        Integer id = rowId(rowData);
+        if (id == null) {
+            return false;
+        }
+        return residenceController.residenceDelete(id);
+    }
+
+    private boolean saveAppartement(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+
+        Integer residenceId = parseIntOrNull(values.get("Residence ID"), null);
+        Integer userId = parseIntOrNull(values.get("User ID"), null);
+        String type = safe(values.get("Type"));
+        Integer area = parseIntOrNull(values.get("Area"), null);
+        Integer rent = parseIntOrNull(values.get("Rent"), null);
+        Integer sale = parseIntOrNull(values.get("Sale"), null);
+        Integer parking = parseBinaryFlag(values.get("Parking"));
+        Integer available = parseBinaryFlag(values.get("Available"));
+        String builtDate = safe(values.get("Built Date"));
+
+        if (residenceId == null || "-".equals(type)) {
+            return false;
+        }
+
+        if ("add".equals(mode)) {
+            Integer createdId = residenceController.apartmentCreate(
+                residenceId,
+                userId,
+                parking,
+                available,
+                null,
+                type,
+                null,
+                area,
+                rent,
+                sale,
+                "-".equals(builtDate) ? null : builtDate
+            );
+            return createdId != null && createdId > 0;
+        }
+
+        if ("edit".equals(mode)) {
+            Integer id = rowId(originalRowData);
+            if (id == null) {
+                return false;
+            }
+            return residenceController.apartmentUpdate(
+                id,
+                residenceId,
+                userId,
+                parking,
+                available,
+                null,
+                type,
+                null,
+                area,
+                rent,
+                sale,
+                "-".equals(builtDate) ? null : builtDate
+            );
+        }
+
+        return false;
+    }
+
+    private boolean deleteAppartement(String[] rowData) {
+        Integer id = rowId(rowData);
+        if (id == null) {
+            return false;
+        }
+        return residenceController.apartmentDelete(id);
+    }
+
+    private boolean saveMaintenanceTicket(String mode, String[] originalRowData, VBox fields) {
+        Map<String, String> values = readEditableFieldValues(fields);
+
+        Integer apartmentId = parseIntOrNull(values.get("Apartment ID"), null);
+        String general = safe(values.get("General"));
+        String plumbing = safe(values.get("Plumbing"));
+        String electrical = safe(values.get("Electrical"));
+        String heating = safe(values.get("Heating"));
+        String description = safe(values.get("Description"));
+        String recommendation = safe(values.get("AI Recommendation"));
+
+        if (apartmentId == null || "-".equals(general)) {
+            return false;
+        }
+
+        if ("add".equals(mode)) {
+            Integer createdId = maintenanceController.maintenanceCreate(
+                apartmentId,
+                general,
+                "-".equals(plumbing) ? null : plumbing,
+                "-".equals(electrical) ? null : electrical,
+                "-".equals(heating) ? null : heating,
+                "-".equals(description) ? null : description,
+                "-".equals(recommendation) ? null : recommendation
+            );
+            return createdId != null && createdId > 0;
+        }
+
+        if ("edit".equals(mode)) {
+            Integer id = rowId(originalRowData);
+            if (id == null) {
+                return false;
+            }
+            return maintenanceController.maintenanceUpdate(
+                id,
+                general,
+                "-".equals(plumbing) ? null : plumbing,
+                "-".equals(electrical) ? null : electrical,
+                "-".equals(heating) ? null : heating,
+                "-".equals(description) ? null : description,
+                "-".equals(recommendation) ? null : recommendation
+            );
+        }
+
+        return false;
+    }
+
+    private boolean deleteMaintenanceTicket(String[] rowData) {
+        Integer id = rowId(rowData);
+        if (id == null) {
+            return false;
+        }
+        return maintenanceController.maintenanceDelete(id);
+    }
+
     private Optional<Evenement> findEvenementByRow(String[] originalRowData) {
         if (originalRowData == null || originalRowData.length < 5) {
             return Optional.empty();
@@ -1296,6 +1603,35 @@ public class DashboardAdminService {
             }
         }
         return values;
+    }
+
+    private Integer rowId(String[] rowData) {
+        if (rowData == null || rowData.length == 0) {
+            return null;
+        }
+        return parseIntOrNull(rowData[0], null);
+    }
+
+    private Integer parseBinaryFlag(String value) {
+        String normalized = safe(value).toLowerCase();
+        if ("-".equals(normalized)) {
+            return 0;
+        }
+        if ("0".equals(normalized)
+            || "no".equals(normalized)
+            || "false".equals(normalized)
+            || "occupied".equals(normalized)
+            || "rented".equals(normalized)
+            || "unavailable".equals(normalized)) {
+            return 0;
+        }
+        if ("1".equals(normalized)
+            || "yes".equals(normalized)
+            || "true".equals(normalized)
+            || "available".equals(normalized)) {
+            return 1;
+        }
+        return 0;
     }
 
     private String safe(String value) {

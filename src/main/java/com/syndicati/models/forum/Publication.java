@@ -93,6 +93,13 @@ public class Publication {
         this.user = user;
     }
 
+    // Aliases for view synchronization
+    public String getTitrePublication() { return getTitrePub(); }
+    public String getDescPublication() { return getDescriptionPub(); }
+    public String getCatPublication() { return getCategoriePub(); }
+    public String getImagePublication() { return getImagePub(); }
+    public LocalDateTime getDatePublication() { return getDateCreationPub(); }
+
     public List<String> validateForCreate() {
         List<String> errors = new ArrayList<>();
 

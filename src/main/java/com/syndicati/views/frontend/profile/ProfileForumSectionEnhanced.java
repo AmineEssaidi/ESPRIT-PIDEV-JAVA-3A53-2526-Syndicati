@@ -7,18 +7,22 @@ import com.syndicati.controllers.user.profile.ProfileController;
 import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.forum.Reaction;
+import com.syndicati.services.forum.ReactionService;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.session.SessionManager;
 import javafx.animation.FadeTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
@@ -30,6 +34,7 @@ import javafx.scene.paint.ImagePattern;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.shape.Circle;
+import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
 import java.time.LocalDateTime;
@@ -51,6 +56,7 @@ public class ProfileForumSectionEnhanced {
     private final ReactionController reactionController;
     private final ProfileController profileController;
     private final User currentUser;
+    private final ThemeManager tm = ThemeManager.getInstance();
 
     private final StackPane switcherContainer = new StackPane();
     private final VBox faceListView = new VBox(16);
@@ -83,6 +89,9 @@ public class ProfileForumSectionEnhanced {
     private List<Commentaire> filteredComments = new ArrayList<>();
     private List<Reaction> filteredReactions = new ArrayList<>();
     private List<Reaction> filteredBookmarks = new ArrayList<>();
+
+    private String selectedCommentImagePath = null;
+    private boolean commentVisibility = true;
 
     public ProfileForumSectionEnhanced() {
         this.publicationController = new PublicationController();
@@ -327,42 +336,42 @@ public class ProfileForumSectionEnhanced {
     }
 
     private void refreshDataAndRender() {
-        allPublications.clear();
-        allComments.clear();
-        allReactions.clear();
-        publicationById.clear();
-
+        // 1. Data Fetching (safe on background thread)
         List<Publication> pubs = publicationController.publications();
-        if (pubs != null) {
-            allPublications.addAll(pubs);
-        }
-        for (Publication pub : allPublications) {
-            if (pub.getIdPublication() != null) {
-                publicationById.put(pub.getIdPublication(), pub);
-            }
-        }
-
         List<Commentaire> comments = commentaireController.commentaires();
-        if (comments != null) {
-            allComments.addAll(comments);
-        }
-
         List<Reaction> reactions = reactionController.reactions();
-        if (reactions != null) {
-            allReactions.addAll(reactions);
-        }
 
-        filteredPublications = filterPublications(allPublications);
-        filteredComments = filterComments(allComments);
-        filteredReactions = filterReactions(allReactions, false);
-        filteredBookmarks = filterReactions(allReactions, true);
+        // 2. UI Updates (MUST be on FX thread)
+        javafx.application.Platform.runLater(() -> {
+            allPublications.clear();
+            publicationById.clear();
+            if (pubs != null) {
+                allPublications.addAll(pubs);
+                for (Publication pub : allPublications) {
+                    if (pub.getIdPublication() != null) {
+                        publicationById.put(pub.getIdPublication(), pub);
+                    }
+                }
+            }
 
-        renderPublications();
-        renderComments();
-        renderReactions();
-        renderBookmarks();
-        updateTabLabels();
-        switchTab(currentTab);
+            allComments.clear();
+            if (comments != null) allComments.addAll(comments);
+
+            allReactions.clear();
+            if (reactions != null) allReactions.addAll(reactions);
+
+            filteredPublications = filterPublications(allPublications);
+            filteredComments = filterComments(allComments);
+            filteredReactions = filterReactions(allReactions, false);
+            filteredBookmarks = filterReactions(allReactions, true);
+
+            renderPublications();
+            renderComments();
+            renderReactions();
+            renderBookmarks();
+            updateTabLabels();
+            switchTab(currentTab);
+        });
     }
 
     private List<Publication> filterPublications(List<Publication> source) {
@@ -544,11 +553,19 @@ public class ProfileForumSectionEnhanced {
         category.setFont(Font.font("Segoe UI", 9));
         category.setStyle("-fx-text-fill: rgba(99, 102, 241, 0.9); -fx-background-color: rgba(99, 102, 241, 0.1); -fx-padding: 4 8 4 8; -fx-background-radius: 6;");
 
+        Button quickBookmark = new Button(reactionController.publicationStatus(publication, currentUser).isBookmarked() ? "★" : "☆");
+        quickBookmark.setStyle("-fx-background-color: transparent; -fx-text-fill: #6366f1; -fx-font-size: 14; -fx-padding: 0 8 0 8; -fx-cursor: hand;");
+        quickBookmark.setOnAction(e -> {
+            e.consume(); // Don't trigger row click
+            reactionController.publicationToggle(publication, currentUser, "Bookmark");
+            asyncRefresh();
+        });
+        
         Label chevron = new Label("→");
         chevron.setFont(Font.font(14));
         chevron.setTextFill(Color.color(1, 1, 1, 0.5));
 
-        header.getChildren().addAll(icon, titleSection, category, chevron);
+        header.getChildren().addAll(icon, titleSection, category, quickBookmark, chevron);
         item.getChildren().add(header);
 
         return item;
@@ -602,30 +619,33 @@ public class ProfileForumSectionEnhanced {
     }
 
     private VBox createBookmarkItem(Reaction bookmark) {
-        VBox item = clickableRow(() -> showBookmarkDetails(bookmark));
-
-        HBox row = new HBox(10);
-        row.setAlignment(Pos.CENTER_LEFT);
-
-        Label icon = new Label("🔖");
         Publication publication = resolvePublication(bookmark.getPublication());
         if (publication == null && bookmark.getCommentaire() != null) {
             publication = resolvePublication(bookmark.getCommentaire().getPublication());
         }
 
-        String titleText = publication == null ? "Bookmarked item" : safe(publication.getTitrePub(), "Bookmarked publication");
+        if (publication != null) {
+            // Render full publication card for bookmarks
+            VBox card = createPublicationPreviewCard(publication);
+            card.setStyle(card.getStyle() + "; -fx-border-color: rgba(147, 197, 253, 0.2); -fx-border-width: 1;");
+            return card;
+        }
+
+        // Fallback for non-publication bookmarks
+        VBox item = clickableRow(() -> showBookmarkDetails(bookmark));
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        Label icon = new Label("🔖");
+        String titleText = "Bookmarked item";
         Label title = new Label(trimTo(titleText, 90));
         title.setTextFill(Color.WHITE);
         title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
         HBox.setHgrow(title, Priority.ALWAYS);
-
         Label date = new Label(formatDate(bookmark.getUpdatedAt()));
         date.setTextFill(Color.color(1, 1, 1, 0.5));
         date.setFont(Font.font("Segoe UI", 10));
-
         row.getChildren().addAll(icon, title, date);
         item.getChildren().add(row);
-
         return item;
     }
 
@@ -666,124 +686,437 @@ public class ProfileForumSectionEnhanced {
         detailsTitle.setText("Publication Details");
         detailsContent.getChildren().clear();
 
-        VBox metaCard = detailCard();
-        metaCard.getChildren().addAll(
-            detailLine("Title", safe(publication.getTitrePub(), "—")),
-            detailLine("Category", safe(publication.getCategoriePub(), "—")),
-            detailLine("Date", formatDate(publication.getDateCreationPub())),
-            detailLine("Description", safe(publication.getDescriptionPub(), "No description"))
-        );
-
         VBox previewCard = createPublicationPreviewCard(publication);
         VBox commentsSection = createPublicationCommentsSection(publication);
 
-        detailsContent.getChildren().addAll(previewCard, metaCard, commentsSection);
+        detailsContent.getChildren().addAll(previewCard, commentsSection);
         animateSwitcherFace(false);
     }
 
     private VBox createPublicationPreviewCard(Publication publication) {
         VBox preview = detailCard();
+        preview.setSpacing(15);
 
-        Label heading = new Label("Preview");
-        heading.setTextFill(Color.WHITE);
-        heading.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        // Header with Title and Bookmark
+        HBox header = new HBox(15);
+        header.setAlignment(Pos.TOP_LEFT);
 
+        VBox titleArea = new VBox(4);
         Label title = new Label(safe(publication.getTitrePub(), "Untitled publication"));
         title.setTextFill(Color.WHITE);
         title.setWrapText(true);
-        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
+        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
+        
+        HBox meta = new HBox(10);
+        Label category = new Label("🏷️ " + safe(publication.getCategoriePub(), "General"));
+        category.setTextFill(Color.web("#6366f1"));
+        category.setFont(Font.font("Segoe UI Emoji", FontWeight.BOLD, 11));
+        
+        Label date = new Label("📅 " + formatDate(publication.getDateCreationPub()));
+        date.setTextFill(Color.color(1, 1, 1, 0.5));
+        date.setFont(Font.font("Segoe UI Emoji", 11));
+        
+        meta.getChildren().addAll(category, date);
+        titleArea.getChildren().addAll(title, meta);
+        HBox.setHgrow(titleArea, Priority.ALWAYS);
 
+        Button bookmarkBtn = new Button("🔖");
+        styleIconButton(bookmarkBtn, reactionController.publicationStatus(publication, currentUser).isBookmarked());
+        bookmarkBtn.setOnAction(e -> {
+            reactionController.publicationToggle(publication, currentUser, "Bookmark");
+            asyncRefresh();
+        });
+
+        header.getChildren().addAll(titleArea, bookmarkBtn);
+
+        // Description
         Label description = new Label(safe(publication.getDescriptionPub(), "No description"));
-        description.setTextFill(Color.color(1, 1, 1, 0.8));
+        description.setTextFill(Color.color(1, 1, 1, 0.9));
         description.setWrapText(true);
-        description.setFont(Font.font("Segoe UI", 12));
+        description.setFont(Font.font("Segoe UI", 13));
+        description.setPadding(new Insets(5, 0, 5, 0));
 
+        // Image
         Node imageNode;
         Image image = resolveImage(publication.getImagePub(), "forum_images");
         if (image != null) {
             ImageView imageView = new ImageView(image);
             imageView.setPreserveRatio(true);
-            imageView.setFitWidth(520);
-            imageView.setFitHeight(280);
+            imageView.setFitWidth(550);
+            imageView.setFitHeight(350);
             imageView.setSmooth(true);
-            imageView.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
-            imageNode = imageView;
+            
+            StackPane imageFrame = new StackPane(imageView);
+            imageFrame.setAlignment(Pos.CENTER_LEFT);
+            imageFrame.setStyle("-fx-background-color: rgba(0,0,0,0.3); -fx-background-radius: 12; -fx-padding: 2; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12;");
+            
+            imageNode = imageFrame;
         } else {
-            Label noImage = new Label("No image attached.");
-            noImage.setTextFill(Color.color(1, 1, 1, 0.55));
-            noImage.setFont(Font.font("Segoe UI", 10));
-            imageNode = noImage;
+            imageNode = new VBox(); // Empty placeholder
         }
 
-        preview.getChildren().addAll(heading, title, description, imageNode);
+        // Action Bar (Edit/Delete for author)
+        HBox authorActions = new HBox(10);
+        authorActions.setAlignment(Pos.CENTER_RIGHT);
+        if (currentUser != null && publication.getUser() != null && currentUser.getIdUser().equals(publication.getUser().getIdUser())) {
+            Button editBtn = new Button("Edit ✏️");
+            editBtn.setStyle("-fx-background-color: rgba(99, 102, 241, 0.2); -fx-text-fill: #818cf8; -fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 5; -fx-cursor: hand;");
+            editBtn.setOnAction(e -> showEditPublicationModal(publication));
+            
+            Button deleteBtn = new Button("Delete 🗑️");
+            deleteBtn.setStyle("-fx-background-color: rgba(239, 68, 68, 0.15); -fx-text-fill: #fca5a5; -fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 5; -fx-cursor: hand;");
+            deleteBtn.setOnAction(e -> {
+                publicationController.publicationDelete(publication.getIdPublication());
+                showListView();
+                asyncRefresh();
+            });
+            
+            authorActions.getChildren().addAll(editBtn, deleteBtn);
+        }
+
+        // Reaction Bar
+        HBox reactionBar = createPublicationReactionBar(publication);
+
+        preview.getChildren().addAll(header, description, imageNode, authorActions, reactionBar);
         return preview;
+    }
+
+    private void styleIconButton(Button btn, boolean active) {
+        btn.setStyle("-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.25)" : "rgba(255,255,255,0.05)") + "; " +
+                     "-fx-text-fill: " + (active ? "#818cf8" : "white") + "; " +
+                     "-fx-font-size: 16; -fx-background-radius: 10; -fx-padding: 8; -fx-cursor: hand; " +
+                     "-fx-border-color: " + (active ? "rgba(99, 102, 241, 0.4)" : "transparent") + "; -fx-border-width: 1;");
+    }
+
+    private HBox createPublicationReactionBar(Publication publication) {
+        VBox wrapper = new VBox(12);
+        wrapper.setMaxWidth(Double.MAX_VALUE);
+        wrapper.setPadding(new Insets(15, 0, 0, 0));
+        wrapper.setStyle("-fx-border-color: rgba(255,255,255,0.05); -fx-border-width: 1 0 0 0;");
+
+        ReactionService.ReactionStatus status = reactionController.publicationStatus(publication, currentUser);
+        Map<String, Integer> counts = status.getCounts();
+        Map<String, Integer> emojiCounts = status.getEmojiCounts();
+        
+        int likes = counts.getOrDefault("Like", 0);
+        int dislikes = counts.getOrDefault("Dislike", 0);
+        int total = likes + dislikes;
+        double ratio = total > 0 ? (double) likes / total : 0.5;
+
+        // Ratio Bar
+        VBox ratioContainer = new VBox(5);
+        HBox ratioBar = new HBox(0);
+        ratioBar.setPrefHeight(6);
+        ratioBar.setMaxWidth(200);
+        ratioBar.setStyle("-fx-background-radius: 3; -fx-overflow: hidden;");
+
+        javafx.scene.layout.Region likeRegion = new javafx.scene.layout.Region();
+        likeRegion.setStyle("-fx-background-color: #22c55e;");
+        likeRegion.setPrefWidth(200 * ratio);
+        
+        javafx.scene.layout.Region dislikeRegion = new javafx.scene.layout.Region();
+        dislikeRegion.setStyle("-fx-background-color: #ef4444;");
+        dislikeRegion.setPrefWidth(200 * (1 - ratio));
+
+        ratioBar.getChildren().addAll(likeRegion, dislikeRegion);
+        
+        Label ratioText = new Label(Math.round(ratio * 100) + "% positive");
+        ratioText.setTextFill(Color.color(1, 1, 1, 0.5));
+        ratioText.setFont(Font.font(10));
+        ratioContainer.getChildren().addAll(ratioBar, ratioText);
+
+        HBox mainActions = new HBox(12);
+        mainActions.setAlignment(Pos.CENTER_LEFT);
+
+        boolean isLiked = false;
+        boolean isDisliked = false;
+        String currentEmoji = null;
+        for (ReactionService.ReactionPayload p : status.getReactions()) {
+            if ("Like".equals(p.getKind())) isLiked = true;
+            if ("Dislike".equals(p.getKind())) isDisliked = true;
+            if ("Emoji".equals(p.getKind())) currentEmoji = p.getEmoji();
+        }
+
+        Button likeBtn = createReactionToggleBtn("👍 " + likes, isLiked, "#22c55e", () -> {
+            reactionController.publicationToggle(publication, currentUser, "Like");
+            asyncRefresh();
+            showPublicationDetails(publication);
+        });
+
+        Button dislikeBtn = createReactionToggleBtn("👎 " + dislikes, isDisliked, "#ef4444", () -> {
+            reactionController.publicationToggle(publication, currentUser, "Dislike");
+            asyncRefresh();
+            showPublicationDetails(publication);
+        });
+
+        mainActions.getChildren().addAll(likeBtn, dislikeBtn, ratioContainer);
+
+        // Emoji Cluster with Counts
+        javafx.scene.layout.FlowPane emojiCluster = new javafx.scene.layout.FlowPane(10, 10);
+        String[] emojis = {"❤️", "😂", "😮", "😢", "😡", "👍", "🔥", "✨"};
+        for (String e : emojis) {
+            int eCount = emojiCounts.getOrDefault(e, 0);
+            boolean active = e.equals(currentEmoji);
+            
+            Button eBtn = new Button(e + (eCount > 0 ? " " + eCount : ""));
+            eBtn.setStyle("-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.5)" : "rgba(255,255,255,0.03)") + "; " +
+                          "-fx-font-family: 'Segoe UI Emoji'; " +
+                          "-fx-font-size: 14; -fx-padding: 6 10; -fx-background-radius: 10; -fx-cursor: hand; " +
+                          "-fx-text-fill: white; -fx-opacity: " + (active ? "1.0" : "0.8") + ";");
+            
+            eBtn.setOnAction(evt -> {
+                reactionController.publicationEmoji(publication, currentUser, e);
+                asyncRefresh();
+                showPublicationDetails(publication);
+            });
+            emojiCluster.getChildren().add(eBtn);
+        }
+
+        wrapper.getChildren().addAll(mainActions, emojiCluster);
+        HBox finalBar = new HBox(wrapper);
+        HBox.setHgrow(wrapper, Priority.ALWAYS);
+        return finalBar;
+    }
+
+    private Button createReactionToggleBtn(String text, boolean active, String activeColor, Runnable onAction) {
+        Button btn = new Button(text);
+        btn.setStyle("-fx-background-color: " + (active ? tm.toRgba(activeColor, 0.2) : "rgba(255,255,255,0.05)") + "; " +
+                     "-fx-text-fill: " + (active ? activeColor : "white") + "; " +
+                     "-fx-font-weight: bold; -fx-font-size: 12; -fx-padding: 6 12; -fx-background-radius: 8; -fx-cursor: hand; " +
+                     "-fx-border-color: " + (active ? tm.toRgba(activeColor, 0.4) : "transparent") + "; -fx-border-width: 1;");
+        btn.setOnAction(e -> onAction.run());
+        return btn;
     }
 
     private VBox createPublicationCommentsSection(Publication publication) {
         VBox section = detailCard();
+        section.setSpacing(12);
 
-        Label heading = new Label("Comments");
+        Label heading = new Label("Comments (" + (commentaireController.commentairesByPublication(publication) != null ? commentaireController.commentairesByPublication(publication).size() : 0) + ")");
         heading.setTextFill(Color.WHITE);
-        heading.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        heading.setFont(Font.font("Segoe UI", FontWeight.BOLD, 15));
 
-        VBox commentsBox = new VBox(8);
+        VBox commentsBox = new VBox(12);
         List<Commentaire> publicationComments = commentaireController.commentairesByPublication(publication);
         if (publicationComments == null || publicationComments.isEmpty()) {
-            commentsBox.getChildren().add(emptyText("No comments yet."));
+            commentsBox.getChildren().add(emptyText("No comments yet. Be the first to share your thoughts!"));
         } else {
             for (Commentaire comment : publicationComments) {
                 commentsBox.getChildren().add(createCommentPreviewItem(comment));
             }
         }
 
-        Label composeLabel = new Label("Add a comment");
-        composeLabel.setTextFill(Color.color(1, 1, 1, 0.8));
-        composeLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+        VBox composeBox = new VBox(10);
+        composeBox.setStyle("-fx-background-color: rgba(255,255,255,0.02); -fx-padding: 15; -fx-background-radius: 12; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+        
+        Label composeLabel = new Label("Write a comment...");
+        composeLabel.setTextFill(Color.WHITE);
+        composeLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
 
         TextArea commentInput = new TextArea();
-        commentInput.setPromptText("Share your thoughts...");
+        commentInput.setPromptText("Type your comment here...");
         commentInput.setWrapText(true);
         commentInput.setPrefRowCount(3);
-        commentInput.setStyle("-fx-background-color: rgba(255,255,255,0.04); -fx-control-inner-background: rgba(255,255,255,0.04); -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.45); -fx-background-radius: 10; -fx-border-radius: 10; -fx-border-color: rgba(255,255,255,0.12);");
+        commentInput.setStyle("-fx-background-color: transparent; -fx-control-inner-background: rgba(0,0,0,0.2); -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.4); -fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: rgba(255,255,255,0.1);");
+
+        HBox controls = new HBox(15);
+        controls.setAlignment(Pos.CENTER_LEFT);
+
+        javafx.scene.control.CheckBox visibilityBox = new javafx.scene.control.CheckBox("Show my name");
+        visibilityBox.setSelected(commentVisibility);
+        visibilityBox.setStyle("-fx-text-fill: rgba(255,255,255,0.7); -fx-font-size: 11;");
+        visibilityBox.setOnAction(e -> commentVisibility = visibilityBox.isSelected());
+
+        Button uploadBtn = new Button("📷 Add Image");
+        uploadBtn.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 5; -fx-cursor: hand;");
+        
+        Label fileLabel = new Label("No file chosen");
+        fileLabel.setTextFill(Color.color(1, 1, 1, 0.4));
+        fileLabel.setFont(Font.font(10));
+
+        uploadBtn.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+            java.io.File file = fc.showOpenDialog(root.getScene().getWindow());
+            if (file != null) {
+                selectedCommentImagePath = file.getName();
+                fileLabel.setText("📎 " + file.getName());
+                fileLabel.setTextFill(Color.web("#818cf8"));
+            }
+        });
+
+        HBox.setHgrow(visibilityBox, Priority.ALWAYS);
+        controls.getChildren().addAll(visibilityBox, uploadBtn, fileLabel);
 
         Label feedback = new Label();
-        feedback.setTextFill(Color.color(1, 1, 1, 0.65));
-        feedback.setFont(Font.font("Segoe UI", 11));
+        feedback.setTextFill(Color.color(1, 1, 1, 0.6));
+        feedback.setFont(Font.font(11));
 
         Button postBtn = new Button("Post Comment");
-        postBtn.setStyle("-fx-padding: 8 14 8 14; -fx-background-color: rgba(99, 102, 241, 0.85); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8;");
+        postBtn.setStyle("-fx-padding: 10 20; -fx-background-color: #6366f1; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8; -fx-cursor: hand;");
         postBtn.setOnAction(e -> postPublicationComment(publication, commentInput, feedback));
 
-        section.getChildren().addAll(heading, commentsBox, composeLabel, commentInput, postBtn, feedback);
+        composeBox.getChildren().addAll(composeLabel, commentInput, controls, postBtn, feedback);
+        
+        section.getChildren().addAll(heading, commentsBox, new Label(""), composeBox);
         return section;
     }
 
+    private HBox createCommentReactionBar(Commentaire comment) {
+        VBox wrapper = new VBox(10);
+        wrapper.setMaxWidth(Double.MAX_VALUE);
+        wrapper.setPadding(new Insets(10, 0, 0, 0));
+
+        ReactionService.ReactionStatus status = reactionController.commentStatus(comment, currentUser);
+        Map<String, Integer> counts = status.getCounts();
+        Map<String, Integer> emojiCounts = status.getEmojiCounts();
+        
+        int likes = counts.getOrDefault("Like", 0);
+        int dislikes = counts.getOrDefault("Dislike", 0);
+        int total = likes + dislikes;
+        double ratio = total > 0 ? (double) likes / total : 0.5;
+
+        // Ratio Bar (Small version for comments)
+        HBox ratioBar = new HBox(0);
+        ratioBar.setPrefHeight(4);
+        ratioBar.setMaxWidth(100);
+        ratioBar.setStyle("-fx-background-radius: 2; -fx-overflow: hidden;");
+
+        javafx.scene.layout.Region likeRegion = new javafx.scene.layout.Region();
+        likeRegion.setStyle("-fx-background-color: #22c55e;");
+        likeRegion.setPrefWidth(100 * ratio);
+        
+        javafx.scene.layout.Region dislikeRegion = new javafx.scene.layout.Region();
+        dislikeRegion.setStyle("-fx-background-color: #ef4444;");
+        dislikeRegion.setPrefWidth(100 * (1 - ratio));
+
+        ratioBar.getChildren().addAll(likeRegion, dislikeRegion);
+
+        HBox mainActions = new HBox(10);
+        mainActions.setAlignment(Pos.CENTER_LEFT);
+
+        boolean isLiked = false;
+        boolean isDisliked = false;
+        String currentEmoji = null;
+        for (ReactionService.ReactionPayload p : status.getReactions()) {
+            if ("Like".equals(p.getKind())) isLiked = true;
+            if ("Dislike".equals(p.getKind())) isDisliked = true;
+            if ("Emoji".equals(p.getKind())) currentEmoji = p.getEmoji();
+        }
+
+        Button likeBtn = createCommentReactionBtn("👍 " + likes, isLiked, "#22c55e", () -> {
+            reactionController.commentToggle(comment, currentUser, "Like");
+            asyncRefresh();
+            publicationController.publicationById(comment.getPublication().getIdPublication()).ifPresent(this::showPublicationDetails);
+        });
+
+        Button dislikeBtn = createCommentReactionBtn("👎 " + dislikes, isDisliked, "#ef4444", () -> {
+            reactionController.commentToggle(comment, currentUser, "Dislike");
+            asyncRefresh();
+            publicationController.publicationById(comment.getPublication().getIdPublication()).ifPresent(this::showPublicationDetails);
+        });
+
+        mainActions.getChildren().addAll(likeBtn, dislikeBtn, ratioBar);
+
+        // Emoji Cluster
+        javafx.scene.layout.FlowPane emojiCluster = new javafx.scene.layout.FlowPane(6, 6);
+        String[] emojis = {"❤️", "😂", "😮", "😢", "😡", "👍", "🔥", "✨"};
+        for (String e : emojis) {
+            int eCount = emojiCounts.getOrDefault(e, 0);
+            boolean active = e.equals(currentEmoji);
+            
+            Button eBtn = new Button(e + (eCount > 0 ? " " + eCount : ""));
+            eBtn.setStyle("-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.4)" : "rgba(255,255,255,0.02)") + "; " +
+                          "-fx-font-family: 'Segoe UI Emoji'; " +
+                          "-fx-font-size: 11; -fx-padding: 4 8; -fx-background-radius: 8; -fx-cursor: hand; " +
+                          "-fx-text-fill: white; -fx-opacity: " + (active ? "1.0" : "0.7") + ";");
+            
+            eBtn.setOnAction(evt -> {
+                reactionController.commentEmoji(comment, currentUser, e);
+                asyncRefresh();
+                publicationController.publicationById(comment.getPublication().getIdPublication()).ifPresent(this::showPublicationDetails);
+            });
+            emojiCluster.getChildren().add(eBtn);
+        }
+
+        wrapper.getChildren().addAll(mainActions, emojiCluster);
+        return new HBox(wrapper);
+    }
+
+    private Button createCommentReactionBtn(String text, boolean active, String color, Runnable onAction) {
+        Button btn = new Button(text);
+        btn.setStyle("-fx-background-color: " + (active ? tm.toRgba(color, 0.15) : "transparent") + "; " +
+                     "-fx-text-fill: " + (active ? color : "rgba(255,255,255,0.6)") + "; " +
+                     "-fx-font-size: 11; -fx-padding: 4 8; -fx-background-radius: 6; -fx-cursor: hand;");
+        btn.setOnAction(e -> onAction.run());
+        return btn;
+    }
+
     private VBox createCommentPreviewItem(Commentaire comment) {
-        HBox item = new HBox(10);
-        item.setAlignment(Pos.TOP_LEFT);
-        item.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 1; -fx-padding: 10; -fx-background-radius: 8; -fx-border-radius: 8;");
+        VBox wrap = new VBox(8);
+        wrap.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-padding: 12; -fx-background-radius: 10; -fx-border-color: rgba(255,255,255,0.06);");
+
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
 
         StackPane avatar = createCommentAvatarNode(comment);
+        
+        VBox authorMeta = new VBox(2);
+        String authorName = comment.isVisibility() ? author(comment.getUser()) : "Anonymous User";
+        Label authorLbl = new Label(authorName);
+        authorLbl.setTextFill(Color.WHITE);
+        authorLbl.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+        
+        Label dateLbl = new Label(formatDate(comment.getCreatedAt()));
+        dateLbl.setTextFill(Color.color(1, 1, 1, 0.4));
+        dateLbl.setFont(Font.font(10));
+        authorMeta.getChildren().addAll(authorLbl, dateLbl);
+        HBox.setHgrow(authorMeta, Priority.ALWAYS);
 
-        VBox bodyWrap = new VBox(4);
-        HBox.setHgrow(bodyWrap, Priority.ALWAYS);
+        // Comment Actions (Edit/Delete)
+        if (currentUser != null && comment.getUser() != null && currentUser.getIdUser().equals(comment.getUser().getIdUser())) {
+            Button editBtn = new Button("✏️");
+            editBtn.setStyle("-fx-background-color: rgba(99, 102, 241, 0.15); -fx-text-fill: #818cf8; -fx-padding: 6; -fx-background-radius: 6; -fx-cursor: hand; -fx-font-size: 12;");
+            editBtn.setOnAction(e -> showEditCommentModal(comment));
 
-        Label content = new Label(safe(comment.getDescriptionCommentaire(), "No comment text"));
+            Button delBtn = new Button("🗑️");
+            delBtn.setStyle("-fx-background-color: rgba(239, 68, 68, 0.15); -fx-text-fill: #fca5a5; -fx-padding: 6; -fx-background-radius: 6; -fx-cursor: hand; -fx-font-size: 12;");
+            delBtn.setOnAction(e -> {
+                commentaireController.commentaireDelete(comment.getIdCommentaire());
+                asyncRefresh();
+                publicationController.publicationById(comment.getPublication().getIdPublication())
+                    .ifPresent(this::showPublicationDetails);
+            });
+            header.getChildren().addAll(editBtn, delBtn);
+        }
+
+        header.getChildren().add(0, avatar);
+        header.getChildren().add(1, authorMeta);
+
+        Label content = new Label(safe(comment.getDescriptionCommentaire(), "—"));
         content.setWrapText(true);
-        content.setTextFill(Color.WHITE);
+        content.setTextFill(Color.color(1, 1, 1, 0.9));
         content.setFont(Font.font("Segoe UI", 12));
+        content.setPadding(new Insets(5, 0, 5, 0));
 
-        String author = comment.isVisibility() ? author(comment.getUser()) : "Anonymous";
+        HBox actionsBar = createCommentReactionBar(comment);
+        wrap.getChildren().addAll(header, content, actionsBar);
 
-        Label meta = new Label(author + " • " + formatDate(comment.getCreatedAt()));
-        meta.setTextFill(Color.color(1, 1, 1, 0.55));
-        meta.setFont(Font.font("Segoe UI", 10));
+        // Comment Image
+        if (comment.getImageCommentaire() != null && !comment.getImageCommentaire().isEmpty()) {
+            Image img = resolveImage(comment.getImageCommentaire(), "commentaire_images");
+            if (img != null) {
+                ImageView iv = new ImageView(img);
+                iv.setPreserveRatio(true);
+                iv.setFitWidth(200);
+                iv.setFitHeight(150);
+                StackPane imgFrame = new StackPane(iv);
+                imgFrame.setAlignment(Pos.CENTER_LEFT);
+                imgFrame.setStyle("-fx-background-color: rgba(0,0,0,0.1); -fx-background-radius: 5;");
+                wrap.getChildren().add(imgFrame);
+            }
+        }
 
-        bodyWrap.getChildren().addAll(meta, content);
-
-        VBox wrap = new VBox();
-        wrap.getChildren().add(item);
-        item.getChildren().addAll(avatar, bodyWrap);
         return wrap;
     }
 
@@ -870,11 +1203,12 @@ public class ProfileForumSectionEnhanced {
             return;
         }
 
-        Integer createdId = commentaireController.commentaireCreate(content, null, true, publication, currentUser);
+        Integer createdId = commentaireController.commentaireCreate(content, selectedCommentImagePath, commentVisibility, publication, currentUser);
         if (createdId != null && createdId > 0) {
             input.clear();
+            selectedCommentImagePath = null; // Reset image
             feedback.setTextFill(Color.web("#86efac"));
-            feedback.setText("Comment posted.");
+            feedback.setText("Comment posted successfully!");
             refreshDataAndRender();
             showPublicationDetails(publication);
             return;
@@ -1066,46 +1400,229 @@ public class ProfileForumSectionEnhanced {
             return null;
         }
 
-        String raw = dbValue.trim().replace("\\", "/");
-        try {
-            if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("file:/")) {
-                Image web = new Image(raw, true);
-                return web.isError() ? null : web;
-            }
+        String path = dbValue.trim();
+        
+        // Try exact path first (already includes uploads/ or is a URL)
+        Image img = ImageLoaderUtil.loadImage(path);
+        if (img != null) return img;
 
-            File pathAsFile = new File(raw);
-            if (pathAsFile.exists()) {
-                Image img = new Image(pathAsFile.toURI().toString(), true);
-                return img.isError() ? null : img;
-            }
-
-            File uploadsRoot = new File(System.getProperty("user.dir") + File.separator + "uploads");
-            List<File> candidates = List.of(
-                new File(uploadsRoot, raw),
-                new File(uploadsRoot, fallbackFolder + File.separator + raw),
-                new File(uploadsRoot, "forum_images" + File.separator + raw),
-                new File(uploadsRoot, "commentaire_images" + File.separator + raw)
-            );
-
-            for (File candidate : candidates) {
-                if (candidate.exists()) {
-                    Image img = new Image(candidate.toURI().toString(), true);
-                    if (!img.isError()) {
-                        return img;
-                    }
-                }
-            }
-        } catch (Exception ignored) {
+        // Try with uploads/ prefix
+        if (!path.startsWith("uploads/") && !path.startsWith("uploads\\")) {
+            img = ImageLoaderUtil.loadImage("uploads/" + path);
+            if (img != null) return img;
         }
+
+        // Try with folder specific paths
+        if (fallbackFolder != null) {
+            img = ImageLoaderUtil.loadImage("uploads/" + fallbackFolder + "/" + path);
+            if (img != null) return img;
+        }
+
+        // Common forum locations fallback
+        img = ImageLoaderUtil.loadImage("uploads/forum_images/" + path);
+        if (img != null) return img;
+        
+        img = ImageLoaderUtil.loadImage("uploads/commentaire_images/" + path);
+        if (img != null) return img;
 
         return null;
     }
 
-    public VBox getRoot() {
-        return root;
+    private void asyncRefresh() {
+        new Thread(this::refreshDataAndRender).start();
     }
 
-    public void cleanup() {
-        // Cleanup resources if needed.
+    private void showEditPublicationModal(Publication pub) {
+        javafx.stage.Stage stage = new javafx.stage.Stage(javafx.stage.StageStyle.TRANSPARENT);
+        stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        
+        VBox layout = new VBox(20);
+        layout.setStyle("-fx-background-color: #1e1e24; -fx-padding: 30; -fx-background-radius: 20; -fx-border-color: #3f3f46; -fx-border-width: 1; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 20, 0, 0, 10);");
+        layout.setPrefWidth(500);
+        layout.setAlignment(Pos.CENTER);
+
+        Label titleLbl = new Label("Update Your Story");
+        titleLbl.setTextFill(Color.WHITE);
+        titleLbl.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
+
+        VBox form = new VBox(15);
+        
+        TextField titleField = new TextField(pub.getTitrePub());
+        titleField.setPromptText("Post Title");
+        titleField.setStyle("-fx-background-color: #09090b; -fx-text-fill: white; -fx-background-radius: 8; -fx-padding: 10; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 8;");
+
+        ComboBox<String> catBox = new ComboBox<>();
+        catBox.getItems().addAll("Announcement", "Suggestion", "Jeux Video", "Informatique", "Nouveauté", "Discussion General", "Culture", "Sport");
+        catBox.setValue(pub.getCategoriePub() == null ? "Discussion General" : pub.getCategoriePub());
+        catBox.setMaxWidth(Double.MAX_VALUE);
+        catBox.setStyle("-fx-background-color: #09090b; -fx-text-fill: white; -fx-background-radius: 8;");
+
+        TextArea descArea = new TextArea(pub.getDescriptionPub());
+        descArea.setPromptText("Description...");
+        descArea.setWrapText(true);
+        descArea.setPrefRowCount(6);
+        descArea.setStyle("-fx-control-inner-background: #09090b; -fx-text-fill: white; -fx-background-radius: 8; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 8;");
+
+        // Image Selection Zone
+        HBox imageZone = new HBox(15);
+        imageZone.setAlignment(Pos.CENTER_LEFT);
+        
+        String[] currentImgPath = { pub.getImagePub() };
+        ImageView preview = new ImageView();
+        preview.setFitWidth(80);
+        preview.setFitHeight(80);
+        preview.setPreserveRatio(true);
+        if (pub.getImagePub() != null) {
+            Image existing = resolveImage(pub.getImagePub(), "forum_images");
+            if (existing != null) preview.setImage(existing);
+        }
+
+        Button selectImgBtn = new Button("📷 Change Image");
+        selectImgBtn.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-background-radius: 8; -fx-padding: 8 15;");
+        selectImgBtn.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+            java.io.File file = fc.showOpenDialog(stage);
+            if (file != null) {
+                try {
+                    // Actual "upload" - copy to forum_images
+                    File uploadsDir = new File(System.getProperty("user.dir") + File.separator + "uploads" + File.separator + "forum_images");
+                    if (!uploadsDir.exists()) uploadsDir.mkdirs();
+                    
+                    File dest = new File(uploadsDir, file.getName());
+                    java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    
+                    currentImgPath[0] = file.getName();
+                    preview.setImage(new Image(dest.toURI().toString()));
+                } catch (Exception ex) {
+                    System.err.println("Upload failed: " + ex.getMessage());
+                }
+            }
+        });
+
+        imageZone.getChildren().addAll(preview, selectImgBtn);
+        form.getChildren().addAll(titleField, catBox, descArea, imageZone);
+
+        HBox actions = new HBox(12);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        
+        Button saveBtn = new Button("Save Changes");
+        saveBtn.setStyle("-fx-background-color: #6366f1; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 25; -fx-background-radius: 10; -fx-cursor: hand;");
+        saveBtn.setOnAction(e -> {
+            publicationController.publicationUpdate(pub.getIdPublication(), titleField.getText(), descArea.getText(), catBox.getValue(), currentImgPath[0]);
+            stage.close();
+            asyncRefresh();
+            // Small delay to let DB update
+            javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(300));
+            pause.setOnFinished(evt -> publicationController.publicationById(pub.getIdPublication()).ifPresent(this::showPublicationDetails));
+            pause.play();
+        });
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #a1a1aa; -fx-cursor: hand;");
+        cancelBtn.setOnAction(e -> stage.close());
+
+        actions.getChildren().addAll(cancelBtn, saveBtn);
+
+        layout.getChildren().addAll(titleLbl, form, actions);
+        
+        javafx.scene.Scene scene = new javafx.scene.Scene(layout);
+        scene.setFill(Color.TRANSPARENT);
+        stage.setScene(scene);
+        stage.show();
+    }
+
+    private void showEditCommentModal(Commentaire comment) {
+        javafx.stage.Stage stage = new javafx.stage.Stage(javafx.stage.StageStyle.TRANSPARENT);
+        stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        
+        VBox layout = new VBox(20);
+        layout.setStyle("-fx-background-color: #1e1e24; -fx-padding: 30; -fx-background-radius: 20; -fx-border-color: #3f3f46; -fx-border-width: 1; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 20, 0, 0, 10);");
+        layout.setPrefWidth(450);
+        layout.setAlignment(Pos.CENTER);
+
+        Label titleLbl = new Label("Update Comment");
+        titleLbl.setTextFill(Color.WHITE);
+        titleLbl.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
+
+        VBox form = new VBox(15);
+        
+        TextArea descArea = new TextArea(comment.getDescriptionCommentaire());
+        descArea.setPromptText("Write your thoughts...");
+        descArea.setWrapText(true);
+        descArea.setPrefRowCount(4);
+        descArea.setStyle("-fx-control-inner-background: #09090b; -fx-text-fill: white; -fx-background-radius: 8; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 8;");
+
+        // Visibility Toggle
+        javafx.scene.control.CheckBox visCheck = new javafx.scene.control.CheckBox("Visible Identity (Show my name)");
+        visCheck.setSelected(comment.isVisibility());
+        visCheck.setStyle("-fx-text-fill: #a1a1aa; -fx-font-size: 12;");
+
+        // Image Selection Zone
+        HBox imageZone = new HBox(15);
+        imageZone.setAlignment(Pos.CENTER_LEFT);
+        
+        String[] currentImgPath = { comment.getImageCommentaire() };
+        ImageView preview = new ImageView();
+        preview.setFitWidth(60);
+        preview.setFitHeight(60);
+        preview.setPreserveRatio(true);
+        if (comment.getImageCommentaire() != null) {
+            Image existing = resolveImage(comment.getImageCommentaire(), "commentaire_images");
+            if (existing != null) preview.setImage(existing);
+        }
+
+        Button selectImgBtn = new Button("📷 Change Photo");
+        selectImgBtn.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-background-radius: 8; -fx-padding: 6 12; -fx-font-size: 11;");
+        selectImgBtn.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+            java.io.File file = fc.showOpenDialog(stage);
+            if (file != null) {
+                try {
+                    File uploadsDir = new File(System.getProperty("user.dir") + File.separator + "uploads" + File.separator + "commentaire_images");
+                    if (!uploadsDir.exists()) uploadsDir.mkdirs();
+                    File dest = new File(uploadsDir, file.getName());
+                    java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    currentImgPath[0] = file.getName();
+                    preview.setImage(new Image(dest.toURI().toString()));
+                } catch (Exception ex) {
+                    System.err.println("Comment Image Upload failed: " + ex.getMessage());
+                }
+            }
+        });
+
+        imageZone.getChildren().addAll(preview, selectImgBtn);
+        form.getChildren().addAll(descArea, visCheck, imageZone);
+
+        HBox actions = new HBox(12);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+        
+        Button saveBtn = new Button("Update Comment");
+        saveBtn.setStyle("-fx-background-color: #6366f1; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 25; -fx-background-radius: 10; -fx-cursor: hand;");
+        saveBtn.setOnAction(e -> {
+            commentaireController.commentaireUpdate(comment.getIdCommentaire(), descArea.getText(), currentImgPath[0], visCheck.isSelected());
+            stage.close();
+            asyncRefresh();
+            javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(javafx.util.Duration.millis(300));
+            pause.setOnFinished(evt -> publicationController.publicationById(comment.getPublication().getIdPublication()).ifPresent(this::showPublicationDetails));
+            pause.play();
+        });
+
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #a1a1aa; -fx-cursor: hand;");
+        cancelBtn.setOnAction(e -> stage.close());
+
+        actions.getChildren().addAll(cancelBtn, saveBtn);
+        layout.getChildren().addAll(titleLbl, form, actions);
+        
+        javafx.scene.Scene scene = new javafx.scene.Scene(layout);
+        scene.setFill(Color.TRANSPARENT);
+        stage.setScene(scene);
+        stage.show();
+    }
+
+    public VBox getRoot() {
+        return root;
     }
 }

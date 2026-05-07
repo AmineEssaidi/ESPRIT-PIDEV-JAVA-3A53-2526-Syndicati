@@ -4,6 +4,8 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.User;
 import com.syndicati.services.forum.CommentaireService;
+import com.syndicati.services.mail.AsyncMailerService;
+import com.syndicati.services.mail.SyndicatiEmailComposer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -14,9 +16,11 @@ import java.util.Optional;
 public class CommentaireController {
 
     private final CommentaireService commentaireService;
+    private final AsyncMailerService asyncMailerService;
 
     public CommentaireController() {
         this.commentaireService = new CommentaireService();
+        this.asyncMailerService = AsyncMailerService.getInstance();
     }
 
     public List<Commentaire> commentaires() {
@@ -31,28 +35,124 @@ public class CommentaireController {
         return commentaireService.listByPublication(publication);
     }
 
+    // Aliases for view synchronization
+    public List<Commentaire> commentsByPublication(Integer publicationId) {
+        Publication p = new Publication();
+        p.setIdPublication(publicationId);
+        return commentaireService.listByPublication(p);
+    }
+
     public List<Commentaire> commentairesByUser(User user) {
         return commentaireService.listByUser(user);
     }
 
     public Integer commentaireCreate(String description, String image, boolean visibility, Publication publication, User user) {
-        return commentaireService.create(description, image, visibility, publication, user);
+        Integer id = commentaireService.create(description, image, visibility, publication, user);
+        if (id != null && id > 0) {
+            notifyAuthor(description, publication, user, visibility);
+        }
+        return id;
+    }
+
+    // Alias for view synchronization
+    public Integer commentCreate(String description, String image, boolean visibility, Integer publicationId, User user) {
+        Publication p = new Publication();
+        p.setIdPublication(publicationId);
+        return commentaireCreate(description, image, visibility, p, user);
+    }
+
+    public Integer commentCreate(String description, String image, Publication publication, User user, boolean visibility) {
+        return commentaireCreate(description, image, visibility, publication, user);
     }
 
     public Integer commentaireCreate(String description, String image, boolean visibility, LocalDateTime createdAt, Publication publication, User user) {
-        return commentaireService.create(description, image, visibility, createdAt, publication, user);
+        Integer id = commentaireService.create(description, image, visibility, createdAt, publication, user);
+        if (id != null && id > 0) {
+            notifyAuthor(description, publication, user, visibility);
+        }
+        return id;
     }
 
     public boolean commentaireUpdate(Integer id, String description, String image, Boolean visibility) {
-        return commentaireService.update(id, description, image, visibility);
+        boolean success = commentaireService.update(id, description, image, visibility);
+        if (success) {
+            commentaireService.findById(id).ifPresent(c -> notifyAuthor(description, c.getPublication(), c.getUser(), c.isVisibility()));
+        }
+        return success;
+    }
+
+    // Alias for view synchronization
+    public boolean commentUpdate(Integer id, String description, String image, Boolean visibility) {
+        return commentaireUpdate(id, description, image, visibility);
     }
 
     public boolean commentaireUpdate(Integer id, String description, String image, Boolean visibility, LocalDateTime createdAt) {
-        return commentaireService.update(id, description, image, visibility, createdAt);
+        boolean success = commentaireService.update(id, description, image, visibility, createdAt);
+        if (success) {
+            commentaireService.findById(id).ifPresent(c -> notifyAuthor(description, c.getPublication(), c.getUser(), c.isVisibility()));
+        }
+        return success;
+    }
+
+    private void notifyAuthor(String content, Publication publication, User commenter, boolean isPublic) {
+        if (publication == null) {
+            System.out.println("[Comment-Notification] SKIPPED: Publication is null");
+            return;
+        }
+        
+        // Ensure we have the publication's author
+        User author = publication.getUser();
+        if (author == null || author.getEmailUser() == null || author.getEmailUser().isBlank()) {
+            System.out.println("[Comment-Notification] INFO: Author missing or incomplete, fetching from database...");
+            // Use PublicationService to get a fresh copy with the user populated
+            com.syndicati.services.forum.PublicationService pubService = new com.syndicati.services.forum.PublicationService();
+            publication = pubService.findById(publication.getIdPublication()).orElse(publication);
+            author = publication.getUser();
+        }
+
+        if (author == null) {
+            System.out.println("[Comment-Notification] SKIPPED: Publication author still null after fetch (id=" + publication.getIdPublication() + ")");
+            return;
+        }
+        
+        if (commenter == null) {
+            System.out.println("[Comment-Notification] SKIPPED: Commenter is null");
+            return;
+        }
+
+        // Don't notify the author if they are the one commenting
+        if (author.getIdUser() != null && commenter.getIdUser() != null && author.getIdUser().equals(commenter.getIdUser())) {
+            System.out.println("[Comment-Notification] SKIPPED: Commenter is the author (id=" + author.getIdUser() + ")");
+            return;
+        }
+
+        if (author.getEmailUser() == null || author.getEmailUser().isBlank()) {
+            System.out.println("[Comment-Notification] SKIPPED: Author has no email (id=" + author.getIdUser() + ")");
+            return;
+        }
+
+        String commenterName = isPublic ? (commenter.getFirstName() + " " + commenter.getLastName()).trim() : "Anonymous User";
+        String snippet = content.length() > 120 ? content.substring(0, 117) + "..." : content;
+        
+        System.out.println("[Comment-Notification] Attempting to notify author: " + author.getEmailUser() + " about " + (isPublic ? "" : "ANONYMOUS ") + "comment by " + commenterName);
+
+        String html = SyndicatiEmailComposer.commentNotification(
+            author.getFirstName(),
+            commenterName,
+            publication.getTitrePub(),
+            snippet
+        );
+
+        asyncMailerService.sendHtmlAsync(author.getEmailUser(), "New comment on your post: " + publication.getTitrePub(), html);
     }
 
     public boolean commentaireDelete(Integer id) {
         return commentaireService.delete(id);
+    }
+
+    // Alias for view synchronization
+    public boolean commentDelete(Integer id) {
+        return commentaireDelete(id);
     }
 
     public CommentaireService getCommentaireService() {
