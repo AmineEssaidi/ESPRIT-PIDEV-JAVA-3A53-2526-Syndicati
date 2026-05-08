@@ -6,6 +6,7 @@ import com.syndicati.models.user.User;
 import com.syndicati.services.forum.CommentaireService;
 import com.syndicati.services.mail.AsyncMailerService;
 import com.syndicati.services.mail.SyndicatiEmailComposer;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +50,7 @@ public class CommentaireController {
     public Integer commentaireCreate(String description, String image, boolean visibility, Publication publication, User user) {
         Integer id = commentaireService.create(description, image, visibility, publication, user);
         if (id != null && id > 0) {
+            GlobalNotificationPillManager.created("Comment", "Comment posted successfully.");
             notifyAuthor(description, publication, user, visibility);
         }
         return id;
@@ -68,6 +70,7 @@ public class CommentaireController {
     public Integer commentaireCreate(String description, String image, boolean visibility, LocalDateTime createdAt, Publication publication, User user) {
         Integer id = commentaireService.create(description, image, visibility, createdAt, publication, user);
         if (id != null && id > 0) {
+            GlobalNotificationPillManager.created("Comment", "Comment posted successfully.");
             notifyAuthor(description, publication, user, visibility);
         }
         return id;
@@ -76,6 +79,7 @@ public class CommentaireController {
     public boolean commentaireUpdate(Integer id, String description, String image, Boolean visibility) {
         boolean success = commentaireService.update(id, description, image, visibility);
         if (success) {
+            GlobalNotificationPillManager.updated("Comment", "Comment updated successfully.");
             commentaireService.findById(id).ifPresent(c -> notifyAuthor(description, c.getPublication(), c.getUser(), c.isVisibility()));
         }
         return success;
@@ -89,6 +93,7 @@ public class CommentaireController {
     public boolean commentaireUpdate(Integer id, String description, String image, Boolean visibility, LocalDateTime createdAt) {
         boolean success = commentaireService.update(id, description, image, visibility, createdAt);
         if (success) {
+            GlobalNotificationPillManager.updated("Comment", "Comment updated successfully.");
             commentaireService.findById(id).ifPresent(c -> notifyAuthor(description, c.getPublication(), c.getUser(), c.isVisibility()));
         }
         return success;
@@ -147,7 +152,11 @@ public class CommentaireController {
     }
 
     public boolean commentaireDelete(Integer id) {
-        return commentaireService.delete(id);
+        boolean success = commentaireService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Comment", "Comment deleted successfully.");
+        }
+        return success;
     }
 
     // Alias for view synchronization

@@ -169,8 +169,8 @@ public class ApartmentRepository {
     }
 
     public boolean update(Integer id, Integer residenceId, Integer userId, Integer parking, Integer available,
-                         String image, String type, String info, Integer area, Integer rentalPrice,
-                         Integer salePrice, String dateConstructed) {
+                         String image, String type, String info, Double area, Double rentalPrice,
+                         Double salePrice, String dateConstructed) {
         String sql = "UPDATE appartement SET residence_id = ?, id_user = ?, parking = ?, disponible = ?, " +
             "image_a = ?, type_a = ?, appartement_info = ?, superficie = ?, prix_location = ?, " +
             "prix_vente = ?, date_construction = ? WHERE id_app = ?";
@@ -232,9 +232,9 @@ public class ApartmentRepository {
             rs.getString("image_apartment"),
             rs.getString("type_apartment"),
             rs.getString("apartment_info"),
-            rs.getObject("area") != null ? rs.getInt("area") : null,
-            rs.getObject("rental_price") != null ? rs.getInt("rental_price") : null,
-            rs.getObject("sale_price") != null ? rs.getInt("sale_price") : null,
+            rs.getObject("area") != null ? rs.getDouble("area") : null,
+            rs.getObject("rental_price") != null ? rs.getDouble("rental_price") : null,
+            rs.getObject("sale_price") != null ? rs.getDouble("sale_price") : null,
             rs.getString("date_constructed"),
             rs.getInt("id_apartment")
         );

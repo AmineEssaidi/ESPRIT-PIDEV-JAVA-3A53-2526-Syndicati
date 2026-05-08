@@ -14,9 +14,11 @@ import java.util.Map;
  */
 public class ImageLoaderUtil {
 
+    private static final int MAX_CACHED_IMAGES = 24;
+    private static final Object CACHE_LOCK = new Object();
     private static final Map<String, Image> imageCache = new LinkedHashMap<String, Image>(16, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry eldest) {
-            return size() > 64; // Keep max 64 images in memory
+            return size() > MAX_CACHED_IMAGES;
         }
     };
 
@@ -39,9 +41,10 @@ public class ImageLoaderUtil {
             return null;
         }
         
-        // Check cache first
-        if (imageCache.containsKey(imagePath)) {
-            return imageCache.get(imagePath);
+        // Check cache first (thread-safe; LinkedHashMap is not concurrent).
+        synchronized (CACHE_LOCK) {
+            Image cached = imageCache.get(imagePath);
+            if (cached != null) return cached;
         }
 
         try {
@@ -50,7 +53,9 @@ public class ImageLoaderUtil {
 
             // Check if it's a URL
             if (isUrl(candidate)) {
-                image = new Image(candidate, async);
+                // Do NOT cache remote URLs by default: they are often large and cause RAM growth.
+                // Callers that need caching should cache thumbnails explicitly.
+                return new Image(candidate, async);
             } else {
                 // Try loading from file system (relative or absolute path)
                 Path path = Paths.get(candidate);
@@ -71,7 +76,9 @@ public class ImageLoaderUtil {
             }
             
             if (image != null && !image.isError()) {
-                imageCache.put(imagePath, image);
+                synchronized (CACHE_LOCK) {
+                    imageCache.put(imagePath, image);
+                }
                 return image;
             }
 
@@ -104,6 +111,25 @@ public class ImageLoaderUtil {
 
         String path = imagePath.trim();
 
+        // If we stored an ImageKit URL in DB, try loading it first.
+        // If ImageKit is down, fall back to local uploads/profile_images/<filename>.
+        if (isUrl(path)) {
+            Image urlImg = loadImage(path, async);
+            if (urlImg != null) {
+                return urlImg;
+            }
+
+            String filename = extractFilenameFromUrl(path);
+            if (filename != null && !filename.isBlank()) {
+                Image localImg = loadImage("uploads/profile_images/" + filename, async);
+                if (localImg != null) return localImg;
+                localImg = loadImage("profile_images/" + filename, async);
+                if (localImg != null) return localImg;
+            }
+
+            return null;
+        }
+
         // Handle old paths that don't have 'uploads/' prefix
         if (!path.startsWith("uploads/") && !path.startsWith("uploads\\") && !isUrl(path)) {
             path = "uploads/" + path;
@@ -123,7 +149,23 @@ public class ImageLoaderUtil {
      * Clear the image cache (call sparingly, e.g., on logout).
      */
     public static void clearCache() {
-        imageCache.clear();
+        synchronized (CACHE_LOCK) {
+            imageCache.clear();
+        }
+    }
+
+    /**
+     * Trim cache to at most max entries (best-effort).
+     */
+    public static void trimCache(int max) {
+        int target = Math.max(0, max);
+        synchronized (CACHE_LOCK) {
+            while (imageCache.size() > target) {
+                // Remove eldest (iteration order is access-order).
+                String eldestKey = imageCache.keySet().iterator().next();
+                imageCache.remove(eldestKey);
+            }
+        }
     }
 
     /**
@@ -139,6 +181,20 @@ public class ImageLoaderUtil {
             || v.startsWith("file:")
             || v.startsWith("data:")
             || v.startsWith("jar:");
+    }
+
+    private static String extractFilenameFromUrl(String url) {
+        if (url == null || url.isBlank()) return null;
+        String u = url.trim();
+        int q = u.indexOf('?');
+        if (q >= 0) {
+            u = u.substring(0, q);
+        }
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < u.length() - 1) {
+            return u.substring(lastSlash + 1);
+        }
+        return u;
     }
 }
 

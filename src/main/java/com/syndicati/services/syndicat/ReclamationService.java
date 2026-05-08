@@ -129,8 +129,11 @@ public class ReclamationService {
         if (titre == null || titre.isBlank()) {
             return ValidationResult.invalid("titre_reclamations is required");
         }
-        if (titre.length() < 5) {
-            return ValidationResult.invalid("titre_reclamations must be at least 5 characters");
+        if (titre.length() < 10) {
+            return ValidationResult.invalid("titre_reclamations must be at least 10 characters");
+        }
+        if (!Character.isLetter(titre.charAt(0))) {
+            return ValidationResult.invalid("titre_reclamations must start with a letter");
         }
         if (titre.length() > 255) {
             return ValidationResult.invalid("titre_reclamations must not exceed 255 characters");
@@ -141,6 +144,9 @@ public class ReclamationService {
         }
         if (description.length() < 10) {
             return ValidationResult.invalid("desc_reclamation must be at least 10 characters");
+        }
+        if (!Character.isLetter(description.charAt(0))) {
+            return ValidationResult.invalid("desc_reclamation must start with a letter");
         }
         if (description.length() > 255) {
             return ValidationResult.invalid("desc_reclamation must not exceed 255 characters");

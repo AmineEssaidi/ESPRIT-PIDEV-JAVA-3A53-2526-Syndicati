@@ -4,6 +4,7 @@ import com.syndicati.models.evenement.Participation;
 import com.syndicati.models.evenement.Evenement;
 import com.syndicati.models.user.User;
 import com.syndicati.services.evenement.ParticipationService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,19 +44,35 @@ public class ParticipationController {
     }
 
     public Integer participationCreate(Evenement event, User user, Integer nbAccompagnants, String commentaire) {
-        return participationService.create(event, user, nbAccompagnants, commentaire);
+        Integer id = participationService.create(event, user, nbAccompagnants, commentaire);
+        if (id != null && id > 0) {
+            GlobalNotificationPillManager.created("Participation", "Participation created successfully.");
+        }
+        return id;
     }
 
     public boolean participationUpdateStatut(Integer id, String statut) {
-        return participationService.updateStatut(id, statut);
+        boolean success = participationService.updateStatut(id, statut);
+        if (success) {
+            GlobalNotificationPillManager.updated("Participation", "Participation updated successfully.");
+        }
+        return success;
     }
 
     public boolean participationUpdate(Integer id, Integer nbAccompagnants, String commentaire) {
-        return participationService.update(id, nbAccompagnants, commentaire);
+        boolean success = participationService.update(id, nbAccompagnants, commentaire);
+        if (success) {
+            GlobalNotificationPillManager.updated("Participation", "Participation updated successfully.");
+        }
+        return success;
     }
 
     public boolean participationDelete(Integer id) {
-        return participationService.delete(id);
+        boolean success = participationService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Participation", "Participation deleted successfully.");
+        }
+        return success;
     }
 
     public ParticipationService getParticipationService() {

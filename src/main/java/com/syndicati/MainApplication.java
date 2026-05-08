@@ -39,6 +39,7 @@ import com.syndicati.services.forum.SentimentAnalysisService;
  */
 public class MainApplication extends Application {
     private static final String GLOBAL_SCROLLBAR_CSS = "/styles/app-scrollbar.css";
+    private static final String ROOT_CLIP_LISTENER_KEY = "syndicati_root_clip_listener_installed";
     
     private static MainApplication instance;
     private Stage primaryStage;
@@ -49,6 +50,7 @@ public class MainApplication extends Application {
     private String boldFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private String lightFontFamily = "Clash Grotesk"; // default name in case load resolves differently
     private boolean windowChromeListenerInstalled = false;
+    private com.syndicati.services.polling.DbChangePoller dbChangePoller;
     private final ActivityLogController activityLogController = new ActivityLogController();
     private final AnomalyScoringScheduler anomalyScoringScheduler = new AnomalyScoringScheduler();
     private final LangfuseRuntimeService langfuseRuntimeService = LangfuseRuntimeService.getInstance();
@@ -438,35 +440,12 @@ public class MainApplication extends Application {
             // Background sync (ensure profile and metadata are warm in memory)
             Thread.startVirtualThread(() -> {
                 try {
+                    // Full warmup orchestration (data + views) while recovery cinematic is displayed.
+                    com.syndicati.services.warmup.WarmupOrchestrator orchestrator = new com.syndicati.services.warmup.WarmupOrchestrator();
+                    orchestrator.runFullWarmup((p, status) -> recoveryView.setProgress(p, status));
+
                     User user = SessionManager.getInstance().getCurrentUser();
-                    com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
-                    
-                    recoveryView.setProgress(0.2, "Syncing identity...");
-                    
-                    // 1. Fetch Profile (Critical)
-                    if (sm.getCurrentProfile() == null) {
-                        sm.setCurrentProfile(new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(user.getIdUser()).orElse(null));
-                    }
-                    
-                    recoveryView.setProgress(0.5, com.syndicati.utils.localization.LocalizationManager.getInstance().get("warming_workspace"));
-                    
-                    // 2. Pre-load Service Data (Forum & Events)
-                    // This populates the repository caches during the intro sequence
-                    PublicationController pubController = new PublicationController();
-                    EvenementController eventController = new EvenementController();
-                    
-                    recoveryView.setProgress(0.7, com.syndicati.utils.localization.LocalizationManager.getInstance().get("syncing_community"));
-                    pubController.publicationsByCategory("General");
-                    pubController.publicationsByCategory("Announcement");
-                    
-                    recoveryView.setProgress(0.85, com.syndicati.utils.localization.LocalizationManager.getInstance().get("fetching_events"));
-                    eventController.evenements();
-                    
-                    // 3. Refresh local cache for Dashboard data
-                    com.syndicati.services.DatabaseService.getInstance().getCache("warmup"); 
-                    
                     recoveryView.updateUser(user);
-                    recoveryView.setProgress(1.0, com.syndicati.utils.localization.LocalizationManager.getInstance().get("ready_to_enter"));
                 } catch (Exception e) {
                     System.err.println("[ERROR] Preloading failed: " + e.getMessage());
                     javafx.application.Platform.runLater(() -> showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false));
@@ -534,6 +513,10 @@ public class MainApplication extends Application {
         addResizeHandlers(primaryStage, scene);
         applyRoundedShape(scene);
         primaryStage.show();
+
+        // NOTE: Disabled aggressive live DB polling by default.
+        // It can introduce stutter by starving the DB connection pool and triggering UI rebuilds.
+        // If needed, this can be re-enabled later with a conservative interval.
 
         activityLogController.logPageView(goToDashboard ? "admin_dashboard" : "landing_dashboard", "Dashboard", java.util.Map.of(
             "source", "scene_switch",
@@ -773,7 +756,20 @@ public class MainApplication extends Application {
     }
     
     private void applyRoundedShape(Scene scene) {
+        ensureRootClipListenerInstalled(scene);
         updateWindowClip(scene, primaryStage != null && primaryStage.isMaximized());
+    }
+
+    private void ensureRootClipListenerInstalled(Scene scene) {
+        if (scene == null) return;
+        if (scene.getProperties().containsKey(ROOT_CLIP_LISTENER_KEY)) return;
+        scene.getProperties().put(ROOT_CLIP_LISTENER_KEY, Boolean.TRUE);
+
+        // Important: JavaFX clip is stored on the current scene root node.
+        // When code does scene.setRoot(...), the new root won't have the clip unless we re-apply it.
+        scene.rootProperty().addListener((obs, oldRoot, newRoot) -> {
+            updateWindowClip(scene, primaryStage != null && primaryStage.isMaximized());
+        });
     }
 
     private void installWindowChromeListener() {

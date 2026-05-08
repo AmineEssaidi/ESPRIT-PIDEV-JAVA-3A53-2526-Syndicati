@@ -5,7 +5,10 @@ import com.syndicati.models.forum.Publication;
 import com.syndicati.models.forum.Reaction;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
@@ -34,6 +37,8 @@ final class DashboardForumSection {
     private static VBox publicationsPane(DashboardView view) {
         VBox wrap = new VBox(16);
         List<Publication> publications = view.dashboardAdminService().publications();
+        List<Reaction> reactions = view.dashboardAdminService().reactions();
+        Map<Integer, PublicationReactionSummary> summaryByPublication = buildPublicationSummaries(reactions);
 
         int total = publications.size();
         int withImages = 0;
@@ -71,13 +76,19 @@ final class DashboardForumSection {
             String description = view.safe(pub.getDescriptionPub());
             String image = view.safe(pub.getImagePub());
             String date = pub.getDateCreationPub() != null ? pub.getDateCreationPub().toLocalDate().toString() : "";
+            PublicationReactionSummary summary = summaryByPublication.getOrDefault(pub.getIdPublication(), PublicationReactionSummary.empty());
 
             baseRows.add(new String[]{
                 title,
                 category,
                 description,
                 image,
-                date
+                date,
+                String.valueOf(summary.likes),
+                String.valueOf(summary.dislikes),
+                String.valueOf(summary.bookmarks),
+                String.valueOf(summary.reports),
+                summary.emojiSummary()
             });
         }
 
@@ -127,6 +138,37 @@ final class DashboardForumSection {
 
         wrap.getChildren().addAll(stats, tableHost);
         return wrap;
+    }
+
+    private static Map<Integer, PublicationReactionSummary> buildPublicationSummaries(List<Reaction> reactions) {
+        Map<Integer, PublicationReactionSummary> summaryByPublication = new HashMap<>();
+        if (reactions == null) {
+            return summaryByPublication;
+        }
+
+        for (Reaction reaction : reactions) {
+            if (reaction == null || reaction.getPublication() == null || reaction.getPublication().getIdPublication() == null) {
+                continue;
+            }
+
+            Integer publicationId = reaction.getPublication().getIdPublication();
+            PublicationReactionSummary summary = summaryByPublication.computeIfAbsent(publicationId, key -> new PublicationReactionSummary());
+
+            String kind = reaction.getKind();
+            if ("Like".equals(kind)) {
+                summary.likes++;
+            } else if ("Dislike".equals(kind)) {
+                summary.dislikes++;
+            } else if ("Bookmark".equals(kind)) {
+                summary.bookmarks++;
+            } else if ("Report".equals(kind)) {
+                summary.reports++;
+            } else if ("Emoji".equals(kind) && reaction.getEmoji() != null && !reaction.getEmoji().isBlank()) {
+                summary.emojiCounts.put(reaction.getEmoji(), summary.emojiCounts.getOrDefault(reaction.getEmoji(), 0) + 1);
+            }
+        }
+
+        return summaryByPublication;
     }
 
     private static VBox commentsPane(DashboardView view) {
@@ -333,6 +375,33 @@ final class DashboardForumSection {
 
         wrap.getChildren().addAll(stats, tableHost);
         return wrap;
+    }
+
+    private static final class PublicationReactionSummary {
+        int likes;
+        int dislikes;
+        int bookmarks;
+        int reports;
+        Map<String, Integer> emojiCounts = new LinkedHashMap<>();
+
+        static PublicationReactionSummary empty() {
+            return new PublicationReactionSummary();
+        }
+
+        String emojiSummary() {
+            if (emojiCounts.isEmpty()) {
+                return "None";
+            }
+
+            StringBuilder summary = new StringBuilder();
+            for (Map.Entry<String, Integer> entry : emojiCounts.entrySet()) {
+                if (summary.length() > 0) {
+                    summary.append(", ");
+                }
+                summary.append(entry.getKey()).append(" x").append(entry.getValue());
+            }
+            return summary.toString();
+        }
     }
 
     private static HBox dashboardHeaderControls(TextField searchField, Button sortPill, HBox filterRow) {

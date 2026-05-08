@@ -65,8 +65,8 @@ public class ApartmentService {
      * Create a new apartment.
      */
     public Integer create(Integer residenceId, Integer userId, Integer parking, Integer available,
-                         String image, String type, String info, Integer area, Integer rentalPrice,
-                         Integer salePrice, String dateConstructed) {
+                         String image, String type, String info, Double area, Double rentalPrice,
+                         Double salePrice, String dateConstructed) {
         ValidationResult validation = validateCreate(residenceId, type, area, rentalPrice);
         if (!validation.valid) {
             System.out.println("ApartmentService.create validation failed: " + validation.message);
@@ -82,8 +82,8 @@ public class ApartmentService {
      * Update an existing apartment.
      */
     public boolean update(Integer id, Integer residenceId, Integer userId, Integer parking, Integer available,
-                         String image, String type, String info, Integer area, Integer rentalPrice,
-                         Integer salePrice, String dateConstructed) {
+                         String image, String type, String info, Double area, Double rentalPrice,
+                         Double salePrice, String dateConstructed) {
         if (id == null || id <= 0) {
             return false;
         }
@@ -157,7 +157,7 @@ public class ApartmentService {
         return apartments.stream().filter(apt -> apt.getAvailable() == 1).toList();
     }
 
-    private ValidationResult validateCreate(Integer residenceId, String type, Integer area, Integer rentalPrice) {
+    private ValidationResult validateCreate(Integer residenceId, String type, Double area, Double rentalPrice) {
         if (residenceId == null || residenceId <= 0) {
             return new ValidationResult(false, "Residence ID is required");
         }
@@ -182,7 +182,7 @@ public class ApartmentService {
         return new ValidationResult(true, "");
     }
 
-    private ValidationResult validateUpdate(String type, Integer area, Integer rentalPrice) {
+    private ValidationResult validateUpdate(String type, Double area, Double rentalPrice) {
         if (type == null || type.isBlank()) {
             return new ValidationResult(false, "Apartment type is required");
         }

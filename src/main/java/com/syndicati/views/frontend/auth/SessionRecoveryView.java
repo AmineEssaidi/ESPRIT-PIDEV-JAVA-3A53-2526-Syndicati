@@ -16,6 +16,9 @@ import javafx.scene.effect.GaussianBlur;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
+import javafx.scene.media.MediaView;
 import javafx.scene.paint.*;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
@@ -24,6 +27,7 @@ import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import com.syndicati.utils.media.CinematicVideoCache;
 
 /**
  * SessionRecoveryView - A cinematic, high-end animation view shown during auto-login.
@@ -45,6 +49,9 @@ public class SessionRecoveryView {
     private VBox userCard;
     private ImageView avatarView;
     private Label nameLabel;
+
+    private MediaPlayer videoPlayer;
+    private boolean useVideoBackground = true;
     
     private Runnable onGoHome;
     private Runnable onGoDashboard;
@@ -65,6 +72,9 @@ public class SessionRecoveryView {
     public void setOnGoDashboard(Runnable r) { this.onGoDashboard = r; }
 
     private void setupContent() {
+        // Background video replaces dot/particle visuals.
+        setupVideoBackground();
+
         // 1. Cinematic Background
         Circle topGlow = new Circle(400, Color.web(accentHex, 0.08));
         topGlow.setTranslateY(-300);
@@ -130,12 +140,44 @@ public class SessionRecoveryView {
 
         centerBox.getChildren().addAll(userCard, statusBox, actionsBox);
 
-        // 5. Particle Layer
-        Pane particleLayer = new Pane();
-        particleLayer.setMouseTransparent(true);
-        createParticles(particleLayer);
+        // 5. Particle Layer (only if video fails)
+        if (!useVideoBackground) {
+            Pane particleLayer = new Pane();
+            particleLayer.setMouseTransparent(true);
+            createParticles(particleLayer);
+            root.getChildren().addAll(topGlow, bottomGlow, particleLayer, centerBox);
+        } else {
+            root.getChildren().addAll(topGlow, bottomGlow, centerBox);
+        }
+    }
 
-        root.getChildren().addAll(topGlow, bottomGlow, particleLayer, centerBox);
+    private void setupVideoBackground() {
+        if (!useVideoBackground) return;
+        try {
+            try { CinematicVideoCache.warmupAsync(); } catch (Throwable ignored) {}
+            String src;
+            try {
+                src = CinematicVideoCache.getStartupVideoSource();
+            } catch (Throwable t) {
+                src = CinematicVideoCache.REMOTE_STARTUP_VIDEO_URL;
+            }
+            Media media = new Media(src);
+            videoPlayer = new MediaPlayer(media);
+            videoPlayer.setVolume(0.0);
+            videoPlayer.setAutoPlay(false);
+            videoPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+
+            MediaView mv = new MediaView(videoPlayer);
+            mv.setPreserveRatio(false);
+            mv.fitWidthProperty().bind(root.widthProperty());
+            mv.fitHeightProperty().bind(root.heightProperty());
+            mv.setSmooth(true);
+
+            root.getChildren().add(0, mv);
+        } catch (Exception e) {
+            useVideoBackground = false;
+            System.err.println("[SessionRecovery] Video background failed: " + e.getMessage());
+        }
     }
 
     private void setDefaultAvatar(ImageView iv) {
@@ -152,11 +194,13 @@ public class SessionRecoveryView {
     }
 
     private void startAmbientAnimations() {
-        particleTimeline = new Timeline(new KeyFrame(Duration.millis(30), e -> {
-            for (Particle p : particles) p.update();
-        }));
-        particleTimeline.setCycleCount(Timeline.INDEFINITE);
-        particleTimeline.play();
+        if (!useVideoBackground && !particles.isEmpty()) {
+            particleTimeline = new Timeline(new KeyFrame(Duration.millis(30), e -> {
+                for (Particle p : particles) p.update();
+            }));
+            particleTimeline.setCycleCount(Timeline.INDEFINITE);
+            particleTimeline.play();
+        }
         
         // Fade in user card
         FadeTransition ft = new FadeTransition(Duration.seconds(1), userCard);
@@ -164,6 +208,20 @@ public class SessionRecoveryView {
         TranslateTransition tt = new TranslateTransition(Duration.seconds(1), userCard);
         tt.setToY(0);
         new ParallelTransition(ft, tt).play();
+
+        if (videoPlayer != null) {
+            if (videoPlayer.getStatus() == MediaPlayer.Status.READY) {
+                videoPlayer.seek(Duration.ZERO);
+                videoPlayer.play();
+            } else {
+                videoPlayer.setOnReady(() -> {
+                    try {
+                        videoPlayer.seek(Duration.ZERO);
+                        videoPlayer.play();
+                    } catch (Exception ignored) {}
+                });
+            }
+        }
     }
 
     public void setProgress(double p, String status) {
@@ -266,6 +324,7 @@ public class SessionRecoveryView {
 
     public void cleanup() {
         if (particleTimeline != null) particleTimeline.stop();
+        if (videoPlayer != null) videoPlayer.stop();
     }
 
     // --- INNER CLASSES ---

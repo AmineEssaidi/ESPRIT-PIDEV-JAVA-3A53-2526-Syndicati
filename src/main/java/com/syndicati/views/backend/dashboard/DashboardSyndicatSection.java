@@ -5,6 +5,7 @@ import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.syndicat.Reponse;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,25 +42,38 @@ final class DashboardSyndicatSection {
         int active = 0;
         int pending = 0;
         int resolved = 0;
+        int rejected = 0;
 
         for (Reclamation rec : reclamations) {
-            if ("active".equals(rec.getStatutReclamation())) {
+            String status = rec.getStatutReclamation();
+            if ("active".equals(status)) {
                 active++;
-            } else if ("en_attente".equals(rec.getStatutReclamation())) {
+            } else if ("en_attente".equals(status)) {
                 pending++;
-            } else if ("termine".equals(rec.getStatutReclamation())) {
+            } else if ("termine".equals(status)) {
                 resolved++;
+            } else if ("refuse".equals(status)) {
+                rejected++;
             }
         }
 
         HBox stats = new HBox(16);
         stats.setFillHeight(true);
         view.addStatCards(stats,
-            new String[]{"TOT", "ACT", "PEN", "RES"},
-            new String[]{"Total", "Active", "Pending", "Resolved"},
-            new String[]{String.valueOf(total), String.valueOf(active), String.valueOf(pending), String.valueOf(resolved)},
-            new String[]{"#60a5fa", "#10b981", "#f59e0b", "#3b82f6"}
+            new String[]{"TOT", "ACT", "PEN", "RES", "REJ"},
+            new String[]{"Total", "Active", "Pending", "Resolved", "Rejected"},
+            new String[]{String.valueOf(total), String.valueOf(active), String.valueOf(pending), String.valueOf(resolved), String.valueOf(rejected)},
+            new String[]{"#60a5fa", "#10b981", "#f59e0b", "#3b82f6", "#ef4444"}
         );
+
+        List<Reponse> allReponses = controller.reponses();
+        Map<Integer, Integer> replyCounts = new HashMap<>();
+        for (Reponse r : allReponses) {
+            if (r.getReclamation() != null) {
+                int recId = r.getReclamation().getIdReclamations();
+                replyCounts.put(recId, replyCounts.getOrDefault(recId, 0) + 1);
+            }
+        }
 
         List<String[]> baseRows = new ArrayList<>();
         for (Reclamation rec : reclamations) {
@@ -67,7 +81,7 @@ final class DashboardSyndicatSection {
             String title = rec.getTitreReclamations() != null ? rec.getTitreReclamations() : "-";
             String status = rec.getStatutReclamation() != null ? rec.getStatutReclamation() : "-";
             String date = rec.getCreatedAt() != null ? rec.getCreatedAt().toString().substring(0, 10) : "-";
-            int replyCount = rec.getReponses() != null ? rec.getReponses().size() : 0;
+            int replyCount = replyCounts.getOrDefault(rec.getIdReclamations(), 0);
 
             baseRows.add(new String[]{
                 title,

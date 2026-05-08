@@ -232,6 +232,93 @@ public class NavigationManager {
         }
     }
 
+    /**
+     * Dispose a cached view instance and release references for GC.
+     * This calls cleanup() when available and then nulls the cached field.
+     */
+    public synchronized void disposeView(String pageName) {
+        String normalized = pageName == null ? "" : pageName.toLowerCase().trim();
+        if (normalized.equals("residence")) normalized = "services/residence";
+        if (normalized.equals("forum")) normalized = "services/forum";
+        if (normalized.equals("syndicat")) normalized = "services/syndicat";
+        if (normalized.equals("evenement")) normalized = "services/evenement";
+
+        System.out.println("[Dispose] Requested disposeView(" + normalized + ")");
+
+        try {
+            switch (normalized) {
+                case "services":
+                    System.out.println("[Dispose] servicesView=" + (servicesView != null));
+                    if (servicesView != null) servicesView.cleanup();
+                    servicesView = null;
+                    break;
+                case "about":
+                    System.out.println("[Dispose] aboutView=" + (aboutView != null));
+                    if (aboutView != null) aboutView.cleanup();
+                    aboutView = null;
+                    break;
+                case "profile":
+                    System.out.println("[Dispose] profileView=" + (profileView != null));
+                    if (profileView != null) profileView.cleanup();
+                    profileView = null;
+                    break;
+                case "dashboard":
+                    System.out.println("[Dispose] dashboardView=" + (dashboardView != null));
+                    if (dashboardView != null) dashboardView.cleanup();
+                    dashboardView = null;
+                    break;
+                case "service-detail":
+                    System.out.println("[Dispose] serviceDetailView=" + (serviceDetailView != null));
+                    if (serviceDetailView != null) serviceDetailView.cleanup();
+                    serviceDetailView = null;
+                    break;
+                case "about-detail":
+                    System.out.println("[Dispose] aboutDetailView=" + (aboutDetailView != null));
+                    if (aboutDetailView != null) aboutDetailView.cleanup();
+                    aboutDetailView = null;
+                    break;
+                case "settings":
+                    System.out.println("[Dispose] settingsView=" + (settingsView != null));
+                    if (settingsView != null) settingsView.cleanup();
+                    settingsView = null;
+                    break;
+                case "services/residence":
+                    System.out.println("[Dispose] residenceView=" + (residenceView != null));
+                    if (residenceView != null) residenceView.cleanup();
+                    residenceView = null;
+                    break;
+                case "services/forum":
+                    System.out.println("[Dispose] forumView=" + (forumView != null));
+                    if (forumView != null) forumView.cleanup();
+                    forumView = null;
+                    break;
+                case "services/syndicat":
+                    System.out.println("[Dispose] syndicatView=" + (syndicatView != null));
+                    if (syndicatView != null) syndicatView.cleanup();
+                    syndicatView = null;
+                    break;
+                case "services/evenement":
+                    System.out.println("[Dispose] evenementView=" + (evenementView != null));
+                    if (evenementView != null) evenementView.cleanup();
+                    evenementView = null;
+                    break;
+                default:
+                    break;
+            }
+        } catch (Exception ignored) {
+            // Ensure references are still dropped even if cleanup fails.
+            if (normalized.equals("services/forum")) forumView = null;
+            if (normalized.equals("services/evenement")) evenementView = null;
+            if (normalized.equals("services/residence")) residenceView = null;
+            if (normalized.equals("services/syndicat")) syndicatView = null;
+            if (normalized.equals("profile")) profileView = null;
+            if (normalized.equals("dashboard")) dashboardView = null;
+        }
+
+        // After dropping references, run a best-effort memory trim under pressure.
+        try { com.syndicati.utils.perf.MemoryPressureUtil.onViewDisposed(); } catch (Exception ignored) {}
+    }
+
     public Pane getPage(String pageName) {
         String normalized = pageName == null ? "home" : pageName.toLowerCase().trim();
         

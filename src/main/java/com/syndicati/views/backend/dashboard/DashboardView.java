@@ -3,13 +3,17 @@ package com.syndicati.views.backend.dashboard;
 import com.syndicati.controllers.log.AnalyticsController;
 import com.syndicati.models.log.analytics.AnomalyResult;
 import com.syndicati.models.log.analytics.SuspiciousActivity;
+import com.syndicati.models.forum.Publication;
 import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
+import com.syndicati.models.residence.Residence;
+import com.syndicati.models.residence.Apartment;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
@@ -23,10 +27,15 @@ import javafx.scene.Node;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Popup;
 import javafx.stage.Window;
+import com.syndicati.utils.image.imagekit.ImageKitConfig;
+import com.syndicati.utils.image.imagekit.ImageKitStorageService;
+import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
+import java.io.File;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
@@ -39,10 +48,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.paint.ImagePattern;
 
 /**
@@ -1303,15 +1314,16 @@ public class DashboardView implements ViewInterface {
         HBox cards = new HBox(16);
         cards.setFillHeight(true);
         addStatCards(cards,
-            new String[]{"SYN", "REC", "PND", "REP"},
-            new String[]{"Syndics", "Reclamations", "Pending", "Responses"},
+            new String[]{"SYN", "REC", "PND", "REP", "REJ"},
+            new String[]{"Syndics", "Reclamations", "Pending", "Responses", "Rejected"},
             new String[]{
                 String.valueOf(intStat(stats, "total")),
                 String.valueOf(intStat(stats, "reclamations")),
                 String.valueOf(intStat(stats, "reclamations_pending")),
-                String.valueOf(intStat(stats, "reponses"))
+                String.valueOf(intStat(stats, "reponses")),
+                String.valueOf(intStat(stats, "reclamations_rejected"))
             },
-            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24"}
+            new String[]{"#a78bfa", "#34d399", "#60a5fa", "#fbbf24", "#ef4444"}
         );
 
         VBox recent = sectionCard();
@@ -1758,20 +1770,36 @@ public class DashboardView implements ViewInterface {
             for (int r = fromIndex; r < toIndex; r++) {
                 String bg = (((r - fromIndex) & 1) == 0) ? "transparent" : "rgba(255,255,255,0.01)";
                 String[] rowData = workingRows.get(r);
-                for (int c = 0; c < rowData.length; c++) {
-                    Text tx = t(rowData[c], lightFont(), FontWeight.NORMAL, 14);
-                    tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
+                
+                // Detect hidden ID: if we have more data than columns, assume index 0 is hidden ID
+                boolean hasHiddenId = rowData.length > cols.length;
+                int dataStartIdx = hasHiddenId ? 1 : 0;
+
+                for (int c = 0; c < cols.length; c++) {
+                    int dataIdx = dataStartIdx + c;
+                    if (dataIdx >= rowData.length) break;
+
+                    Node cellContent;
+                    boolean isImage = isImageFieldLabel(cols[c]);
+                    String cellValue = rowData[dataIdx];
                     
-                    // CRITICAL FIX: Ensure text stays within column bounds
-                    tx.setWrappingWidth(140); 
-                    
-                    HBox cb = new HBox(tx);
+                    if (isImage && cellValue != null && !cellValue.isBlank() && !"-".equals(cellValue)) {
+                        cellContent = tableThumbnail(cellValue);
+                    } else {
+                        Text tx = t(cellValue, lightFont(), FontWeight.NORMAL, 14);
+                        tx.setFill(c == 0 ? textSecondaryColor() : textMutedColor());
+                        tx.setWrappingWidth(140);
+                        cellContent = tx;
+                    }
+
+                    HBox cb = new HBox(cellContent);
                     cb.setMinWidth(100);
                     cb.setPrefWidth(160);
                     cb.setMaxWidth(200);
                     
-                    // Force the text to follow the container width
-                    tx.wrappingWidthProperty().bind(cb.widthProperty().subtract(24)); 
+                    if (cellContent instanceof Text tx) {
+                        tx.wrappingWidthProperty().bind(cb.widthProperty().subtract(24));
+                    }
                     
                     cb.setPadding(new Insets(10,12,10,12));
                     cb.setAlignment(Pos.CENTER_LEFT);
@@ -2040,6 +2068,7 @@ public class DashboardView implements ViewInterface {
                 Button del = dangerAction(spec.viewDeleteLabel);
                 del.setOnAction(ignored -> {
                     if (dashboardAdminService.deleteEntity(entityLabel, rowData)) {
+                        viewCache.clear();
                         switchSection(activeSection);
                     } else {
                         switchToTableFace(container);
@@ -2055,6 +2084,7 @@ public class DashboardView implements ViewInterface {
             Button save = pillAction(saveLabel, true);
             save.setOnAction(ignored -> {
                 if (dashboardAdminService.saveEntity(entityLabel, mode, rowData, fields)) {
+                    viewCache.clear();
                     switchSection(activeSection);
                 } else {
                     switchToTableFace(container);
@@ -2091,10 +2121,15 @@ public class DashboardView implements ViewInterface {
         ));
         if ("view".equals(mode)) {
             fields.getChildren().add(metaStrip(rowData));
+            if ("Publication".equalsIgnoreCase(entityLabel)) {
+                fields.getChildren().add(publicationInsightCard(rowData));
+            }
         }
 
+        boolean hasHiddenId = (rowData != null && cols.length < rowData.length);
         for (int i = 0; i < cols.length; i++) {
-            String val = (rowData != null && i < rowData.length) ? rowData[i] : "";
+            int dataIdx = hasHiddenId ? i + 1 : i;
+            String val = (rowData != null && dataIdx < rowData.length) ? rowData[dataIdx] : "";
             boolean editable = "edit".equals(mode) || "add".equals(mode);
             fields.getChildren().add(fieldRow(entityLabel, mode, cols[i], val, editable));
         }
@@ -2105,13 +2140,253 @@ public class DashboardView implements ViewInterface {
             fields.getChildren().add(notesBox());
         }
 
+        if ("Reponse".equalsIgnoreCase(entityLabel) && ("edit".equals(mode) || "add".equals(mode))) {
+            setupReponseConditionalFields(fields);
+        }
+
         return fields;
+    }
+
+    private void setupReponseConditionalFields(VBox fields) {
+        ComboBox<String> userSelect = null;
+        ComboBox<String> recSelect = null;
+
+        for (Node rowNode : fields.getChildren()) {
+            if (rowNode instanceof VBox row) {
+                for (Node child : row.getChildren()) {
+                    if (child instanceof ComboBox<?> cb) {
+                        if ("reponse-user-select".equals(cb.getId())) userSelect = (ComboBox<String>) cb;
+                        if ("reponse-reclamation-select".equals(cb.getId())) recSelect = (ComboBox<String>) cb;
+                    }
+                }
+            }
+        }
+
+        if (userSelect != null && recSelect != null) {
+            final ComboBox<String> finalRecSelect = recSelect;
+            final ComboBox<String> finalUserSelect = userSelect;
+
+            // Initial state
+            if (userSelect.getValue() == null || userSelect.getValue().isBlank() || "-".equals(userSelect.getValue())) {
+                finalRecSelect.setDisable(true);
+            }
+
+            userSelect.valueProperty().addListener((obs, oldVal, newVal) -> {
+                String currentRec = finalRecSelect.getValue();
+                if (newVal == null || newVal.isBlank() || "-".equals(newVal)) {
+                    finalRecSelect.setDisable(true);
+                    finalRecSelect.getItems().clear();
+                } else {
+                    finalRecSelect.setDisable(false);
+                    finalRecSelect.getItems().setAll(reponseReclamationOptionsByUser(newVal));
+                    if (currentRec != null && finalRecSelect.getItems().contains(currentRec)) {
+                        finalRecSelect.setValue(currentRec);
+                    }
+                }
+            });
+        }
     }
 
     private Text sectionTitle(String text) {
         Text t = t(text, boldFont(), FontWeight.BOLD, 16);
         t.setFill(textSecondaryColor());
         return t;
+    }
+
+    private VBox publicationInsightCard(String[] rowData) {
+        String imagePath = rowData != null && rowData.length > 3 ? rowData[3] : "";
+        int likes = parseIntCell(rowData, 5);
+        int dislikes = parseIntCell(rowData, 6);
+        int bookmarks = parseIntCell(rowData, 7);
+        int reports = parseIntCell(rowData, 8);
+        String emojiSummary = rowData != null && rowData.length > 9 ? rowData[9] : "None";
+
+        VBox wrap = new VBox(14);
+        wrap.getChildren().add(sectionTitle("Publication Insights"));
+
+        HBox mediaRow = new HBox(16);
+        mediaRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox thumbnailCard = new VBox();
+        thumbnailCard.setPadding(new Insets(10));
+        thumbnailCard.setStyle(
+            "-fx-background-color:rgba(255,255,255,0.03);" +
+            "-fx-border-color:rgba(255,255,255,0.08);" +
+            "-fx-border-width:1;" +
+            "-fx-background-radius:14px;" +
+            "-fx-border-radius:14px;"
+        );
+
+        Node thumbnail = publicationThumbnail(imagePath);
+        thumbnailCard.getChildren().add(thumbnail);
+
+        VBox mediaText = new VBox(4);
+        Text mediaTitle = t("Publication media", lightFont(), FontWeight.NORMAL, 12);
+        mediaTitle.setFill(textMutedColor());
+        Text mediaValue = t(imagePath == null || imagePath.isBlank() || "-".equals(imagePath) ? "No media attached" : imagePath, lightFont(), FontWeight.NORMAL, 13);
+        mediaValue.setFill(textSecondaryColor());
+        mediaValue.setWrappingWidth(300);
+        mediaText.getChildren().addAll(mediaTitle, mediaValue);
+
+        mediaRow.getChildren().addAll(thumbnailCard, mediaText);
+
+        // Ratio Bar (Mirroring ForumPageView)
+        VBox ratioBox = new VBox(6);
+        int totalReactions = likes + dislikes;
+        double ratio = totalReactions == 0 ? 0 : (double) likes / totalReactions;
+        String ratioText = totalReactions == 0 ? "0%" : (int)(ratio * 100) + "%";
+        
+        HBox ratioHeader = new HBox(4);
+        ratioHeader.setAlignment(Pos.CENTER_LEFT);
+        Text ratioTitle = t("Reaction Ratio", lightFont(), FontWeight.SEMI_BOLD, 12);
+        ratioTitle.setFill(textMutedColor());
+        Text ratioVal = t(ratioText, boldFont(), FontWeight.BOLD, 12);
+        ratioVal.setFill(Color.web(accentHex()));
+        ratioHeader.getChildren().addAll(ratioTitle, ratioVal);
+
+        HBox ratioBarContainer = new HBox();
+        ratioBarContainer.setPrefSize(200, 6);
+        ratioBarContainer.setMaxSize(200, 6);
+        ratioBarContainer.setStyle("-fx-background-color:rgba(255,255,255,0.05); -fx-background-radius:100px; -fx-overflow:hidden;");
+        
+        Region likesBar = new Region();
+        likesBar.setStyle("-fx-background-color:#22c55e; -fx-background-radius:100px 0 0 100px;");
+        likesBar.setPrefHeight(6);
+        likesBar.setPrefWidth(200 * ratio);
+        
+        Region dislikesBar = new Region();
+        dislikesBar.setStyle("-fx-background-color:#ef4444; -fx-background-radius:" + (ratio >= 1.0 ? "0" : "0 100px 100px 0") + ";");
+        dislikesBar.setPrefHeight(6);
+        dislikesBar.setPrefWidth(200 * (1.0 - ratio));
+        
+        ratioBarContainer.getChildren().addAll(likesBar, dislikesBar);
+        ratioBox.getChildren().addAll(ratioHeader, ratioBarContainer);
+
+        HBox chips = new HBox(8);
+        chips.setAlignment(Pos.CENTER_LEFT);
+        chips.getChildren().addAll(
+            chip("\uD83D\uDC4D " + likes, true),
+            chip("\uD83D\uDC4E " + dislikes, false),
+            chip("\uD83D\uDCAF " + bookmarks, false),
+            chip("\u26A0\uFE0F " + reports, false)
+        );
+
+        VBox emojiSection = new VBox(6);
+        Text emojiTitle = t("Emoji reactions", lightFont(), FontWeight.NORMAL, 12);
+        emojiTitle.setFill(textMutedColor());
+        
+        FlowPane emojiFlow = new FlowPane(10, 10);
+        emojiFlow.setAlignment(Pos.CENTER_LEFT);
+        
+        if (emojiSummary == null || emojiSummary.isBlank() || "None".equals(emojiSummary)) {
+            Text none = t("No emoji reactions", lightFont(), FontWeight.NORMAL, 13);
+            none.setFill(textMutedColor());
+            emojiFlow.getChildren().add(none);
+        } else {
+            String[] parts = emojiSummary.split(", ");
+            for (String part : parts) {
+                // Format: "?? x1"
+                int xIndex = part.lastIndexOf(" x");
+                if (xIndex > 0) {
+                    String emojiStr = part.substring(0, xIndex).trim();
+                    String countStr = part.substring(xIndex + 2).trim();
+                    
+                    HBox item = new HBox(4);
+                    item.setAlignment(Pos.CENTER_LEFT);
+                    item.setPadding(new Insets(4, 8, 4, 8));
+                    item.setStyle("-fx-background-color:rgba(255,255,255,0.04); -fx-background-radius:8px; -fx-border-color:rgba(255,255,255,0.08); -fx-border-radius:8px;");
+                    
+                    Node icon = twemojiIcon(emojiStr, 18);
+                    Text count = t(countStr, lightFont(), FontWeight.BOLD, 12);
+                    count.setFill(textSecondaryColor());
+                    
+                    item.getChildren().addAll(icon, count);
+                    emojiFlow.getChildren().add(item);
+                }
+            }
+        }
+        emojiSection.getChildren().addAll(emojiTitle, emojiFlow);
+
+        wrap.getChildren().addAll(mediaRow, ratioBox, chips, emojiSection);
+        return wrap;
+    }
+
+    private Node twemojiIcon(String emoji, int size) {
+        if (emoji == null || emoji.isBlank()) return new Text("");
+        try {
+            String hex = Integer.toHexString(emoji.codePointAt(0));
+            if ("2764".equals(hex) || "❤️".equals(emoji)) hex = "2764"; // Fix for heart variant
+            String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
+            
+            Image img = new Image(url, true);
+            ImageView iv = new ImageView(img);
+            iv.setFitWidth(size);
+            iv.setFitHeight(size);
+            iv.setSmooth(true);
+            return iv;
+        } catch (Exception e) {
+            return t(emoji, lightFont(), FontWeight.NORMAL, size);
+        }
+    }
+
+    private Node publicationThumbnail(String imagePath) {
+        VBox placeholder = new VBox();
+        placeholder.setPrefSize(120, 78);
+        placeholder.setMinSize(120, 78);
+        placeholder.setMaxSize(120, 78);
+        placeholder.setAlignment(Pos.CENTER);
+        placeholder.setStyle(
+            "-fx-background-color:rgba(255,255,255,0.04);" +
+            "-fx-background-radius:12px;" +
+            "-fx-border-color:rgba(255,255,255,0.08);" +
+            "-fx-border-radius:12px;" +
+            "-fx-border-width:1;"
+        );
+
+        if (imagePath == null || imagePath.isBlank() || "-".equals(imagePath)) {
+            Text none = t("No image", lightFont(), FontWeight.NORMAL, 12);
+            none.setFill(textMutedColor());
+            placeholder.getChildren().add(none);
+            return placeholder;
+        }
+
+        // Try multiple paths to find the image
+        Image image = ImageLoaderUtil.loadImage(imagePath);
+        if (image == null || image.isError()) {
+            image = ImageLoaderUtil.loadImage("uploads/" + imagePath);
+        }
+        if (image == null || image.isError()) {
+            image = ImageLoaderUtil.loadImage("uploads/forum_images/" + imagePath);
+        }
+        if (image == null || image.isError()) {
+            image = ImageLoaderUtil.loadImage("uploads/profile_images/" + imagePath);
+        }
+        
+        if (image == null || image.isError()) {
+            Text none = t("Image unavailable", lightFont(), FontWeight.NORMAL, 12);
+            none.setFill(textMutedColor());
+            placeholder.getChildren().add(none);
+            return placeholder;
+        }
+
+        ImageView preview = new ImageView(image);
+        preview.setFitWidth(120);
+        preview.setFitHeight(78);
+        preview.setPreserveRatio(true);
+        preview.setSmooth(true);
+        preview.setClip(new Rectangle(120, 78));
+        return preview;
+    }
+
+    private int parseIntCell(String[] rowData, int index) {
+        if (rowData == null || index < 0 || index >= rowData.length) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(rowData[index]);
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private HBox metaStrip(String[] rowData) {
@@ -2190,6 +2465,91 @@ public class DashboardView implements ViewInterface {
         }
 
         if (canEditThisField) {
+            if (label.toLowerCase().contains("image")) {
+                TextField urlField = new TextField(value != null ? value : "");
+                urlField.setEditable(false);
+                urlField.setPromptText("Click upload to add media...");
+                urlField.setStyle("-fx-background-color:rgba(255,255,255,0.05);-fx-text-fill:white;-fx-border-color:rgba(255,255,255,0.1);-fx-border-radius:100;-fx-background-radius:100;-fx-padding:8 12 8 12;");
+                HBox.setHgrow(urlField, Priority.ALWAYS);
+
+                ImageView preview = new ImageView();
+                preview.setFitWidth(80);
+                preview.setFitHeight(50);
+                preview.setPreserveRatio(true);
+                preview.setStyle("-fx-background-radius: 8px;");
+
+                Runnable updatePreview = () -> {
+                    String path = urlField.getText();
+                    if (path != null && !path.isBlank() && !"-".equals(path)) {
+                        Image img = ImageLoaderUtil.loadImage(path);
+                        if (img != null && !img.isError()) {
+                            preview.setImage(img);
+                            preview.setManaged(true);
+                            preview.setVisible(true);
+                        } else {
+                            preview.setManaged(false);
+                            preview.setVisible(false);
+                        }
+                    } else {
+                        preview.setManaged(false);
+                        preview.setVisible(false);
+                    }
+                };
+                updatePreview.run();
+                urlField.textProperty().addListener((obs, oldV, newV) -> updatePreview.run());
+                
+                Button uploadBtn = pillAction(value != null && !value.isBlank() && !"-".equals(value) ? "Change" : "Upload", true);
+                uploadBtn.setPadding(new Insets(8, 16, 8, 16));
+                
+                Button removeBtn = new Button("✕");
+                removeBtn.setTooltip(new javafx.scene.control.Tooltip("Remove Image"));
+                removeBtn.setStyle("-fx-background-color:rgba(255,59,48,0.1);-fx-text-fill:#ff3b30;-fx-font-weight:bold;-fx-background-radius:100;-fx-min-width:32;-fx-min-height:32;-fx-cursor:hand;");
+                removeBtn.setOnAction(e -> {
+                    urlField.setText("-");
+                    uploadBtn.setText("Upload");
+                    liveHint.setText("Image removed");
+                    liveHint.setTextFill(Color.web("#ff3b30"));
+                });
+
+                uploadBtn.setOnAction(e -> {
+                    FileChooser fc = new FileChooser();
+                    fc.setTitle("Select " + label);
+                    fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"));
+                    File selected = fc.showOpenDialog(root.getScene().getWindow());
+                    if (selected != null) {
+                        uploadBtn.setText("...");
+                        uploadBtn.setDisable(true);
+                        new Thread(() -> {
+                            try {
+                                ImageKitConfig cfg = ImageKitConfig.fromEnv();
+                                ImageKitStorageService svc = new ImageKitStorageService(cfg);
+                                ImageKitUploadResult res = svc.uploadFile(selected, "dashboard_assets");
+                                javafx.application.Platform.runLater(() -> {
+                                    urlField.setText(res.url());
+                                    uploadBtn.setText("Change");
+                                    uploadBtn.setDisable(false);
+                                    liveHint.setText("✓ Uploaded");
+                                    liveHint.setTextFill(Color.web(accentHex()));
+                                });
+                            } catch (Exception ex) {
+                                ex.printStackTrace();
+                                javafx.application.Platform.runLater(() -> {
+                                    uploadBtn.setText("Retry");
+                                    uploadBtn.setDisable(false);
+                                    liveHint.setText("✗ Failed");
+                                    liveHint.setTextFill(Color.web("#ff3b30"));
+                                });
+                            }
+                        }).start();
+                    }
+                });
+                
+                HBox uploadBox = new HBox(8, preview, urlField, uploadBtn, removeBtn);
+                uploadBox.setAlignment(Pos.CENTER_LEFT);
+                row.getChildren().addAll(lbl, uploadBox, liveHint);
+                return row;
+            }
+
             if ("User".equalsIgnoreCase(entityLabel) && "Role".equalsIgnoreCase(label)) {
                 ComboBox<String> roleSelect = new ComboBox<>();
                 roleSelect.getItems().addAll(userRoleOptions(value));
@@ -2238,16 +2598,129 @@ public class DashboardView implements ViewInterface {
             if ("Reponse".equalsIgnoreCase(entityLabel) && "User".equalsIgnoreCase(label)) {
                 ComboBox<String> userSelect = new ComboBox<>();
                 userSelect.getItems().addAll(reponseUserOptions(value));
-                String selectedUser = normalizeUserDisplayName(value);
-                if (!selectedUser.equals("-") && !userSelect.getItems().contains(selectedUser)) {
-                    userSelect.getItems().add(selectedUser);
-                }
-                if (!selectedUser.equals("-")) {
-                    userSelect.setValue(selectedUser);
-                }
                 styleSelect(userSelect, "Select User", Function.identity());
+                if (value != null && !value.isBlank() && !"-".equals(value)) {
+                    userSelect.setValue(value);
+                }
+                userSelect.setId("reponse-user-select");
                 installLiveValidation(userSelect, liveHint, entityLabel, label);
                 row.getChildren().addAll(lbl, userSelect, liveHint);
+                return row;
+            }
+
+            if ("Appartement".equalsIgnoreCase(entityLabel)) {
+                if ("Residence ID".equalsIgnoreCase(label)) {
+                    ComboBox<String> resSelect = new ComboBox<>();
+                    resSelect.getItems().addAll(residenceOptions(value));
+                    styleSelect(resSelect, "Select Residence", Function.identity());
+                    if (value != null && !value.isBlank() && !"-".equals(value)) {
+                        // Find match by ID
+                        resSelect.getItems().stream()
+                            .filter(opt -> opt.startsWith(value + " -"))
+                            .findFirst()
+                            .ifPresent(resSelect::setValue);
+                    }
+                    installLiveValidation(resSelect, liveHint, entityLabel, label);
+                    row.getChildren().addAll(lbl, resSelect, liveHint);
+                    return row;
+                }
+                if ("User ID".equalsIgnoreCase(label)) {
+                    ComboBox<String> userSelect = new ComboBox<>();
+                    userSelect.getItems().addAll(fullUserOptions(value));
+                    styleSelect(userSelect, "Select User", Function.identity());
+                    if (value != null && !value.isBlank() && !"-".equals(value)) {
+                        userSelect.getItems().stream()
+                            .filter(opt -> opt.startsWith(value + " -"))
+                            .findFirst()
+                            .ifPresent(userSelect::setValue);
+                    }
+                    installLiveValidation(userSelect, liveHint, entityLabel, label);
+                    row.getChildren().addAll(lbl, userSelect, liveHint);
+                    return row;
+                }
+                if ("Type".equalsIgnoreCase(label)) {
+                    ComboBox<String> typeSelect = new ComboBox<>();
+                    typeSelect.getItems().addAll(apartmentTypeOptions());
+                    styleSelect(typeSelect, "Select Type", Function.identity());
+                    if (value != null && !value.isBlank() && !"-".equals(value)) {
+                        typeSelect.setValue(value);
+                    }
+                    installLiveValidation(typeSelect, liveHint, entityLabel, label);
+                    row.getChildren().addAll(lbl, typeSelect, liveHint);
+                    return row;
+                }
+            }
+
+                if ("Blocks".equalsIgnoreCase(label)) {
+                    FlowPane blocksPane = new FlowPane(12, 10);
+                    blocksPane.setPadding(new Insets(8, 0, 8, 0));
+                    blocksPane.setPrefWrapLength(300);
+                    String[] allBlocks = {"A", "B", "C", "D", "E", "F"};
+                    java.util.Set<String> selected = new java.util.HashSet<>();
+                    if (value != null && !value.isBlank() && !"-".equals(value)) {
+                        for (String s : value.split(",")) selected.add(s.trim());
+                    }
+                    for (String b : allBlocks) {
+                        javafx.scene.control.CheckBox cb = new javafx.scene.control.CheckBox(b);
+                        cb.setStyle("-fx-text-fill:white;-fx-font-weight:bold;-fx-cursor:hand;-fx-font-size:12px;");
+                        if (selected.contains(b)) cb.setSelected(true);
+                        blocksPane.getChildren().add(cb);
+                    }
+                    installLiveValidation(blocksPane, liveHint, entityLabel, label);
+                    row.getChildren().addAll(lbl, blocksPane, liveHint);
+                    return row;
+                }
+                
+                if ("Units".equalsIgnoreCase(label) || "Floors".equalsIgnoreCase(label)) {
+                    ComboBox<String> enumSelect = new ComboBox<>();
+                    if ("Units".equalsIgnoreCase(label)) enumSelect.getItems().addAll(residenceUnitOptions());
+                    else enumSelect.getItems().addAll(residenceFloorOptions());
+                    
+                    styleSelect(enumSelect, "Select Value", Function.identity());
+                    if (value != null && !value.isBlank() && !"-".equals(value)) {
+                        enumSelect.setValue(value);
+                    }
+                    installLiveValidation(enumSelect, liveHint, entityLabel, label);
+                    row.getChildren().addAll(lbl, enumSelect, liveHint);
+                    return row;
+                }
+
+            if (("Appartement".equalsIgnoreCase(entityLabel) || "Residence".equalsIgnoreCase(entityLabel)) &&
+                ("Available".equalsIgnoreCase(label) || "Parking".equalsIgnoreCase(label))) {
+                ComboBox<String> boolSelect = new ComboBox<>();
+                boolSelect.getItems().addAll(booleanOptions(label));
+                String displayVal = "Available".equalsIgnoreCase(label) 
+                    ? (isTruthyText(value) ? "Available" : "Occupied")
+                    : (isTruthyText(value) ? "Yes" : "No");
+                boolSelect.setValue(displayVal);
+                styleSelect(boolSelect, "Select Status", Function.identity());
+                installLiveValidation(boolSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, boolSelect, liveHint);
+                return row;
+            }
+
+            if ("Built Date".equalsIgnoreCase(label)) {
+                LocalDate initial = LocalDate.now();
+                try {
+                    if (value != null && !value.isBlank() && !"-".equals(value)) {
+                        initial = LocalDate.parse(value);
+                    }
+                } catch (Exception ignored) {}
+                VBox calendar = buildGlassCalendar(initial, (date) -> updateLiveHint(liveHint, null));
+                row.getChildren().addAll(lbl, calendar, liveHint);
+                return row;
+            }
+
+            if ("Maintenance Ticket".equalsIgnoreCase(entityLabel) && 
+                (label.contains("General") || label.contains("Plumbing") || label.contains("Electrical") || label.contains("Heating"))) {
+                ComboBox<String> scoreSelect = new ComboBox<>();
+                for (int i = 1; i <= 10; i++) scoreSelect.getItems().add(String.valueOf(i));
+                styleSelect(scoreSelect, "Select Score", Function.identity());
+                if (value != null && !value.isBlank() && !"-".equals(value)) {
+                    scoreSelect.setValue(value);
+                }
+                installLiveValidation(scoreSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, scoreSelect, liveHint);
                 return row;
             }
 
@@ -2262,6 +2735,7 @@ public class DashboardView implements ViewInterface {
                     reclamationSelect.setValue(selectedReclamation);
                 }
                 styleSelect(reclamationSelect, "Select Reclamation", Function.identity());
+                reclamationSelect.setId("reponse-reclamation-select");
                 installLiveValidation(reclamationSelect, liveHint, entityLabel, label);
                 row.getChildren().addAll(lbl, reclamationSelect, liveHint);
                 return row;
@@ -2380,9 +2854,22 @@ public class DashboardView implements ViewInterface {
             installLiveValidation(input, liveHint, entityLabel, label);
             row.getChildren().addAll(lbl, input, liveHint);
         } else {
-            Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
-            val.setFill(textSecondaryColor());
-            VBox box = new VBox(val);
+            Node displayNode;
+            if (isImageFieldLabel(label) && value != null && !value.isBlank() && !"-".equals(value)) {
+                VBox imgWrap = new VBox(6);
+                imgWrap.getChildren().addAll(
+                    publicationThumbnail(value),
+                    t(value, lightFont(), FontWeight.NORMAL, 11)
+                );
+                ((Text)imgWrap.getChildren().get(1)).setFill(textMutedColor());
+                displayNode = imgWrap;
+            } else {
+                Text val = t(value, lightFont(), FontWeight.NORMAL, 14);
+                val.setFill(textSecondaryColor());
+                displayNode = val;
+            }
+
+            VBox box = new VBox(displayNode);
             box.setPadding(new Insets(8, 10, 8, 10));
             box.setStyle(
                 "-fx-background-color:rgba(255,255,255,0.03);" +
@@ -2425,9 +2912,18 @@ public class DashboardView implements ViewInterface {
         refresh.run();
     }
 
+    private void installLiveValidation(javafx.scene.layout.FlowPane input, Label hint, String entityLabel, String fieldLabel) {
+        input.getChildren().forEach(node -> {
+            if (node instanceof javafx.scene.control.CheckBox cb) {
+                cb.selectedProperty().addListener((obs, old, val) -> updateLiveHint(hint, null));
+            }
+        });
+        updateLiveHint(hint, null);
+    }
+
     private void updateLiveHint(Label hint, String error) {
         if (error == null || error.isBlank()) {
-            hint.setText("âœ“ Looks good");
+            hint.setText("\u2713 Looks good");
             hint.setTextFill(Color.web(accentHex()));
             return;
         }
@@ -2478,7 +2974,45 @@ public class DashboardView implements ViewInterface {
 
     private boolean isImageFieldLabel(String label) {
         String normalized = label == null ? "" : label.trim().toLowerCase();
-        return normalized.contains("image") || normalized.contains("avatar");
+        return normalized.contains("image") || 
+               normalized.contains("avatar") || 
+               normalized.contains("thumbnail") || 
+               normalized.contains("media") || 
+               normalized.contains("photo") || 
+               normalized.contains("icon") || 
+               normalized.contains("cover");
+    }
+
+    private Node tableThumbnail(String imagePath) {
+        Image image = ImageLoaderUtil.loadImage(imagePath);
+        if (image == null || image.isError()) {
+            image = ImageLoaderUtil.loadImage("uploads/" + imagePath);
+        }
+        if (image == null || image.isError()) {
+            image = ImageLoaderUtil.loadImage("uploads/forum_images/" + imagePath);
+        }
+        if (image == null || image.isError()) {
+            image = ImageLoaderUtil.loadImage("uploads/profile_images/" + imagePath);
+        }
+        
+        if (image == null || image.isError()) {
+            Text none = t("No Image", lightFont(), FontWeight.NORMAL, 10);
+            none.setFill(textMutedColor());
+            return none;
+        }
+
+        ImageView iv = new ImageView(image);
+        iv.setFitWidth(40);
+        iv.setFitHeight(30);
+        iv.setPreserveRatio(true);
+        iv.setSmooth(true);
+        
+        Rectangle clip = new Rectangle(40, 30);
+        clip.setArcWidth(8);
+        clip.setArcHeight(8);
+        iv.setClip(clip);
+        
+        return iv;
     }
 
     private boolean isDateFieldLabel(String label) {
@@ -2625,6 +3159,22 @@ public class DashboardView implements ViewInterface {
         String current = normalizeReclamationTitle(currentValue);
         if (!current.equals("-")) {
             reclamations.add(current);
+        }
+        return new ArrayList<>(reclamations);
+    }
+
+    private List<String> reponseReclamationOptionsByUser(String userDisplayName) {
+        LinkedHashSet<String> reclamations = new LinkedHashSet<>();
+        for (Reclamation reclamation : dashboardAdminService.reclamations()) {
+            if (reclamation != null && reclamation.getUser() != null) {
+                String displayName = userDisplayName(reclamation.getUser());
+                if (displayName.equals(userDisplayName)) {
+                    String title = normalizeReclamationTitle(reclamation.getTitreReclamations());
+                    if (!title.equals("-")) {
+                        reclamations.add(title);
+                    }
+                }
+            }
         }
         return new ArrayList<>(reclamations);
     }
@@ -3208,6 +3758,48 @@ public class DashboardView implements ViewInterface {
     String boldFont()  { return com.syndicati.MainApplication.getInstance().getBoldFontFamily();  }
     String lightFont() { return com.syndicati.MainApplication.getInstance().getLightFontFamily(); }
 
+    private List<String> residenceOptions(String current) {
+        List<String> list = new ArrayList<>();
+        for (Residence r : dashboardAdminService.residences()) {
+            list.add(r.getIdResidence() + " - " + r.getNameResidence());
+        }
+        return list;
+    }
+
+    private List<String> fullUserOptions(String current) {
+        List<String> list = new ArrayList<>();
+        for (User u : dashboardAdminService.users()) {
+            list.add(u.getIdUser() + " - " + u.getFirstName() + " " + u.getLastName());
+        }
+        return list;
+    }
+
+    private List<String> apartmentTypeOptions() {
+        return List.of("STUDIO", "S1", "S2", "S3", "S4", "S5");
+    }
+
+    private List<String> residenceUnitOptions() {
+        List<String> list = new ArrayList<>();
+        for (int i = 1; i <= 10; i++) list.add(String.valueOf(i));
+        return list;
+    }
+
+    private List<String> residenceFloorOptions() {
+        return List.of("0", "1", "2", "3", "4", "5");
+    }
+
+    private List<String> residenceBlockOptions() {
+        return List.of("A", "B", "C", "D", "E");
+    }
+
+    private List<String> booleanOptions(String label) {
+        if ("Available".equalsIgnoreCase(label)) {
+            return List.of("Available", "Occupied");
+        }
+        return List.of("Yes", "No");
+    }
+
+    /** Multi-mode module view template - used to reduce duplication across sections. */
     /** Multi-mode module view template - used to reduce duplication across sections. */
     VBox moduleModeView(String name, String icon, String[] labels, java.util.function.Function<String, Node> contentMapper) {
         VBox shell = moduleShell(name, icon);
@@ -3221,6 +3813,119 @@ public class DashboardView implements ViewInterface {
         body.getChildren().add(contentMapper.apply(labels[0]));
         shell.getChildren().addAll(sub, body);
         return shell;
+    }
+
+    private VBox buildGlassCalendar(LocalDate initialValue, Consumer<LocalDate> onSelect) {
+        VBox container = new VBox(10);
+        container.setUserData(initialValue);
+        container.setMaxWidth(320);
+        container.setPadding(new Insets(10));
+        container.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-border-color:rgba(255,255,255,0.08);-fx-border-radius:16;-fx-background-radius:16;");
+        
+        refreshGlassCalendar(container, initialValue, onSelect);
+        return container;
+    }
+
+    private void refreshGlassCalendar(VBox container, LocalDate monthToShow, Consumer<LocalDate> onSelect) {
+        container.getChildren().clear();
+        LocalDate selected = (LocalDate) container.getUserData();
+
+        HBox head = new HBox(8);
+        head.setAlignment(Pos.CENTER_LEFT);
+        
+        Button prev = calendarIconButton("<");
+        prev.setOnAction(_ -> refreshGlassCalendar(container, monthToShow.minusMonths(1), onSelect));
+        
+        Button next = calendarIconButton(">");
+        next.setOnAction(_ -> refreshGlassCalendar(container, monthToShow.plusMonths(1), onSelect));
+        
+        String title = monthToShow.getMonth().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH) + " " + monthToShow.getYear();
+        Text monthLabel = t(title, boldFont(), FontWeight.BOLD, 14);
+        monthLabel.setFill(Color.web(accentHex()));
+        
+        Region s = new Region(); HBox.setHgrow(s, Priority.ALWAYS);
+        head.getChildren().addAll(monthLabel, s, prev, next);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(5); grid.setVgap(5);
+        for (int i = 0; i < 7; i++) {
+            ColumnConstraints cc = new ColumnConstraints();
+            cc.setPercentWidth(14.28);
+            grid.getColumnConstraints().add(cc);
+        }
+
+        String[] days = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+        for (int i = 0; i < 7; i++) {
+            Text d = t(days[i], lightFont(), FontWeight.NORMAL, 10);
+            d.setFill(textMutedColor());
+            StackPane cell = new StackPane(d);
+            cell.setMinHeight(20);
+            grid.add(cell, i, 0);
+        }
+
+        LocalDate first = monthToShow.withDayOfMonth(1);
+        int startOffset = first.getDayOfWeek().getValue() - 1;
+        int daysInMonth = monthToShow.lengthOfMonth();
+        int day = 1;
+
+        for (int r = 1; r <= 6; r++) {
+            for (int c = 0; c < 7; c++) {
+                if (r == 1 && c < startOffset) continue;
+                if (day > daysInMonth) break;
+
+                final int currentDay = day;
+                LocalDate date = monthToShow.withDayOfMonth(currentDay);
+                boolean isSelected = date.equals(selected);
+                boolean isToday = date.equals(LocalDate.now());
+
+                StackPane cell = new StackPane();
+                cell.setMinHeight(30);
+                cell.setCursor(Cursor.HAND);
+                
+                String baseStyle = "-fx-background-radius: 8px;";
+                if (isSelected) {
+                    cell.setStyle(baseStyle + "-fx-background-color:" + accentGradient() + ";");
+                } else if (isToday) {
+                    cell.setStyle(baseStyle + "-fx-background-color:rgba(255,255,255,0.05);-fx-border-color:" + accentHex() + ";-fx-border-width:1;");
+                } else {
+                    cell.setStyle(baseStyle + "-fx-background-color:rgba(255,255,255,0.03);");
+                }
+
+                Text txt = t(String.valueOf(currentDay), boldFont(), FontWeight.BOLD, 11);
+                txt.setFill(isSelected ? Color.WHITE : textSecondaryColor());
+                cell.getChildren().add(txt);
+
+                cell.setOnMouseClicked(_ -> {
+                    container.setUserData(date);
+                    onSelect.accept(date);
+                    refreshGlassCalendar(container, monthToShow, onSelect);
+                });
+
+                if (!isSelected) {
+                    cell.setOnMouseEntered(_ -> cell.setStyle(baseStyle + "-fx-background-color:" + accentRgba(0.15) + ";"));
+                    cell.setOnMouseExited(_ -> {
+                        if (date.equals(LocalDate.now())) {
+                            cell.setStyle(baseStyle + "-fx-background-color:rgba(255,255,255,0.05);-fx-border-color:" + accentHex() + ";-fx-border-width:1;");
+                        } else {
+                            cell.setStyle(baseStyle + "-fx-background-color:rgba(255,255,255,0.03);");
+                        }
+                    });
+                }
+
+                grid.add(cell, c, r);
+                day++;
+            }
+            if (day > daysInMonth) break;
+        }
+
+        container.getChildren().addAll(head, grid);
+    }
+
+    private Button calendarIconButton(String icon) {
+        Button btn = new Button(icon);
+        btn.setCursor(Cursor.HAND);
+        btn.setStyle("-fx-background-color:rgba(255,255,255,0.05);-fx-text-fill:white;-fx-background-radius:6;-fx-padding:2 6;-fx-font-size:10;");
+        return btn;
     }
 }
 

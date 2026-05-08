@@ -32,8 +32,7 @@ import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.text.Text;
 
 import java.time.LocalDate;
@@ -96,6 +95,14 @@ public class DashboardAdminService {
 
     public List<Reclamation> reclamations() {
         return reclamationController.reclamations();
+    }
+
+    public List<Residence> residences() {
+        return residenceController.residences();
+    }
+
+    public List<Apartment> apartments() {
+        return residenceController.apartments();
     }
 
     public List<Reponse> reponses() {
@@ -253,6 +260,7 @@ public class DashboardAdminService {
                 stats.put("total", queryCount("SELECT COUNT(*) FROM user WHERE role_user = 'SYNDIC'"));
                 stats.put("reclamations", queryCount("SELECT COUNT(*) FROM reclamations"));
                 stats.put("reclamations_pending", queryCount("SELECT COUNT(*) FROM reclamations WHERE statutreclamation = 'en_attente'"));
+                stats.put("reclamations_rejected", queryCount("SELECT COUNT(*) FROM reclamations WHERE statutreclamation = 'refuse'"));
                 stats.put("reponses", queryCount("SELECT COUNT(*) FROM reponses"));
                 stats.put("recent_reclamations", queryRows(
                     "SELECT titrereclamations, imagereclamation, statutreclamation FROM reclamations ORDER BY idreclamations DESC LIMIT 4"
@@ -1161,9 +1169,10 @@ public class DashboardAdminService {
         Map<String, String> values = readEditableFieldValues(fields);
         String name = safe(values.get("Residence"));
         String address = safe(values.get("Address"));
-        Integer units = parseIntOrNull(values.get("Units"), null);
-        Integer floors = parseIntOrNull(values.get("Floors"), null);
+        Integer units = parseIntOrNull(values.get("Units"), 1);
+        Integer floors = parseIntOrNull(values.get("Floors"), 0);
         String blocks = safe(values.get("Blocks"));
+        String image = safe(values.get("Image"));
 
         if ("-".equals(name) || "-".equals(address)) {
             return false;
@@ -1173,7 +1182,7 @@ public class DashboardAdminService {
             Integer createdId = residenceController.residenceCreate(
                 name,
                 address,
-                null,
+                "-".equals(image) ? null : image,
                 units,
                 floors,
                 "-".equals(blocks) ? null : blocks
@@ -1190,7 +1199,7 @@ public class DashboardAdminService {
                 id,
                 name,
                 address,
-                null,
+                "-".equals(image) ? null : image,
                 units,
                 floors,
                 "-".equals(blocks) ? null : blocks
@@ -1211,15 +1220,16 @@ public class DashboardAdminService {
     private boolean saveAppartement(String mode, String[] originalRowData, VBox fields) {
         Map<String, String> values = readEditableFieldValues(fields);
 
-        Integer residenceId = parseIntOrNull(values.get("Residence ID"), null);
-        Integer userId = parseIntOrNull(values.get("User ID"), null);
+        Integer residenceId = extractId(values.get("Residence ID"));
+        Integer userId = extractId(values.get("User ID"));
         String type = safe(values.get("Type"));
-        Integer area = parseIntOrNull(values.get("Area"), null);
-        Integer rent = parseIntOrNull(values.get("Rent"), null);
-        Integer sale = parseIntOrNull(values.get("Sale"), null);
+        Double area = parseDoubleOrNull(values.get("Area"), 0.0);
+        Double rent = parseDoubleOrNull(values.get("Rent"), 0.0);
+        Double sale = parseDoubleOrNull(values.get("Sale"), 0.0);
         Integer parking = parseBinaryFlag(values.get("Parking"));
         Integer available = parseBinaryFlag(values.get("Available"));
         String builtDate = safe(values.get("Built Date"));
+        String image = safe(values.get("Image"));
 
         if (residenceId == null || "-".equals(type)) {
             return false;
@@ -1231,7 +1241,7 @@ public class DashboardAdminService {
                 userId,
                 parking,
                 available,
-                null,
+                "-".equals(image) ? null : image,
                 type,
                 null,
                 area,
@@ -1253,7 +1263,7 @@ public class DashboardAdminService {
                 userId,
                 parking,
                 available,
-                null,
+                "-".equals(image) ? null : image,
                 type,
                 null,
                 area,
@@ -1586,18 +1596,46 @@ public class DashboardAdminService {
                 values.put(label, picker.getValue() == null ? picker.getEditor().getText() : picker.getValue().toString());
                 continue;
             }
-            if (labelNode instanceof Text && inputNode instanceof HBox) {
+            if (labelNode instanceof Text && inputNode instanceof javafx.scene.control.TextArea) {
                 String label = ((Text) labelNode).getText();
-                HBox rowInput = (HBox) inputNode;
-                for (Node child : rowInput.getChildren()) {
-                    if (child instanceof TextField) {
-                        values.put(label, ((TextField) child).getText());
-                        break;
-                    }
-                    if (child instanceof DatePicker) {
-                        DatePicker picker = (DatePicker) child;
-                        values.put(label, picker.getValue() == null ? picker.getEditor().getText() : picker.getValue().toString());
-                        break;
+                values.put(label, ((javafx.scene.control.TextArea) inputNode).getText());
+                continue;
+            }
+            if (labelNode instanceof Text && (inputNode instanceof FlowPane || inputNode instanceof HBox || inputNode instanceof VBox)) {
+                String label = ((Text) labelNode).getText();
+                Pane container = (Pane) inputNode;
+                
+                // If it has a LocalDate in userData (Custom GlassCalendar)
+                if (container.getUserData() instanceof java.time.LocalDate ld) {
+                    values.put(label, ld.toString());
+                    continue;
+                }
+
+                // If it contains checkboxes, join them
+                String joined = container.getChildren().stream()
+                    .filter(c -> c instanceof javafx.scene.control.CheckBox)
+                    .map(c -> (javafx.scene.control.CheckBox) c)
+                    .filter(javafx.scene.control.CheckBox::isSelected)
+                    .map(javafx.scene.control.CheckBox::getText)
+                    .collect(java.util.stream.Collectors.joining(","));
+                
+                if (!joined.isEmpty()) {
+                    values.put(label, joined);
+                    continue;
+                }
+
+                // Fallback for HBox with nested inputs
+                if (inputNode instanceof HBox rowInput) {
+                    for (Node child : rowInput.getChildren()) {
+                        if (child instanceof TextField) {
+                            values.put(label, ((TextField) child).getText());
+                            break;
+                        }
+                        if (child instanceof DatePicker) {
+                            DatePicker picker = (DatePicker) child;
+                            values.put(label, picker.getValue() == null ? picker.getEditor().getText() : picker.getValue().toString());
+                            break;
+                        }
                     }
                 }
             }
@@ -1610,6 +1648,16 @@ public class DashboardAdminService {
             return null;
         }
         return parseIntOrNull(rowData[0], null);
+    }
+
+    private Integer extractId(String value) {
+        if (value == null || value.isBlank() || "-".equals(value)) {
+            return null;
+        }
+        if (value.contains(" - ")) {
+            return parseIntOrNull(value.split(" - ")[0], null);
+        }
+        return parseIntOrNull(value, null);
     }
 
     private Integer parseBinaryFlag(String value) {
@@ -1672,6 +1720,16 @@ public class DashboardAdminService {
         try {
             String normalized = safe(value);
             return "-".equals(normalized) ? fallback : Integer.parseInt(normalized);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private Double parseDoubleOrNull(String value, Double fallback) {
+        try {
+            String normalized = safe(value);
+            if ("-".equals(normalized)) return fallback;
+            return Double.parseDouble(normalized.replace(",", "."));
         } catch (NumberFormatException e) {
             return fallback;
         }

@@ -48,10 +48,13 @@ public final class SyndicatiEmailComposer {
     }
 
     public static String commentNotification(String authorFirstName, String commenterName, String publicationTitle, String commentSnippet) {
+        String replyLabel = commenterName != null && commenterName.equalsIgnoreCase("Anonymous User")
+            ? "Anonymous User replied to your publication."
+            : esc(commenterName) + " replied to your publication.";
         String body =
             "<h2 style='color:#ff4b5c;'>New Discussion Activity</h2>" +
             "<p>Hello " + esc(nameOrFallback(authorFirstName)) + ",</p>" +
-            "<p><strong>" + esc(commenterName) + "</strong> has just interacted with your publication.</p>" +
+            "<p>" + replyLabel + "</p>" +
             "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
             "<p style='font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;'>On Publication</p>" +
             "<h3 style='margin-bottom:20px;color:#ffffff;font-size:18px;letter-spacing:-0.5px;'>" + esc(publicationTitle) + "</h3>" +

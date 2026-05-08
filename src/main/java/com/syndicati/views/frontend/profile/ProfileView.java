@@ -24,6 +24,7 @@ import com.syndicati.services.security.FaceIDService;
 import com.syndicati.services.biometric.RealCameraService;
 import com.syndicati.services.InsightFaceService;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.application.Platform;
@@ -375,7 +376,7 @@ public class ProfileView implements ViewInterface {
         VBox card = new VBox(0);
         card.setMaxWidth(1600);
         card.setAlignment(Pos.TOP_CENTER);
-        card.setStyle(shell(34, surfaceCard(), 0.16));
+        card.setStyle(shell(34, "rgba(10,10,15,0.90)", 0.16));
 
         StackPane banner = new StackPane();
         banner.setMinHeight(180);
@@ -653,7 +654,7 @@ public class ProfileView implements ViewInterface {
         VBox level = new VBox(0, text(String.valueOf(levelValue), 28, true, "#ffffff"), text("LVL", 10, true, tm.getAccentHex()));
         level.setAlignment(Pos.CENTER);
         level.setMinSize(72, 72);
-        level.setStyle(shell(16, surfaceSoft(), 0.16));
+        level.setStyle(shell(16, "rgba(10,10,15,0.80)", 0.16));
 
         VBox title = new VBox(4, text("RESIDENT STANDING", 18, true, "#ffffff"), text("Your status within the Horizon community", 12, false, textMuted()));
         HBox.setHgrow(title, Priority.ALWAYS);
@@ -752,7 +753,7 @@ public class ProfileView implements ViewInterface {
 
         VBox search = new VBox(10);
         search.setPadding(new Insets(14));
-        search.setStyle(shell(18, surfaceSoft(), 0.16));
+        search.setStyle(shell(18, "rgba(10,10,15,0.80)", 0.16));
         Text searchTitle = text("Explore Community", 13, true, "#ffffff");
         Text searchSub = text("Search residents and send connection requests.", 12, false, textMuted());
 
@@ -961,7 +962,7 @@ public class ProfileView implements ViewInterface {
         VBox c = new VBox(8);
         c.setPadding(new Insets(10));
         c.setAlignment(Pos.CENTER_LEFT);
-        c.setStyle(shell(14, "rgba(255,255,255,0.03)", 0.10));
+        c.setStyle(shell(14, "rgba(10,10,15,0.80)", 0.10));
 
         HBox row = new HBox(8);
         row.setAlignment(Pos.CENTER_LEFT);
@@ -994,7 +995,7 @@ public class ProfileView implements ViewInterface {
         HBox row = new HBox(10);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
-        row.setStyle(shell(12, "rgba(255,255,255,0.03)", 0.10));
+        row.setStyle(shell(12, "rgba(10,10,15,0.80)", 0.10));
 
         StackPane avatar = circleAvatarNode(otherUser, display, 34, 12);
 
@@ -1039,7 +1040,7 @@ public class ProfileView implements ViewInterface {
         HBox row = new HBox(10);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(8));
-        row.setStyle(shell(10, "rgba(255,255,255,0.03)", 0.08));
+        row.setStyle(shell(10, "rgba(10,10,15,0.80)", 0.08));
 
         StackPane avatar = circleAvatarNode(candidate, display, 32, 12);
 
@@ -1084,7 +1085,7 @@ public class ProfileView implements ViewInterface {
         tabNav.setAlignment(Pos.CENTER);
         tabNav.setPadding(new Insets(8));
         tabNav.setMaxWidth(1120);
-        tabNav.setStyle(shell(999, "rgba(255,255,255,0.04)", 0.1));
+        tabNav.setStyle(shell(999, "rgba(10,10,15,0.75)", 0.1));
 
         addDetailTab(tabNav, "Account", "account", new ProfileAccountSection().getRoot());
         addDetailTab(tabNav, "Forum", "forum", new ProfileForumSectionEnhanced().getRoot());
@@ -1187,7 +1188,7 @@ public class ProfileView implements ViewInterface {
     private VBox eventItem(String title, String date, String location, String status, String type) {
         VBox row = new VBox(10);
         row.setPadding(new Insets(16));
-        row.setStyle(shell(16, "rgba(255,255,255,0.03)", 0.08));
+        row.setStyle(shell(16, "rgba(10,10,15,0.80)", 0.08));
 
         HBox top = new HBox(10);
         VBox iconWrap = new VBox(text("EV", 11, true, tm.getAccentHex()));
@@ -1214,7 +1215,7 @@ public class ProfileView implements ViewInterface {
     private VBox reclamationItem(String title, String status, String submitted) {
         VBox row = new VBox(8);
         row.setPadding(new Insets(16));
-        row.setStyle(shell(16, "rgba(255,255,255,0.03)", 0.08));
+        row.setStyle(shell(16, "rgba(10,10,15,0.80)", 0.08));
 
         HBox top = new HBox();
         Text titleText = text(title, 14, true, "#ffffff");
@@ -1250,7 +1251,7 @@ public class ProfileView implements ViewInterface {
             text(value, 13, true, "#ffffff")
         );
         pill.setPadding(new Insets(10, 12, 10, 12));
-        pill.setStyle(shell(12, "rgba(255,255,255,0.04)", 0.09));
+        pill.setStyle(shell(12, "rgba(10,10,15,0.75)", 0.09));
         return pill;
     }
 
@@ -1929,32 +1930,19 @@ public class ProfileView implements ViewInterface {
     }
 
     private void showAvatarAlert(Alert.AlertType type, String title, String message) {
-        if (root.getScene() == null || root.getScene().getWindow() == null) {
-            return;
+        if (type == Alert.AlertType.ERROR) {
+            GlobalNotificationPillManager.expandedError(
+                title,
+                message,
+                "Review the fields you just changed.",
+                "Retry the action after correcting the input.",
+                "If the problem persists, reopen this page and try again."
+            );
+        } else if (type == Alert.AlertType.WARNING) {
+            GlobalNotificationPillManager.validationIssue(title, message, "Double-check the current input before continuing.");
+        } else {
+            GlobalNotificationPillManager.success(title, message);
         }
-
-        Stage stage = new Stage();
-        stage.initOwner(root.getScene().getWindow());
-        stage.initModality(Modality.APPLICATION_MODAL);
-        stage.initStyle(StageStyle.TRANSPARENT);
-
-        Label heading = new Label(type == Alert.AlertType.ERROR ? "Action failed" : "Done");
-        heading.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: 800;");
-        Label body = new Label(message);
-        body.setWrapText(true);
-        body.setStyle("-fx-text-fill: rgba(255,255,255,0.78); -fx-font-size: 13px;");
-
-        Button ok = new Button("OK");
-        ok.setStyle(fancyAvatarPrimaryButtonStyle());
-        ok.setOnAction(e -> stage.close());
-
-        VBox content = new VBox(10, heading, body, ok);
-        content.setStyle("-fx-padding: 14; -fx-background-color: linear-gradient(to bottom right, #11131a, #171a24); -fx-background-radius: 18; -fx-border-radius: 18; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
-
-        Scene scene = new Scene(content);
-        scene.setFill(Color.TRANSPARENT);
-        stage.setScene(scene);
-        stage.showAndWait();
     }
 
     private Dialog<ButtonType> styledAvatarDialog(String title) {
@@ -2200,7 +2188,7 @@ public class ProfileView implements ViewInterface {
         c.setAlignment(Pos.CENTER);
         StackPane avatar = new StackPane();
         avatar.setMinSize(60, 60);
-        avatar.setStyle(shell(16, "rgba(255,255,255,0.05)", 0.10));
+        avatar.setStyle(shell(16, "rgba(10,10,15,0.80)", 0.10));
         avatar.getChildren().add(text("U", 18, true, textSoft()));
         c.getChildren().addAll(avatar, text(name, 11, true, textMuted()));
         return c;
@@ -2817,7 +2805,7 @@ public class ProfileView implements ViewInterface {
 
     private String shell(double radius, String bg, double borderOpacity) {
         return "-fx-background-color: " + bg + ";"
-            + "-fx-border-color: rgba(255,255,255," + borderOpacity + ");"
+            + "-fx-border-color: rgba(60,60,80," + borderOpacity + ");"
             + "-fx-border-width: 1px;"
             + "-fx-background-radius: " + radius + "px;"
             + "-fx-border-radius: " + radius + "px;";

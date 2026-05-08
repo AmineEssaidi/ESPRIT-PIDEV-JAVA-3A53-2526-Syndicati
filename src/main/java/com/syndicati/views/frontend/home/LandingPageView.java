@@ -32,6 +32,7 @@ public class LandingPageView implements ViewInterface {
     private VBox contentRow; 
     private String currentPageName = "home";
     private final java.util.Map<String, javafx.scene.Node> pageCache = new java.util.HashMap<>();
+    private String lastPageName = "home";
     
     public LandingPageView() {
         this("home");
@@ -200,6 +201,23 @@ public class LandingPageView implements ViewInterface {
                 darkPanel.getChildren().clear();
                 darkPanel.getChildren().add(contentRow);
             }
+
+            // Dispose the previous non-home page (navigateTo("home") was only hiding nodes before).
+            if (lastPageName != null
+                && !lastPageName.isBlank()
+                && !"home".equalsIgnoreCase(lastPageName)
+                && !"dashboard".equalsIgnoreCase(lastPageName)) {
+                try {
+                    System.out.println("[Dispose] LandingPageView.navigateToHome disposing " + lastPageName);
+                    // Remove all non-home pages from the scene graph and clear cache.
+                    for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
+                        if (homeContent != null && node == homeContent.getRoot()) continue;
+                        mainContent.getChildren().remove(node);
+                    }
+                    pageCache.clear();
+                    NavigationManager.getInstance().disposeView(lastPageName);
+                } catch (Exception ignored) {}
+            }
             
             // Hide all cached pages
             for (javafx.scene.Node node : mainContent.getChildren()) {
@@ -214,6 +232,8 @@ public class LandingPageView implements ViewInterface {
             
             homeContent.getRoot().setVisible(true);
             homeContent.getRoot().setManaged(true);
+
+            lastPageName = "home";
         });
     }
     
@@ -224,6 +244,23 @@ public class LandingPageView implements ViewInterface {
     public void enterDashboardMode() {
         showLoadingTransition("Admin Dashboard", () -> {
             currentPageName = "dashboard";
+
+            // Dispose previous non-dashboard view before entering dashboard mode.
+            if (lastPageName != null
+                && !lastPageName.isBlank()
+                && !"dashboard".equalsIgnoreCase(lastPageName)
+                && !"home".equalsIgnoreCase(lastPageName)) {
+                try {
+                    System.out.println("[Dispose] LandingPageView.enterDashboardMode disposing " + lastPageName);
+                    for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
+                        if (homeContent != null && node == homeContent.getRoot()) continue;
+                        mainContent.getChildren().remove(node);
+                    }
+                    pageCache.clear();
+                    NavigationManager.getInstance().disposeView(lastPageName);
+                } catch (Exception ignored) {}
+            }
+
             DashboardView dv = NavigationManager.getInstance().getDashboardView();
             dv.setExitCallback(this::exitDashboardMode);
             HBox adminRoot = dv.getRoot();
@@ -232,6 +269,8 @@ public class LandingPageView implements ViewInterface {
             VBox.setVgrow(adminRoot, Priority.ALWAYS);
             darkPanel.getChildren().clear();
             darkPanel.getChildren().add(adminRoot);
+
+            lastPageName = "dashboard";
         });
     }
 
@@ -261,35 +300,60 @@ public class LandingPageView implements ViewInterface {
                 darkPanel.getChildren().clear();
                 darkPanel.getChildren().add(contentRow);
             }
-            
-            javafx.scene.Node targetPage = pageCache.computeIfAbsent(normalizedPage, 
-                name -> {
-                    ViewInterface view = NavigationManager.getInstance().getView(name);
-                    if (view == null) return null;
-                    javafx.scene.Node p = view.getRoot();
-                    p.setVisible(false);
-                    p.setManaged(false);
-                    return p;
-                });
-            
+
+            // Sweep expired DB cache entries to prevent memory stacking across navigation.
+            try {
+                com.syndicati.services.DatabaseService.getInstance().sweepExpiredCache();
+            } catch (Exception ignored) {}
+            // Trim image cache to avoid accumulating decoded image buffers across view hops.
+            try {
+                com.syndicati.utils.image.ImageLoaderUtil.trimCache(12);
+            } catch (Exception ignored) {}
+
+            // Dispose the previous page so its Node tree can be garbage collected.
+            // This prevents memory stacking when navigating between heavy views.
+            if (lastPageName != null
+                && !lastPageName.isBlank()
+                && !"home".equalsIgnoreCase(lastPageName)
+                && !"dashboard".equalsIgnoreCase(lastPageName)
+                && !lastPageName.equalsIgnoreCase(normalizedPage)) {
+                // Remove all non-home pages from the scene graph.
+                for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
+                    if (homeContent != null && node == homeContent.getRoot()) continue;
+                    mainContent.getChildren().remove(node);
+                }
+                pageCache.clear();
+                NavigationManager.getInstance().disposeView(lastPageName);
+                try { com.syndicati.utils.perf.MemoryPressureUtil.onViewDisposed(); } catch (Exception ignored) {}
+            }
+
+            // NO-CACHE MODE: always dispose and recreate the target view so RAM stays low.
+            // Exception: Profile is warm-started during SessionRecovery; disposing it here breaks preloading.
+            if (!"profile".equalsIgnoreCase(normalizedPage)) {
+                NavigationManager.getInstance().disposeView(normalizedPage);
+            }
+            ViewInterface view = NavigationManager.getInstance().getView(normalizedPage);
+            javafx.scene.Node targetPage = view != null ? view.getRoot() : null;
+
+            // Hide home content when leaving home.
+            if (homeContent != null && homeContent.getRoot() != null) {
+                boolean isHome = "home".equalsIgnoreCase(normalizedPage);
+                homeContent.getRoot().setVisible(isHome);
+                homeContent.getRoot().setManaged(isHome);
+            }
+
             if (targetPage != null) {
-                if (!mainContent.getChildren().contains(targetPage)) {
-                    mainContent.getChildren().add(targetPage);
-                }
-                
-                // Fast Visibility Toggle
-                for (javafx.scene.Node node : mainContent.getChildren()) {
-                    boolean isTarget = (node == targetPage);
-                    node.setVisible(isTarget);
-                    node.setManaged(isTarget);
-                }
+                targetPage.setVisible(true);
+                targetPage.setManaged(true);
+                mainContent.getChildren().add(targetPage);
 
                 // Trigger async data load for everything except Profile (which is built in bg)
-                ViewInterface view = NavigationManager.getInstance().getView(pageName);
-                if (view != null && !(view instanceof ProfileView)) {
+                if (!(view instanceof ProfileView)) {
                     Thread.startVirtualThread(view::loadDataAsync);
                 }
             }
+
+            lastPageName = normalizedPage;
         });
     }
 
@@ -372,6 +436,14 @@ public class LandingPageView implements ViewInterface {
         ThemeManager.getInstance().removeAccentChangeListener(accentRefreshListener);
         if (header != null) header.cleanup();
         if (footer != null) footer.cleanup();
+
+        // Dispose cached pages/views to release memory.
+        try {
+            for (String k : new java.util.ArrayList<>(pageCache.keySet())) {
+                NavigationManager.getInstance().disposeView(k);
+            }
+            pageCache.clear();
+        } catch (Exception ignored) {}
     }
 
     private HBox createWindowBar() {

@@ -56,7 +56,7 @@ public class ProfileAccountSection {
 
     private VBox createAccountCard() {
         VBox card = new VBox(12);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle("-fx-background-color: rgba(10,10,15,0.85); -fx-border-color: rgba(60,60,80,0.5); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
         card.setPadding(new Insets(22));
 
         Label title = new Label("Account");
@@ -84,7 +84,7 @@ public class ProfileAccountSection {
 
     private VBox createOnboardingCard() {
         VBox card = new VBox(16);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20; -fx-padding: 22;");
+        card.setStyle("-fx-background-color: rgba(10,10,15,0.85); -fx-border-color: rgba(60,60,80,0.5); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20; -fx-padding: 22;");
         card.setPadding(new Insets(22));
 
         HBox header = new HBox(12);

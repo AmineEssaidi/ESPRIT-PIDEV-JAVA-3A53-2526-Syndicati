@@ -177,8 +177,8 @@ public class ReviewService {
         if (score == null) {
             return new ValidationResult(false, "Score is required");
         }
-        if (score < 1 || score > 5) {
-            return new ValidationResult(false, "Score must be between 1 and 5");
+        if (score < 0 || score > 10) {
+            return new ValidationResult(false, "Score must be between 0 and 10");
         }
         return new ValidationResult(true, "");
     }

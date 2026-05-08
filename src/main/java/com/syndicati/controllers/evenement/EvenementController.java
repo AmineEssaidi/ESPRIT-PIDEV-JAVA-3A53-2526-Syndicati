@@ -3,6 +3,7 @@ package com.syndicati.controllers.evenement;
 import com.syndicati.models.evenement.Evenement;
 import com.syndicati.models.user.User;
 import com.syndicati.services.evenement.EvenementService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -39,23 +40,43 @@ public class EvenementController {
     }
 
     public Integer evenementCreate(String titre, String description, LocalDateTime dateEvent, String lieu, Integer nbPlaces, String type, String image, User user) {
-        return evenementService.create(titre, description, dateEvent, lieu, nbPlaces, type, image, user);
+        Integer id = evenementService.create(titre, description, dateEvent, lieu, nbPlaces, type, image, user);
+        if (id != null && id > 0) {
+            GlobalNotificationPillManager.created("Event", "Event created successfully.");
+        }
+        return id;
     }
 
     public boolean evenementUpdate(Integer id, String titre, String description, LocalDateTime dateEvent, String lieu, Integer nbPlaces, String type) {
-        return evenementService.update(id, titre, description, dateEvent, lieu, nbPlaces, type);
+        boolean success = evenementService.update(id, titre, description, dateEvent, lieu, nbPlaces, type);
+        if (success) {
+            GlobalNotificationPillManager.updated("Event", "Event updated successfully.");
+        }
+        return success;
     }
 
     public boolean evenementUpdateForDashboard(Integer id, String titre, String description, LocalDateTime dateEvent, String lieu, Integer nbPlaces, Integer nbRestants, String type, String image) {
-        return evenementService.updateForDashboard(id, titre, description, dateEvent, lieu, nbPlaces, nbRestants, type, image);
+        boolean success = evenementService.updateForDashboard(id, titre, description, dateEvent, lieu, nbPlaces, nbRestants, type, image);
+        if (success) {
+            GlobalNotificationPillManager.updated("Event", "Event updated successfully.");
+        }
+        return success;
     }
 
     public boolean evenementUpdateStatut(Integer id, String statut) {
-        return evenementService.updateStatut(id, statut);
+        boolean success = evenementService.updateStatut(id, statut);
+        if (success) {
+            GlobalNotificationPillManager.updated("Event", "Event status updated successfully.");
+        }
+        return success;
     }
 
     public boolean evenementDelete(Integer id) {
-        return evenementService.delete(id);
+        boolean success = evenementService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Event", "Event deleted successfully.");
+        }
+        return success;
     }
 
     public EvenementService getEvenementService() {

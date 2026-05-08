@@ -8,6 +8,9 @@ import javafx.scene.effect.GaussianBlur;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
+import javafx.scene.media.MediaView;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.RadialGradient;
@@ -17,6 +20,7 @@ import javafx.scene.transform.Rotate;
 import javafx.util.Duration;
 
 import java.util.Random;
+import com.syndicati.utils.media.CinematicVideoCache;
 
 /**
  * LoadingCinematicView - A premium, localized loading transition.
@@ -28,6 +32,10 @@ public class LoadingCinematicView {
     private final ThemeManager tm = ThemeManager.getInstance();
     private final String accentHex = tm.getAccentHex();
     private final Random rand = new Random();
+
+    private MediaPlayer videoPlayer;
+    private MediaView mediaView;
+    private boolean useVideoBackground = true;
     
     private Pane backgroundLayer;
     private VBox content;
@@ -47,6 +55,10 @@ public class LoadingCinematicView {
     }
 
     private void setupAtmosphere() {
+        if (useVideoBackground && setupVideoBackground()) {
+            return;
+        }
+        
         backgroundLayer = new Pane();
         backgroundLayer.setMouseTransparent(true);
         
@@ -86,6 +98,36 @@ public class LoadingCinematicView {
         root.getChildren().add(backgroundLayer);
     }
 
+    private boolean setupVideoBackground() {
+        try {
+            try { CinematicVideoCache.warmupAsync(); } catch (Throwable ignored) {}
+            String src;
+            try {
+                src = CinematicVideoCache.getStartupVideoSource();
+            } catch (Throwable t) {
+                src = CinematicVideoCache.REMOTE_STARTUP_VIDEO_URL;
+            }
+            Media media = new Media(src);
+            videoPlayer = new MediaPlayer(media);
+            videoPlayer.setVolume(0.0);
+            videoPlayer.setAutoPlay(false);
+            videoPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+
+            mediaView = new MediaView(videoPlayer);
+            mediaView.setPreserveRatio(false);
+            mediaView.fitWidthProperty().bind(root.widthProperty());
+            mediaView.fitHeightProperty().bind(root.heightProperty());
+            mediaView.setSmooth(true);
+
+            root.getChildren().add(0, mediaView);
+            return true;
+        } catch (Exception e) {
+            useVideoBackground = false;
+            System.err.println("[LoadingCinematic] Video background failed: " + e.getMessage());
+            return false;
+        }
+    }
+
     private void setupContent(String targetView) {
         content = new VBox(-5);
         content.setAlignment(Pos.CENTER);
@@ -103,6 +145,20 @@ public class LoadingCinematicView {
     }
 
     public void play(Runnable onFinished) {
+        if (videoPlayer != null) {
+            if (videoPlayer.getStatus() == MediaPlayer.Status.READY) {
+                videoPlayer.seek(Duration.ZERO);
+                videoPlayer.play();
+            } else {
+                videoPlayer.setOnReady(() -> {
+                    try {
+                        videoPlayer.seek(Duration.ZERO);
+                        videoPlayer.play();
+                    } catch (Exception ignored) {}
+                });
+            }
+        }
+
         // Staggered Entrance
         FadeTransition f1 = new FadeTransition(Duration.millis(800), loadingLabel);
         f1.setToValue(1.0);
@@ -122,7 +178,10 @@ public class LoadingCinematicView {
         
         FadeTransition fadeOut = new FadeTransition(Duration.millis(600), root);
         fadeOut.setToValue(0);
-        fadeOut.setOnFinished(e -> onFinished.run());
+        fadeOut.setOnFinished(e -> {
+            if (videoPlayer != null) videoPlayer.stop();
+            onFinished.run();
+        });
         
         SequentialTransition seq = new SequentialTransition(
             new ParallelTransition(f1, t1, f2, t2),

@@ -255,6 +255,10 @@ public class ThemeManager {
         this.currentScene = scene;
         applyTheme();
     }
+
+    public Scene getScene() {
+        return currentScene;
+    }
     
     private void applyTheme() {
         if (currentScene == null) return;

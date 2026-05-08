@@ -10,6 +10,8 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
+import com.syndicati.services.DatabaseService;
+import com.syndicati.services.events.DataUpdateBus;
 import com.syndicati.services.forum.OpenAIModerationService;
 import com.syndicati.services.forum.SentimentAnalysisService;
 import com.syndicati.services.forum.SentimentAnalysisService.SentimentResult;
@@ -17,9 +19,14 @@ import com.syndicati.services.forum.DiscordWebhookService;
 import com.syndicati.services.forum.ReactionService.ReactionActionResult;
 import com.syndicati.services.forum.ReactionService.ReactionPayload;
 import com.syndicati.services.forum.ReactionService.ReactionStatus;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.image.imagekit.ImageKitConfig;
+import com.syndicati.utils.image.imagekit.ImageKitStorageService;
+import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import javafx.application.Platform;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,6 +38,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.animation.ScaleTransition;
@@ -98,6 +109,8 @@ public class ForumPageView implements ViewInterface {
     private final VBox notificationBox = new VBox(10);
     private final ThemeManager tm = ThemeManager.getInstance();
     private final SessionManager session = SessionManager.getInstance();
+    private final DatabaseService db = DatabaseService.getInstance();
+    private final DataUpdateBus updates = DataUpdateBus.getInstance();
     private final PublicationController publications = new PublicationController();
     private final CommentaireController comments = new CommentaireController();
     private final ReactionController reactions = new ReactionController();
@@ -179,11 +192,78 @@ public class ForumPageView implements ViewInterface {
     private final List<File> commentImages = new ArrayList<>();
     private final FlowPane commentImagePreviews = new FlowPane();
 
+    private static final String IK_FOLDER_FORUM_IMAGES = "/syndicati/forum_images";
+    private static final String IK_FOLDER_COMMENT_IMAGES = "/syndicati/commentaire_images";
+
+    private boolean isUrl(String v) {
+        return v != null && (v.startsWith("http://") || v.startsWith("https://"));
+    }
+
+    private String filenameFromUrl(String url) {
+        if (url == null) return null;
+        String u = url.trim();
+        int q = u.indexOf('?');
+        if (q >= 0) u = u.substring(0, q);
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < u.length() - 1) return u.substring(lastSlash + 1);
+        return u;
+    }
+
+    private Image loadForumImage(String value, String fallbackFolder) {
+        if (value == null) return null;
+        String v = value.trim();
+        if (v.isBlank() || "-".equals(v)) return null;
+
+        // URL case (ImageKit)
+        if (isUrl(v)) {
+            Image urlImg = ImageLoaderUtil.loadImage(v);
+            if (urlImg != null) return urlImg;
+
+            // ImageKit down: fallback to local by filename.
+            String filename = filenameFromUrl(v);
+            if (filename != null && !filename.isBlank()) {
+                Image local = ImageLoaderUtil.loadImage("uploads/" + filename);
+                if (local != null) return local;
+                if (fallbackFolder != null && !fallbackFolder.isBlank()) {
+                    local = ImageLoaderUtil.loadImage("uploads/" + fallbackFolder + "/" + filename);
+                    if (local != null) return local;
+                }
+            }
+            return null;
+        }
+
+        // Local case: either "uploads/..." or just filename.
+        if (v.startsWith("uploads/") || v.startsWith("uploads\\")) {
+            return ImageLoaderUtil.loadImage(v);
+        }
+
+        Image img = ImageLoaderUtil.loadImage("uploads/" + v);
+        if (img != null) return img;
+
+        if (fallbackFolder != null && !fallbackFolder.isBlank()) {
+            img = ImageLoaderUtil.loadImage("uploads/" + fallbackFolder + "/" + v);
+            if (img != null) return img;
+        }
+        return null;
+    }
+
     private final Button filterGeneral = new Button("General");
     private final Button filterAnnouncements = new Button("Announcements");
 
     private Publication current;
     private String currentFilter = "General";
+
+    private AutoCloseable updatesSubscription;
+    private volatile long lastListRefreshAt = 0L;
+    private final Map<Integer, CommentReactionSnapshot> commentReactionById = new ConcurrentHashMap<>();
+    private final Map<Integer, Button> likeBtnByCommentId = new ConcurrentHashMap<>();
+    private final Map<Integer, Button> dislikeBtnByCommentId = new ConcurrentHashMap<>();
+    private final Map<Integer, Button> emojiBtnByCommentId = new ConcurrentHashMap<>();
+    private final Map<Integer, Region> commentLikesBarById = new ConcurrentHashMap<>();
+    private final Map<Integer, Region> commentDislikesBarById = new ConcurrentHashMap<>();
+    private final Map<Integer, Label> commentRatioTextById = new ConcurrentHashMap<>();
+    private volatile long commentsRenderToken = 0L;
+    private javafx.animation.Timeline commentRenderTimeline;
 
     public ForumPageView() {
         mainLayout.setPadding(new Insets(24));
@@ -202,6 +282,9 @@ public class ForumPageView implements ViewInterface {
 
         showFace(readFace);
         loadCategory("General");
+
+        // Live updates for forum were causing noticeable stutter under high-churn tables (comments/reactions).
+        // Keep forum refresh user-driven (buttons) and cache-first instead.
     }
 
     @Override
@@ -211,6 +294,47 @@ public class ForumPageView implements ViewInterface {
 
     @Override
     public void cleanup() {
+        // Stop any in-flight batched rendering.
+        try {
+            commentsRenderToken++;
+            if (commentRenderTimeline != null) {
+                commentRenderTimeline.stop();
+                commentRenderTimeline = null;
+            }
+        } catch (Exception ignored) {}
+
+        if (updatesSubscription != null) {
+            try { updatesSubscription.close(); } catch (Exception ignored) {}
+            updatesSubscription = null;
+        }
+
+        // Release heavy node trees & image references.
+        try {
+            current = null;
+            currentHeroImage = null;
+            detailHeroImage.setImage(null);
+            createImagePreview.setImage(null);
+            editCurrentImagePreview.setImage(null);
+            editNewImagePreview.setImage(null);
+        } catch (Exception ignored) {}
+
+        try {
+            listBox.getChildren().clear();
+            listItemsById.clear();
+            commentsBox.getChildren().clear();
+            commentEditPanels.clear();
+            commentReportPanels.clear();
+            commentEmojiPanels.clear();
+            commentSentimentPanels.clear();
+            profileByUserIdCache.clear();
+            commentReactionById.clear();
+            likeBtnByCommentId.clear();
+            dislikeBtnByCommentId.clear();
+            emojiBtnByCommentId.clear();
+        } catch (Exception ignored) {}
+
+        // Forum has the highest image churn: drop loader cache to help RAM recover.
+        try { ImageLoaderUtil.clearCache(); } catch (Exception ignored) {}
     }
 
     private Node buildHero() {
@@ -520,7 +644,7 @@ public class ForumPageView implements ViewInterface {
 
         tuneInput(createTitle);
         tuneInput(createDescription);
-        tuneInput(createCategory);
+        styleComboBox(createCategory);
         styleValidationLabel(createTitleValidation, "Title must be at least 5 characters", false);
         styleValidationLabel(createCategoryValidation, "Category is required", false);
         styleValidationLabel(createDescriptionValidation, "Description must be at least 10 characters", false);
@@ -603,7 +727,7 @@ public class ForumPageView implements ViewInterface {
 
         tuneInput(editTitle);
         tuneInput(editDescription);
-        tuneInput(editCategory);
+        styleComboBox(editCategory);
         styleValidationLabel(editTitleValidation, "Title must be at least 5 characters", false);
         styleValidationLabel(editCategoryValidation, "Category is required", false);
         styleValidationLabel(editDescriptionValidation, "Description must be at least 10 characters", false);
@@ -849,13 +973,44 @@ public class ForumPageView implements ViewInterface {
     }
 
     private void loadCategory(String category) {
+        // 1) Render instantly from warm cache when available.
+        String cacheKey = "forum:category:" + category;
+        @SuppressWarnings("unchecked")
+        List<Publication> cached = db.getCache(cacheKey);
+        if (cached != null && !cached.isEmpty()) {
+            renderCategoryList(cached);
+        } else {
+            // Clear UI immediately for responsiveness.
+            listBox.getChildren().clear();
+            listItemsById.clear();
+        }
+
+        // 2) Refresh in background and update UI + cache.
+        Thread.startVirtualThread(() -> {
+            try {
+                List<Publication> pubs = publications.publicationsByCategory(category);
+                db.putCache(cacheKey, pubs);
+                javafx.application.Platform.runLater(() -> {
+                    // Only apply if still on the same filter.
+                    if (category != null && category.equals(currentFilter)) {
+                        renderCategoryList(pubs);
+                    }
+                });
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void renderCategoryList(List<Publication> pubs) {
         listBox.getChildren().clear();
         listItemsById.clear();
-        List<Publication> pubs = publications.publicationsByCategory(category);
+        if (pubs == null) return;
         for (Publication p : pubs) {
+            if (p == null) continue;
             VBox item = buildListItem(p);
             listBox.getChildren().add(item);
-            listItemsById.put(p.getIdPublication(), item);
+            if (p.getIdPublication() != null) {
+                listItemsById.put(p.getIdPublication(), item);
+            }
         }
         if (!pubs.isEmpty()) {
             selectPublication(pubs.get(0));
@@ -945,11 +1100,9 @@ public class ForumPageView implements ViewInterface {
 
         String img = current.getImagePublication();
         if (img != null && !img.isBlank() && !"-".equals(img)) {
-            String fullPath = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator
-                    + img;
-            currentHeroImage = new Image(fullPath, true);
+            currentHeroImage = loadForumImage(img, "forum_images");
             detailHeroImage.setImage(currentHeroImage);
-            detailHeroImage.setVisible(true);
+            detailHeroImage.setVisible(currentHeroImage != null);
             refreshHeroViewport();
         } else {
             detailHeroImage.setImage(null);
@@ -1040,6 +1193,14 @@ public class ForumPageView implements ViewInterface {
             postLikesBarRegion.setPrefWidth(greenWidth);
             postDislikesBarRegion.setPrefWidth(110 - greenWidth);
         }
+
+        // Update Emoji Button
+        String myEmoji = rs.getReactions().stream()
+                .filter(r -> "Emoji".equals(r.getKind()))
+                .map(r -> r.getEmoji())
+                .findFirst()
+                .orElse(null);
+        updateEmojiButtonStyle(postEmojiButton, myEmoji);
     }
 
     private void updateReactionButtonStyle(Button btn, boolean active, String colorHex) {
@@ -1166,21 +1327,140 @@ public class ForumPageView implements ViewInterface {
     }
 
     private void loadComments() {
-        commentsBox.getChildren().clear();
+        if (current == null || current.getIdPublication() == null) {
+            commentsBox.getChildren().clear();
+            return;
+        }
+
+        commentsBox.getChildren().setAll(skeletonLine("Loading comments..."));
         commentEditPanels.clear();
         commentReportPanels.clear();
         commentEmojiPanels.clear();
 
-        List<Commentaire> list = comments.commentsByPublication(current.getIdPublication());
+        final Integer pubId = current.getIdPublication();
+        final String cacheKey = "forum:comments:pub:" + pubId;
+
+        // 1) Render cached comments immediately when available.
+        @SuppressWarnings("unchecked")
+        List<Commentaire> cached = db.getCache(cacheKey);
+        if (cached != null && !cached.isEmpty()) {
+            renderCommentsBatched(pubId, cached);
+        }
+
+        // 2) Refresh comments in background and re-render (batched).
+        Thread.startVirtualThread(() -> {
+            try {
+                List<Commentaire> list = comments.commentsByPublication(pubId);
+                db.putCache(cacheKey, list);
+                javafx.application.Platform.runLater(() -> {
+                    // Only apply if the same publication is still selected.
+                    if (current != null && pubId.equals(current.getIdPublication())) {
+                        renderCommentsBatched(pubId, list);
+                    }
+                });
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private Node skeletonLine(String text) {
+        Label l = new Label(text);
+        l.setTextFill(Color.web("rgba(255,255,255,0.6)"));
+        l.setStyle("-fx-font-size: 12px; -fx-font-weight: 600; -fx-padding: 8 0 8 0;");
+        return l;
+    }
+
+    private boolean canSeeComment(Commentaire c, User me, Integer myId) {
+        if (c == null) return false;
+        if (c.getIsPublic()) return true;
+        if (me == null || me.getIdUser() == null) return false;
+        if (MODERATOR_ROLES.contains(me.getRoleUser())) return true;
+        try {
+            if (c.getUser() != null && myId != null && myId.equals(c.getUser().getIdUser())) return true;
+            if (current != null && current.getUser() != null && myId != null && myId.equals(current.getUser().getIdUser())) return true;
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    /**
+     * Build comment nodes in small batches so large threads don't freeze the UI.
+     */
+    private void renderCommentsBatched(Integer pubId, List<Commentaire> list) {
+        if (pubId == null) return;
+        if (current == null || !pubId.equals(current.getIdPublication())) return;
+
+        commentsBox.getChildren().clear();
+        commentEditPanels.clear();
+        commentReportPanels.clear();
+        commentEmojiPanels.clear();
+        commentSentimentPanels.clear();
+        likeBtnByCommentId.clear();
+        dislikeBtnByCommentId.clear();
+        emojiBtnByCommentId.clear();
+        commentReactionById.clear();
+
         User me = session.getCurrentUser();
         Integer myId = me != null ? me.getIdUser() : -1;
 
-        for (Commentaire c : list) {
-            if (!c.getIsPublic() && !MODERATOR_ROLES.contains(me.getRoleUser()) && !c.getUser().getIdUser().equals(myId) && !current.getUser().getIdUser().equals(myId)) {
-                continue;
+        // Filter in-memory first (cheap).
+        List<Commentaire> visible = new ArrayList<>();
+        if (list != null) {
+            for (Commentaire c : list) {
+                if (canSeeComment(c, me, myId)) {
+                    visible.add(c);
+                }
             }
-            commentsBox.getChildren().add(buildCommentItem(c));
         }
+
+        if (visible.isEmpty()) {
+            commentsBox.getChildren().add(skeletonLine("No comments yet."));
+            return;
+        }
+
+        final int batchSize = 12;
+        final int[] idx = {0};
+
+        // Update token so any in-flight batch render stops.
+        final long token = ++commentsRenderToken;
+
+        // Prefetch reactions for visible comments in background (batch queries).
+        prefetchCommentReactionsAsync(visible, token);
+
+        // Render first batch immediately for perceived speed.
+        int first = Math.min(batchSize, visible.size());
+        for (int i = 0; i < first; i++) {
+            commentsBox.getChildren().add(buildCommentItem(visible.get(i)));
+        }
+        idx[0] = first;
+
+        if (idx[0] >= visible.size()) return;
+
+        final javafx.animation.Timeline[] timelineRef = new javafx.animation.Timeline[1];
+        javafx.animation.Timeline tl = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.millis(16), e -> {
+                if (current == null || !pubId.equals(current.getIdPublication())) {
+                    // Publication changed, stop rendering.
+                    if (timelineRef[0] != null) timelineRef[0].stop();
+                    return;
+                }
+                if (token != commentsRenderToken) {
+                    if (timelineRef[0] != null) timelineRef[0].stop();
+                    return;
+                }
+
+                int end = Math.min(idx[0] + batchSize, visible.size());
+                for (int i = idx[0]; i < end; i++) {
+                    commentsBox.getChildren().add(buildCommentItem(visible.get(i)));
+                }
+                idx[0] = end;
+                if (idx[0] >= visible.size()) {
+                    if (timelineRef[0] != null) timelineRef[0].stop();
+                }
+            })
+        );
+        timelineRef[0] = tl;
+        tl.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        tl.play();
+        commentRenderTimeline = tl;
     }
 
     private Node buildCommentItem(Commentaire c) {
@@ -1226,13 +1506,23 @@ public class ForumPageView implements ViewInterface {
             FlowPane imgGrid = new FlowPane(8, 8);
             for (String imgPath : imgs) {
                 if (imgPath.isBlank()) continue;
-                String fullPath = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator + imgPath;
-                ImageView iv = new ImageView(new Image(fullPath, 160, 160, true, true));
+                Image loaded = loadForumThumb(imgPath, "commentaire_images", 160, 160);
+                if (loaded == null) continue;
+                ImageView iv = new ImageView(loaded);
+                iv.setFitWidth(160);
+                iv.setFitHeight(160);
+                iv.setPreserveRatio(true);
+                iv.setSmooth(true);
                 iv.setStyle("-fx-background-radius: 8px; -fx-border-radius: 8px;");
                 imgGrid.getChildren().add(iv);
             }
             content.getChildren().add(imgGrid);
         }
+
+        Integer cid = c.getIdCommentaire();
+        CommentReactionSnapshot snap = (cid != null) ? commentReactionById.get(cid) : null;
+        int likes = snap != null ? snap.likes : 0;
+        int dislikes = snap != null ? snap.dislikes : 0;
 
         // Inline Panels (Edit/Report/Emoji)
         VBox editPanel = buildCommentEditPanel(c);
@@ -1241,6 +1531,8 @@ public class ForumPageView implements ViewInterface {
         VBox sentimentPanel = new VBox(8);
         sentimentPanel.setVisible(false);
         sentimentPanel.setManaged(false);
+        HBox ratioWrap = buildCommentReactionRatioWrap(cid, likes, dislikes);
+        ratioWrap.setPadding(new Insets(2, 0, 0, 0));
         
         commentEditPanels.put(c.getIdCommentaire(), editPanel);
         commentReportPanels.put(c.getIdCommentaire(), reportPanel);
@@ -1250,7 +1542,7 @@ public class ForumPageView implements ViewInterface {
         // Action Row
         HBox actions = buildCommentActionRow(c);
 
-        item.getChildren().addAll(header, content, editPanel, reportPanel, emojiPanel, sentimentPanel, actions);
+        item.getChildren().addAll(header, content, ratioWrap, editPanel, reportPanel, emojiPanel, sentimentPanel, actions);
         return item;
     }
 
@@ -1259,12 +1551,24 @@ public class ForumPageView implements ViewInterface {
         actions.setAlignment(Pos.CENTER_LEFT);
         actions.setPadding(new Insets(4, 0, 0, 0));
 
-        ReactionStatus rs = reactions.getCommentStatus(c.getIdCommentaire(),
-                session.getCurrentUser() != null ? session.getCurrentUser().getIdUser() : -1);
+        Integer cid = c.getIdCommentaire();
+        CommentReactionSnapshot snap = (cid != null) ? commentReactionById.get(cid) : null;
+        int likes = snap != null ? snap.likes : 0;
+        int dislikes = snap != null ? snap.dislikes : 0;
+        boolean liked = snap != null && snap.liked;
+        boolean disliked = snap != null && snap.disliked;
 
-        Button like = commentActionButton("Like (" + rs.getLikes() + ")", rs.isLiked(), "#22c55e");
-        Button dislike = commentActionButton("Dislike (" + rs.getDislikes() + ")", rs.isDisliked(), "#ef4444");
+        Button like = commentActionButton("Like (" + likes + ")", liked, "#22c55e");
+        Button dislike = commentActionButton("Dislike (" + dislikes + ")", disliked, "#ef4444");
         Button emoji = commentActionButton("Emoji", false, tm.getAccentHex());
+        if (cid != null) {
+            likeBtnByCommentId.put(cid, like);
+            dislikeBtnByCommentId.put(cid, dislike);
+            emojiBtnByCommentId.put(cid, emoji);
+        }
+
+        updateEmojiButtonStyle(emoji, snap != null ? snap.myEmoji : null);
+        
         Button report = commentActionButton("Report", false, "#ef4444");
         Button feeling = commentActionButton("Feeling", false, tm.getAccentHex());
 
@@ -1295,6 +1599,244 @@ public class ForumPageView implements ViewInterface {
         }
 
         return actions;
+    }
+
+    private HBox buildCommentReactionRatioWrap(Integer commentId, int likes, int dislikes) {
+        HBox ratioBarContainer = new HBox();
+        ratioBarContainer.setPrefSize(96, 6);
+        ratioBarContainer.setMaxSize(96, 6);
+        ratioBarContainer.setAlignment(Pos.CENTER_LEFT);
+        ratioBarContainer.setStyle("-fx-background-radius: 100px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 100px; -fx-border-width: 1;");
+
+        javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(96, 6);
+        clip.setArcWidth(6);
+        clip.setArcHeight(6);
+        ratioBarContainer.setClip(clip);
+
+        Region likesBar = new Region();
+        likesBar.setStyle("-fx-background-color: #22c55e;");
+        likesBar.setPrefHeight(6);
+
+        Region dislikesBar = new Region();
+        dislikesBar.setStyle("-fx-background-color: #ef4444;");
+        dislikesBar.setPrefHeight(6);
+
+        ratioBarContainer.getChildren().addAll(likesBar, dislikesBar);
+
+        Label ratioText = new Label(formatReactionRatio(likes, dislikes));
+        ratioText.setTextFill(Color.web("rgba(255,255,255,0.72)"));
+        ratioText.setStyle("-fx-font-size: 11px; -fx-font-weight: 700;");
+
+        if (commentId != null) {
+            commentLikesBarById.put(commentId, likesBar);
+            commentDislikesBarById.put(commentId, dislikesBar);
+            commentRatioTextById.put(commentId, ratioText);
+        }
+
+        updateCommentReactionRatioVisuals(commentId, likes, dislikes);
+        HBox ratioWrap = new HBox(6, ratioBarContainer, ratioText);
+        ratioWrap.setAlignment(Pos.CENTER_LEFT);
+        return ratioWrap;
+    }
+
+    private static final class CommentReactionSnapshot {
+        final int likes;
+        final int dislikes;
+        final boolean liked;
+        final boolean disliked;
+        final String myEmoji;
+        CommentReactionSnapshot(int likes, int dislikes, boolean liked, boolean disliked, String myEmoji) {
+            this.likes = likes;
+            this.dislikes = dislikes;
+            this.liked = liked;
+            this.disliked = disliked;
+            this.myEmoji = myEmoji;
+        }
+    }
+
+    private void prefetchCommentReactionsAsync(List<Commentaire> comments, long token) {
+        User me = session.getCurrentUser();
+        int userId = me != null && me.getIdUser() != null ? me.getIdUser() : -1;
+        if (userId <= 0 || comments == null || comments.isEmpty()) return;
+
+        // Only prefetch for a bounded number of comments to keep queries small.
+        List<Integer> ids = new ArrayList<>();
+        for (Commentaire c : comments) {
+            if (c != null && c.getIdCommentaire() != null) ids.add(c.getIdCommentaire());
+            if (ids.size() >= 150) break;
+        }
+        if (ids.isEmpty()) return;
+
+        Thread.startVirtualThread(() -> {
+            try {
+                Map<Integer, Integer> likeCounts = new HashMap<>();
+                Map<Integer, Integer> dislikeCounts = new HashMap<>();
+                Map<Integer, String> myKind = new HashMap<>();
+                Map<Integer, String> myEmoji = new HashMap<>();
+
+                String in = ids.stream().map(x -> "?").reduce((a, b) -> a + "," + b).orElse("?");
+
+                try (Connection conn = db.getConnection()) {
+                    if (conn == null) return;
+
+                    // 1) Counts grouped by comment + kind
+                String sqlCounts = "SELECT commentaire_id, kind, COUNT(*) AS cnt FROM reaction " +
+                        "WHERE commentaire_id IN (" + in + ") AND kind IN ('Like','Dislike') " +
+                        "GROUP BY commentaire_id, kind";
+                    try (PreparedStatement ps = conn.prepareStatement(sqlCounts)) {
+                        int idx = 1;
+                        for (Integer id : ids) ps.setInt(idx++, id);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                int cid = rs.getInt(1);
+                                String kind = rs.getString(2);
+                                int cnt = rs.getInt(3);
+                                if ("Like".equals(kind)) likeCounts.put(cid, cnt);
+                                if ("Dislike".equals(kind)) dislikeCounts.put(cid, cnt);
+                            }
+                        }
+                    }
+
+                    // 2) My reactions (Like/Dislike/Emoji) for these comments
+                    String sqlMine = "SELECT commentaire_id, kind, emoji FROM reaction " +
+                        "WHERE user_id = ? AND commentaire_id IN (" + in + ") AND kind IN ('Like','Dislike','Emoji')";
+                    try (PreparedStatement ps = conn.prepareStatement(sqlMine)) {
+                        int p = 1;
+                        ps.setInt(p++, userId);
+                        for (Integer id : ids) ps.setInt(p++, id);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            while (rs.next()) {
+                                int cid = rs.getInt(1);
+                                String kind = rs.getString(2);
+                                myKind.put(cid, kind);
+                                if ("Emoji".equals(kind)) {
+                                    myEmoji.put(cid, rs.getString(3));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (token != commentsRenderToken) return;
+
+                // Update local cache + UI button labels in one FX pass.
+                javafx.application.Platform.runLater(() -> {
+                    if (token != commentsRenderToken) return;
+                    for (Integer id : ids) {
+                        int likes = likeCounts.getOrDefault(id, 0);
+                        int dislikes = dislikeCounts.getOrDefault(id, 0);
+                        String k = myKind.get(id);
+                        boolean liked = "Like".equals(k);
+                        boolean disliked = "Dislike".equals(k);
+                        String emoji = myEmoji.get(id);
+                        commentReactionById.put(id, new CommentReactionSnapshot(likes, dislikes, liked, disliked, emoji));
+
+                        Button lb = likeBtnByCommentId.get(id);
+                        Button dbb = dislikeBtnByCommentId.get(id);
+                        Button eb = emojiBtnByCommentId.get(id);
+                        if (lb != null) lb.setText("Like (" + likes + ")");
+                        if (dbb != null) dbb.setText("Dislike (" + dislikes + ")");
+                        if (eb != null) updateEmojiButtonStyle(eb, emoji);
+                        updateCommentReactionRatioVisuals(id, likes, dislikes);
+                    }
+                });
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void updateCommentReactionRatioVisuals(Integer commentId, int likes, int dislikes) {
+        if (commentId == null) {
+            return;
+        }
+
+        Region likesBar = commentLikesBarById.get(commentId);
+        Region dislikesBar = commentDislikesBarById.get(commentId);
+        Label ratioText = commentRatioTextById.get(commentId);
+        int total = likes + dislikes;
+        double greenWidth = total == 0 ? 0 : 96.0 * likes / total;
+
+        if (likesBar != null && dislikesBar != null) {
+            likesBar.setPrefWidth(greenWidth);
+            dislikesBar.setPrefWidth(96.0 - greenWidth);
+        }
+
+        if (ratioText != null) {
+            ratioText.setText(formatReactionRatio(likes, dislikes));
+        }
+    }
+
+    private String formatReactionRatio(int likes, int dislikes) {
+        int total = likes + dislikes;
+        if (total <= 0) {
+            return "0%";
+        }
+        int percent = (int) Math.round((likes * 100.0) / total);
+        return percent + "%";
+    }
+
+    private Image loadForumThumb(String value, String fallbackFolder, double w, double h) {
+        if (value == null) return null;
+        String v = value.trim();
+        if (v.isBlank() || "-".equals(v)) return null;
+
+        // URL case: load as a decoded thumbnail to avoid multi-MB buffers per comment.
+        if (isUrl(v)) {
+            try {
+                return new Image(v, w, h, true, true, true);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+
+        // Local case: resolve similarly to loadForumImage, but decode as thumbnail.
+        String path = v;
+        if (!(path.startsWith("uploads/") || path.startsWith("uploads\\"))) {
+            if (fallbackFolder != null && !fallbackFolder.isBlank()) {
+                path = "uploads/" + fallbackFolder + "/" + path;
+            } else {
+                path = "uploads/" + path;
+            }
+        }
+        try {
+            java.io.File f = new java.io.File(System.getProperty("user.dir"), path.replace("uploads/", "uploads" + java.io.File.separator));
+            if (f.exists()) {
+                return new Image(f.toURI().toString(), w, h, true, true, true);
+            }
+            // fallback: let ImageLoaderUtil try anything else
+            Image img = ImageLoaderUtil.loadImage(path);
+            if (img == null) return null;
+            return new Image(img.getUrl(), w, h, true, true, true);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void updateEmojiButtonStyle(Button btn, String emoji) {
+        if (emoji != null && !emoji.isBlank()) {
+            String hex = Integer.toHexString(emoji.codePointAt(0));
+            if (emoji.equals("❤️")) hex = "2764";
+            String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
+            
+            ImageView iv = new ImageView(new Image(url, true));
+            iv.setFitWidth(20);
+            iv.setFitHeight(20);
+            iv.setPreserveRatio(true);
+            
+            btn.setGraphic(iv);
+            btn.setText("");
+            btn.setStyle(
+                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
+                "-fx-border-color: " + tm.getAccentHex() + "88;" +
+                "-fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 6 12 6 12; -fx-cursor: hand;");
+        } else {
+            btn.setGraphic(null);
+            btn.setText("Emoji");
+            btn.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.05);" +
+                "-fx-border-color: rgba(255,255,255,0.12);" +
+                "-fx-text-fill: rgba(255,255,255,0.4);" +
+                "-fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+        }
     }
 
     private Button commentActionButton(String text, boolean active, String colorHex) {
@@ -1458,14 +2000,16 @@ public class ForumPageView implements ViewInterface {
 
         String text = commentInput.getText().trim();
         if (text.isEmpty()) {
+            showNotification("Validation", "Comment cannot be empty.", "#ef4444");
             commentValidation.setText("Comment cannot be empty");
             commentValidation.setTextFill(Color.web("#ef4444"));
             return;
         }
 
         // Moderation
-        if (moderationService.isFlagged(text)) {
-            showNotification("Moderation", "Your comment contains inappropriate content.", "#ef4444");
+        List<String> flaggedCategories = moderationService.checkContent(text);
+        if (!flaggedCategories.isEmpty()) {
+            GlobalNotificationPillManager.moderationBlocked("Comment", "Your comment contains inappropriate content.", flaggedCategories);
             return;
         }
 
@@ -1473,7 +2017,7 @@ public class ForumPageView implements ViewInterface {
         StringBuilder imgPaths = new StringBuilder();
         for (File f : commentImages) {
             try {
-                String path = copyFileToUploads(f);
+                String path = copyFileToUploads(f, IK_FOLDER_COMMENT_IMAGES);
                 if (imgPaths.length() > 0)
                     imgPaths.append(",");
                 imgPaths.append(path);
@@ -1511,15 +2055,16 @@ public class ForumPageView implements ViewInterface {
         }
 
         // Moderation
-        if (moderationService.isFlagged(title + " " + desc)) {
-            showNotification("Moderation", "Inappropriate content detected.", "#ef4444");
+        List<String> flaggedCategories = moderationService.checkContent(title + " " + desc);
+        if (!flaggedCategories.isEmpty()) {
+            GlobalNotificationPillManager.moderationBlocked("Publication", "Inappropriate content detected.", flaggedCategories);
             return;
         }
 
         String imgPath = "-";
         if (createImage != null) {
             try {
-                imgPath = copyFileToUploads(createImage);
+                imgPath = copyFileToUploads(createImage, IK_FOLDER_FORUM_IMAGES);
             } catch (IOException e) {
             }
         }
@@ -1529,6 +2074,11 @@ public class ForumPageView implements ViewInterface {
             // Discord announcement
             if ("Announcement".equalsIgnoreCase(cat)) {
                 discordService.sendAnnouncement("📢 **NEW ANNOUNCEMENT**\n\n**" + title + "**\n" + desc, createImage);
+            } else if ("Jeux Video".equalsIgnoreCase(cat)) {
+                String author = (session.getCurrentUser() != null)
+                        ? (session.getCurrentUser().getFirstName() + " " + session.getCurrentUser().getLastName())
+                        : "Anonymous";
+                discordService.sendAnnouncement(title, desc, author, (createImage != null) ? createImage.getName() : null, false);
             }
 
             loadCategory(currentFilter);
@@ -1547,13 +2097,11 @@ public class ForumPageView implements ViewInterface {
         editImageField.clear();
         editNewImagePreview.setImage(null);
 
-        if (current.getImagePublication() != null && !"-".equals(current.getImagePublication())) {
-            String path = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator
-                    + current.getImagePublication();
-            editCurrentImagePreview.setImage(new Image(path, true));
-        } else {
-            editCurrentImagePreview.setImage(null);
-        }
+        editCurrentImagePreview.setImage(
+            (current.getImagePublication() == null || "-".equals(current.getImagePublication()))
+                ? null
+                : loadForumImage(current.getImagePublication(), "forum_images")
+        );
         showFace(editFace);
     }
 
@@ -1565,12 +2113,21 @@ public class ForumPageView implements ViewInterface {
         String imgPath = current.getImagePublication();
         if (editImage != null) {
             try {
-                imgPath = copyFileToUploads(editImage);
+                imgPath = copyFileToUploads(editImage, IK_FOLDER_FORUM_IMAGES);
             } catch (IOException e) {
             }
         }
 
         publications.publicationUpdate(current.getIdPublication(), title, desc, cat, imgPath);
+
+        // Discord announcement for Jeux Video updates
+        if ("Jeux Video".equalsIgnoreCase(cat)) {
+            String author = (session.getCurrentUser() != null)
+                    ? (session.getCurrentUser().getFirstName() + " " + session.getCurrentUser().getLastName())
+                    : "Anonymous";
+            discordService.sendAnnouncement(title, desc, author, (editImage != null) ? editImage.getName() : filenameFromUrl(imgPath), true);
+        }
+
         loadCategory(currentFilter);
         showFace(readFace);
         showNotification("Success", "Publication updated.", "#22c55e");
@@ -1597,22 +2154,16 @@ public class ForumPageView implements ViewInterface {
             return;
         }
 
-        publicationSentimentPanel.getChildren().clear();
-        publicationSentimentPanel.setPadding(new Insets(14));
-        publicationSentimentPanel.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: " + tm.getAccentHex() + "33; -fx-border-radius: 12px;");
-        
-        Label loading = new Label("Analyzing feelings...");
-        loading.setTextFill(Color.web(tm.getAccentHex()));
-        publicationSentimentPanel.getChildren().add(loading);
-        publicationSentimentPanel.setVisible(true);
-        publicationSentimentPanel.setManaged(true);
+        prepareSentimentPanelForLoading(publicationSentimentPanel);
 
         String textToAnalyze = current.getTitrePublication() + ". " + current.getDescPublication();
         sentimentService.analyzeContent(textToAnalyze).thenAccept(result -> {
             javafx.application.Platform.runLater(() -> {
                 if (publicationSentimentPanel == null) return;
                 if (!result.success) {
-                    publicationSentimentPanel.getChildren().setAll(new Label("Analysis Failed: " + result.explanation));
+                    Label err = new Label("AI Offline: " + result.explanation);
+                    err.setStyle("-fx-text-fill: #ef4444; -fx-font-weight: bold; -fx-padding: 20;");
+                    publicationSentimentPanel.getChildren().setAll(err);
                     return;
                 }
                 fillSentimentPanel(publicationSentimentPanel, result);
@@ -1620,49 +2171,103 @@ public class ForumPageView implements ViewInterface {
         });
     }
 
+    private void prepareSentimentPanelForLoading(VBox panel) {
+        panel.getChildren().clear();
+        panel.setPadding(new Insets(20));
+        panel.setVisible(true);
+        panel.setManaged(true);
+        panel.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 16px;");
+
+        Label loading = new Label("Analyzing...");
+        loading.setStyle("-fx-text-fill: rgba(255,255,255,0.7); -fx-font-size: 13px; -fx-font-weight: bold;");
+        panel.getChildren().add(loading);
+    }
+
     private void fillSentimentPanel(VBox panel, SentimentResult result) {
-        String color = result.sentiment.toLowerCase().contains("pos") ? "#4ade80" : 
-                       (result.sentiment.toLowerCase().contains("neg") ? "#f87171" : "#fbbf24");
+        String baseColor = "#fbbf24"; // Neutral
+        String emoji = "😐";
         
-        VBox layout = new VBox(10);
-        layout.setAlignment(Pos.TOP_LEFT);
+        String s = result.sentiment.toLowerCase();
+        if (s.contains("pos") || s.contains("happy") || s.contains("joy")) {
+            baseColor = "#22c55e";
+            emoji = "✨";
+        } else if (s.contains("neg") || s.contains("angry") || s.contains("sad")) {
+            baseColor = "#ef4444";
+            emoji = "💢";
+        }
+        
+        // Match specific emotions if possible
+        String e = result.primaryEmotion.toLowerCase();
+        if (e.contains("joy") || e.contains("happy")) emoji = "😊";
+        else if (e.contains("angry") || e.contains("rage")) emoji = "😡";
+        else if (e.contains("sad")) emoji = "😢";
+        else if (e.contains("surprise")) emoji = "😲";
+        else if (e.contains("fear")) emoji = "😨";
+
+        panel.getChildren().clear();
+        panel.setStyle(
+            "-fx-background-color: linear-gradient(to right, " + tm.toRgba(baseColor, 0.08) + ", rgba(255,255,255,0.03));" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: linear-gradient(to right, " + tm.toRgba(baseColor, 0.4) + ", rgba(255,255,255,0.1));" +
+            "-fx-border-radius: 20px;" +
+            "-fx-border-width: 1.5px;"
+        );
+
+        HBox layout = new HBox(24);
+        layout.setPadding(new Insets(10));
+        layout.setAlignment(Pos.CENTER_LEFT);
+
+        // Left Side: Big Emotion Indicator
+        StackPane iconStack = new StackPane();
+        Circle glow = new Circle(34);
+        glow.setFill(Color.web(baseColor));
+        glow.setOpacity(0.12);
+        
+        Label emoLabel = new Label(emoji);
+        emoLabel.setStyle("-fx-font-size: 38px;");
+        
+        iconStack.getChildren().addAll(glow, emoLabel);
+
+        // Right Side: Details
+        VBox details = new VBox(12);
+        HBox.setHgrow(details, Priority.ALWAYS);
 
         HBox header = new HBox(12);
-        header.setAlignment(Pos.CENTER_LEFT);
-
-        // AI Icon/Indicator
-        Label aiIcon = new Label("✨");
-        aiIcon.setStyle("-fx-font-size: 18px;");
+        header.setAlignment(Pos.BOTTOM_LEFT);
         
-        VBox titleBox = new VBox(2);
-        Label titleLabel = new Label("AI SENTIMENT ANALYSIS");
-        titleLabel.setStyle("-fx-font-weight: 900; -fx-font-size: 10px; -fx-text-fill: " + color + "; -fx-letter-spacing: 1px;");
         Label sentimentLabel = new Label(result.sentiment.toUpperCase());
-        sentimentLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: white;");
-        titleBox.getChildren().addAll(titleLabel, sentimentLabel);
+        sentimentLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: 900; -fx-text-fill: white; -fx-letter-spacing: -0.5px;");
         
-        header.getChildren().addAll(aiIcon, titleBox);
+        Label confidenceBadge = new Label(result.confidence + "% CONFIDENCE");
+        confidenceBadge.setStyle("-fx-background-color: " + tm.toRgba(baseColor, 0.2) + "; -fx-text-fill: " + baseColor + "; -fx-font-size: 9px; -fx-font-weight: 900; -fx-padding: 3 8; -fx-background-radius: 6px;");
+        
+        header.getChildren().addAll(sentimentLabel, confidenceBadge);
 
-        double confidenceVal = 0.5;
-        try { confidenceVal = Double.parseDouble(result.confidence.replace("%", "")) / 100.0; } catch(Exception e){}
-        
-        HBox confidenceBox = new HBox(10);
-        confidenceBox.setAlignment(Pos.CENTER_LEFT);
-        ProgressBar pb = new ProgressBar(confidenceVal);
-        pb.setPrefWidth(150);
-        pb.setPrefHeight(6);
-        pb.setStyle("-fx-accent: " + color + ";");
-        Label confLabel = new Label(result.confidence + " confidence");
-        confLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: rgba(255,255,255,0.5);");
-        confidenceBox.getChildren().addAll(pb, confLabel);
+        Label emotionMeta = new Label("Primary Emotion: " + result.primaryEmotion);
+        emotionMeta.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + baseColor + "; -fx-opacity: 0.8;");
 
         Text explanation = new Text(result.explanation);
-        explanation.setFill(Color.web("rgba(255,255,255,0.7)"));
-        explanation.setFont(Font.font(13));
-        explanation.setWrappingWidth(700);
+        explanation.setFill(Color.web("rgba(255,255,255,0.75)"));
+        explanation.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 14));
+        explanation.setWrappingWidth(panel.getWidth() > 0 ? panel.getWidth() - 140 : 600);
+        explanation.setLineSpacing(3);
 
-        layout.getChildren().addAll(header, confidenceBox, explanation);
-        panel.getChildren().setAll(layout);
+        details.getChildren().addAll(header, emotionMeta, explanation);
+        
+        layout.getChildren().addAll(iconStack, details);
+        panel.getChildren().add(layout);
+
+        // Entrance Animation
+        layout.setOpacity(0);
+        layout.setTranslateY(10);
+        
+        FadeTransition ft = new FadeTransition(Duration.millis(600), layout);
+        ft.setToValue(1);
+        TranslateTransition tt = new TranslateTransition(Duration.millis(600), layout);
+        tt.setToY(0);
+        
+        ft.play();
+        tt.play();
     }
 
 
@@ -1676,21 +2281,15 @@ public class ForumPageView implements ViewInterface {
             return;
         }
 
-        panel.getChildren().clear();
-        panel.setPadding(new Insets(10));
-        panel.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10px; -fx-border-color: " + tm.getAccentHex() + "22; -fx-border-radius: 10px;");
-        
-        Label loading = new Label("Analyzing comment...");
-        loading.setTextFill(Color.web(tm.getAccentHex()));
-        panel.getChildren().add(loading);
-        panel.setVisible(true);
-        panel.setManaged(true);
+        prepareSentimentPanelForLoading(panel);
 
         sentimentService.analyzeContent(comment.getContenuCommentaire()).thenAccept(result -> {
             javafx.application.Platform.runLater(() -> {
                 if (panel == null) return;
                 if (!result.success) {
-                    panel.getChildren().setAll(new Label("Analysis Failed: " + result.explanation));
+                    Label err = new Label("AI Offline: " + result.explanation);
+                    err.setStyle("-fx-text-fill: #ef4444; -fx-font-weight: bold; -fx-padding: 10;");
+                    panel.getChildren().setAll(err);
                     return;
                 }
                 fillSentimentPanel(panel, result);
@@ -1710,39 +2309,46 @@ public class ForumPageView implements ViewInterface {
     }
 
     private void showNotification(String title, String message, String colorHex) {
-        VBox box = new VBox(4);
-        box.setPadding(new Insets(16));
-        box.setPrefWidth(320);
-        box.setStyle("-fx-background-color: rgba(20,20,30,0.95); -fx-background-radius: 12px; -fx-border-color: "
-                + colorHex + "; -fx-border-radius: 12px;");
+        String normalizedTitle = title == null ? "" : title.toLowerCase();
+        String normalizedMessage = message == null ? "" : message.toLowerCase();
 
-        Label t = new Label(title);
-        t.setStyle("-fx-font-weight: bold; -fx-text-fill: white; -fx-font-size: 14px;");
-        Label m = new Label(message);
-        m.setWrapText(true);
-        m.setStyle("-fx-text-fill: rgba(255,255,255,0.7); -fx-font-size: 12px;");
+        if (normalizedTitle.contains("validation")) {
+            GlobalNotificationPillManager.validationIssue(
+                title,
+                message,
+                "Fill every required field.",
+                "Use at least 5 characters for titles and 10 for descriptions.",
+                "Keep the text clean and retry."
+            );
+            return;
+        }
 
-        box.getChildren().addAll(t, m);
-        notificationBox.getChildren().add(0, box);
+        if (normalizedTitle.contains("auth required")) {
+            GlobalNotificationPillManager.validationIssue(
+                title,
+                message,
+                "Log in to continue.",
+                "Then retry the action from the same page."
+            );
+            return;
+        }
 
-        box.setOpacity(0);
-        box.setTranslateX(100);
-
-        FadeTransition fi = new FadeTransition(Duration.millis(300), box);
-        fi.setToValue(1);
-        TranslateTransition ti = new TranslateTransition(Duration.millis(300), box);
-        ti.setToX(0);
-
-        PauseTransition p = new PauseTransition(Duration.seconds(4));
-
-        FadeTransition fo = new FadeTransition(Duration.millis(300), box);
-        fo.setToValue(0);
-        fo.setOnFinished(e -> notificationBox.getChildren().remove(box));
-
-        new SequentialTransition(new SequentialTransition(fi, ti), p, fo).play();
+        if (normalizedTitle.contains("success") || normalizedMessage.contains("created") || normalizedMessage.contains("updated") || normalizedMessage.contains("posted")) {
+            if (normalizedMessage.contains("created") || normalizedMessage.contains("posted")) {
+                GlobalNotificationPillManager.created(title, message);
+            } else {
+                GlobalNotificationPillManager.updated(title, message);
+            }
+        } else if (normalizedTitle.contains("report") || normalizedTitle.contains("warning") || "#f59e0b".equalsIgnoreCase(colorHex)) {
+            GlobalNotificationPillManager.warning(title, message);
+        } else if (normalizedTitle.contains("error") || "#ef4444".equalsIgnoreCase(colorHex)) {
+            GlobalNotificationPillManager.error(title, message);
+        } else {
+            GlobalNotificationPillManager.info(title, message);
+        }
     }
 
-    private String copyFileToUploads(File source) throws IOException {
+    private String copyFileToUploads(File source, String imageKitFolder) throws IOException {
         String uploadsPath = System.getProperty("user.dir") + File.separator + "uploads";
         File dir = new File(uploadsPath);
         if (!dir.exists())
@@ -1751,6 +2357,21 @@ public class ForumPageView implements ViewInterface {
         String name = System.currentTimeMillis() + "_" + source.getName();
         File dest = new File(dir, name);
         Files.copy(source.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        // Prefer ImageKit URL for DB, but keep local copy for fallback.
+        try {
+            ImageKitConfig cfg = ImageKitConfig.fromEnv();
+            if (cfg != null && cfg.isEnabled() && cfg.getPrivateKey() != null) {
+                ImageKitStorageService svc = new ImageKitStorageService(cfg);
+                ImageKitUploadResult res = svc.uploadFile(dest, imageKitFolder);
+                if (res != null && res.url() != null && !res.url().isBlank()) {
+                    return res.url();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("ImageKit upload failed (forum). Fallback to local: " + e.getMessage());
+        }
+
         return name;
     }
 
@@ -1770,19 +2391,133 @@ public class ForumPageView implements ViewInterface {
     }
 
     private void tuneInput(Node n) {
+        applyInputStyle(n, false);
+        n.focusedProperty().addListener((obs, oldV, newV) -> applyInputStyle(n, newV));
+    }
+
+    private void applyInputStyle(Node n, boolean focused) {
+        if (n instanceof ComboBox<?> cb) {
+            cb.getEditor().setStyle("-fx-text-fill: white; -fx-background-color: transparent;");
+        }
+        
+        String border = focused ? tm.getAccentHex() : "rgba(255,255,255,0.1)";
         n.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05);" +
+                "-fx-background-color: rgba(255,255,255,0.06);" +
+                        "-fx-control-inner-background: rgba(255,255,255,0.06);" +
                         "-fx-text-fill: white;" +
-                        "-fx-prompt-text-fill: rgba(255,255,255,0.4);" +
+                        "-fx-prompt-text-fill: rgba(255,255,255,0.45);" +
+                        "-fx-highlight-fill: " + tm.toRgba(tm.getAccentHex(), 0.45) + ";" +
+                        "-fx-highlight-text-fill: white;" +
                         "-fx-background-radius: 10px;" +
-                        "-fx-border-color: rgba(255,255,255,0.1);" +
+                        "-fx-border-color: " + border + ";" +
                         "-fx-border-radius: 10px;");
-        n.focusedProperty().addListener((obs, oldV, newV) -> {
-            if (newV)
-                n.setStyle(n.getStyle() + "-fx-border-color: " + tm.getAccentHex() + ";");
-            else
-                n.setStyle(n.getStyle() + "-fx-border-color: rgba(255,255,255,0.1);");
+
+        // TextArea has nested ".content" that can default to white in some themes.
+        if (n instanceof TextArea ta) {
+            Runnable styleContent = () -> {
+                Node content = ta.lookup(".content");
+                if (content != null) {
+                    content.setStyle(
+                            "-fx-background-color: rgba(255,255,255,0.06);" +
+                                    "-fx-background-radius: 9px;"
+                    );
+                }
+            };
+            if (ta.getSkin() == null) {
+                ta.skinProperty().addListener((o, oldSkin, newSkin) -> {
+                    if (newSkin != null) Platform.runLater(styleContent);
+                });
+            } else {
+                Platform.runLater(styleContent);
+            }
+        }
+    }
+
+    private void styleComboBox(ComboBox<String> cb) {
+        cb.setButtonCell(new CategoryListCell());
+        cb.setCellFactory(lv -> new CategoryListCell());
+        
+        cb.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.06);" +
+            "-fx-background-radius: 10px;" +
+            "-fx-border-color: rgba(255,255,255,0.12);" +
+            "-fx-border-radius: 10px;" +
+            "-fx-padding: 2 6 2 6;"
+        );
+
+        cb.focusedProperty().addListener((obs, oldV, newV) -> {
+            String border = newV ? tm.getAccentHex() : "rgba(255,255,255,0.12)";
+            cb.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.08);" +
+                "-fx-background-radius: 10px;" +
+                "-fx-border-color: " + border + ";" +
+                "-fx-border-radius: 10px;" +
+                "-fx-padding: 2 6 2 6;"
+            );
         });
+    }
+
+    private class CategoryListCell extends javafx.scene.control.ListCell<String> {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            
+            // Force the popup background to be dark
+            if (getListView() != null) {
+                getListView().setStyle(
+                    "-fx-background-color: #1a1a24;" +
+                    "-fx-background-insets: 0;" +
+                    "-fx-padding: 5;" +
+                    "-fx-border-color: rgba(255,255,255,0.12);" +
+                    "-fx-border-radius: 12px;" +
+                    "-fx-background-radius: 12px;"
+                );
+            }
+
+            if (empty || item == null) {
+                setText(null);
+                setGraphic(null);
+                setStyle("-fx-background-color: transparent;");
+            } else {
+                setText(item);
+                setTextFill(Color.WHITE);
+                setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 14));
+                
+                updateCellStyle(isSelected());
+                
+                selectedProperty().addListener((obs, wasSelected, isSelected) -> updateCellStyle(isSelected));
+
+                setOnMouseEntered(e -> {
+                    if (!isSelected()) {
+                        setStyle("-fx-background-color: rgba(255,255,255,0.08); -fx-background-radius: 8px; -fx-text-fill: white; -fx-padding: 10 14;");
+                    }
+                });
+                setOnMouseExited(e -> {
+                    if (!isSelected()) {
+                        updateCellStyle(false);
+                    }
+                });
+            }
+        }
+
+        private void updateCellStyle(boolean selected) {
+            if (selected) {
+                setStyle(
+                    "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
+                    "-fx-background-radius: 8px;" +
+                    "-fx-text-fill: white;" +
+                    "-fx-padding: 10 14;" +
+                    "-fx-font-weight: bold;"
+                );
+            } else {
+                setStyle(
+                    "-fx-background-color: transparent;" +
+                    "-fx-text-fill: rgba(255,255,255,0.85);" +
+                    "-fx-padding: 10 14;" +
+                    "-fx-font-weight: normal;"
+                );
+            }
+        }
     }
 
     private Button primaryButton(String text, Runnable action) {
@@ -1837,12 +2572,14 @@ public class ForumPageView implements ViewInterface {
 
     private void updateCreateValidationState() {
         styleValidationLabel(createTitleValidation, "Title must be at least 5 chars", createTitle.getText().length() >= 5);
+        styleValidationLabel(createCategoryValidation, "Category is required", createCategory.getValue() != null);
         styleValidationLabel(createDescriptionValidation, "Description must be at least 10 chars",
                 createDescription.getText().length() >= 10);
     }
 
     private void updateEditValidationState() {
         styleValidationLabel(editTitleValidation, "Title must be at least 5 chars", editTitle.getText().length() >= 5);
+        styleValidationLabel(editCategoryValidation, "Category is required", editCategory.getValue() != null);
         styleValidationLabel(editDescriptionValidation, "Description must be at least 10 chars",
                 editDescription.getText().length() >= 10);
     }

@@ -34,6 +34,10 @@ import javafx.scene.Scene;
 import javafx.scene.Cursor;
 import javafx.util.Duration;
 import com.syndicati.MainApplication;
+import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.image.imagekit.ImageKitConfig;
+import com.syndicati.utils.image.imagekit.ImageKitStorageService;
+import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.theme.ThemeManager;
 
 /**
@@ -73,7 +77,7 @@ public class ProfileReclamationSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
         
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle("-fx-background-color: rgba(10,10,15,0.85); -fx-border-color: rgba(60,60,80,0.5); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
         card.setPrefHeight(600);
         
         // Switcher container
@@ -419,7 +423,7 @@ public class ProfileReclamationSectionEnhanced {
 
         // Info Card
         VBox infoCard = new VBox(15);
-        infoCard.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-padding: 20; -fx-background-radius: 15; -fx-border-color: rgba(255,255,255,0.08);");
+        infoCard.setStyle("-fx-background-color: rgba(10,10,15,0.80); -fx-padding: 20; -fx-background-radius: 15; -fx-border-color: rgba(60,60,80,0.4);");
         
         HBox titleBar = new HBox(15);
         titleBar.setAlignment(Pos.CENTER_LEFT);
@@ -585,14 +589,29 @@ public class ProfileReclamationSectionEnhanced {
         String imgPath = response.getImageReponse();
         if (imgPath != null && !imgPath.isBlank() && !"-".equals(imgPath)) {
             try {
-                String fullPath = "file:" + System.getProperty("user.dir") + File.separator + "uploads" + File.separator + imgPath;
-                Image img = new Image(fullPath, 300, 300, true, true);
-                if (!img.isError()) {
+                Image img = null;
+                boolean urlCandidate = imgPath.startsWith("http://") || imgPath.startsWith("https://");
+
+                if (urlCandidate) {
+                    img = ImageLoaderUtil.loadImage(imgPath);
+                    if (img == null) {
+                        // ImageKit down: fallback to local by filename.
+                        String filename = filenameFromUrl(imgPath);
+                        if (filename != null && !filename.isBlank()) {
+                            img = ImageLoaderUtil.loadImage("uploads/reclamation_images/" + filename);
+                        }
+                    }
+                } else {
+                    // DB stores "reclamation_images/<file>" or similar.
+                    img = ImageLoaderUtil.loadImage("uploads/" + imgPath);
+                }
+
+                if (img != null && !img.isError()) {
                     ImageView iv = new ImageView(img);
                     iv.setFitWidth(280);
                     iv.setPreserveRatio(true);
                     iv.setStyle("-fx-border-radius: 8; -fx-background-radius: 8;");
-                    
+
                     StackPane imgWrap = new StackPane(iv);
                     imgWrap.setPadding(new Insets(4, 0, 4, 0));
                     bubble.getChildren().add(imgWrap);
@@ -645,7 +664,24 @@ public class ProfileReclamationSectionEnhanced {
                 String fileName = System.currentTimeMillis() + "_" + selectedResponseFile.getName();
                 File destFile = new File(uploadsDir, fileName);
                 java.nio.file.Files.copy(selectedResponseFile.toPath(), destFile.toPath());
-                imagePath = "reclamation_images" + File.separator + fileName;
+
+                String localPath = "reclamation_images" + File.separator + fileName;
+
+                // Prefer ImageKit URL, keep local as fallback.
+                try {
+                    ImageKitConfig cfg = ImageKitConfig.fromEnv();
+                    if (cfg != null && cfg.isEnabled() && cfg.getPrivateKey() != null) {
+                        ImageKitStorageService svc = new ImageKitStorageService(cfg);
+                        ImageKitUploadResult res = svc.uploadFile(destFile, "/syndicati/reclamation_images");
+                        if (res != null && res.url() != null && !res.url().isBlank()) {
+                            localPath = res.url();
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("ImageKit upload failed (reclamation response). Fallback to local: " + e.getMessage());
+                }
+
+                imagePath = localPath;
             } catch (IOException e) {
                 feedback.setText("Error uploading image: " + e.getMessage());
                 feedback.setTextFill(Color.web("#fca5a5"));
@@ -751,6 +787,16 @@ public class ProfileReclamationSectionEnhanced {
             case "refused": case "refuse": return "#ef4444";
             default: return "#94a3b8";
         }
+    }
+
+    private String filenameFromUrl(String url) {
+        if (url == null || url.isBlank()) return null;
+        String u = url.trim();
+        int q = u.indexOf('?');
+        if (q >= 0) u = u.substring(0, q);
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < u.length() - 1) return u.substring(lastSlash + 1);
+        return u;
     }
 
     public VBox getRoot() {

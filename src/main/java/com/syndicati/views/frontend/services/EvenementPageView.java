@@ -6,8 +6,15 @@ import com.syndicati.controllers.evenement.ParticipationController;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.evenement.Evenement;
 import com.syndicati.models.user.User;
+import com.syndicati.services.DatabaseService;
+import com.syndicati.services.events.DataUpdateBus;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.image.imagekit.ImageKitConfig;
+import com.syndicati.utils.image.imagekit.ImageKitStorageService;
+import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -71,11 +78,15 @@ public class EvenementPageView implements ViewInterface {
     private final ThemeManager tm = ThemeManager.getInstance();
     private final EvenementController evenementController = new EvenementController();
     private final ParticipationController participationController = new ParticipationController();
+    private final DatabaseService db = DatabaseService.getInstance();
+    private final DataUpdateBus updates = DataUpdateBus.getInstance();
+    private AutoCloseable updatesSubscription;
     private GridPane eventsGrid;
     private VBox eventsSection;
     private List<Evenement> currentEvents;
     private int currentPage = 0;
     private static final int CARDS_PER_PAGE = 3;
+    private static final String IK_FOLDER_EVENT_IMAGES = "/syndicati/event_images";
     private boolean dataLoaded = false;
     
     // Form fields (class level for access across methods)
@@ -86,6 +97,42 @@ public class EvenementPageView implements ViewInterface {
     private TextArea descField;
     private TextField placesField;
     private File selectedImageFile = null;
+
+    private boolean isUrl(String v) {
+        return v != null && (v.startsWith("http://") || v.startsWith("https://"));
+    }
+
+    private String filenameFromUrl(String url) {
+        if (url == null) return null;
+        String u = url.trim();
+        int q = u.indexOf('?');
+        if (q >= 0) u = u.substring(0, q);
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < u.length() - 1) return u.substring(lastSlash + 1);
+        return u;
+    }
+
+    private Image loadEventImage(String dbValue) {
+        if (dbValue == null) return null;
+        String v = dbValue.trim();
+        if (v.isBlank() || "-".equals(v)) return null;
+
+        if (isUrl(v)) {
+            Image img = ImageLoaderUtil.loadImage(v);
+            if (img != null) return img;
+            String filename = filenameFromUrl(v);
+            if (filename != null && !filename.isBlank()) {
+                return ImageLoaderUtil.loadImage("uploads/event_images/" + filename);
+            }
+            return null;
+        }
+
+        if (v.startsWith("uploads/") || v.startsWith("uploads\\")) {
+            return ImageLoaderUtil.loadImage(v);
+        }
+
+        return ImageLoaderUtil.loadImage("uploads/event_images/" + v);
+    }
 
     // Weather & Map Services
     private final WeatherService weatherService = new WeatherService();
@@ -123,10 +170,22 @@ public class EvenementPageView implements ViewInterface {
         
         // Attempt immediate hydration from cache
         loadInitialDataFromCache();
+
+        // Live updates (polling-driven): refresh list in-place when DB changes.
+        updatesSubscription = updates.subscribe(DataUpdateBus.Topic.EVENTS, t -> {
+            Thread.startVirtualThread(() -> {
+                try { refreshEventsList(); } catch (Exception ignored) {}
+            });
+        });
     }
     
     private void loadInitialDataFromCache() {
-        List<Evenement> cached = evenementController.evenements();
+        @SuppressWarnings("unchecked")
+        List<Evenement> cached = db.getCache("events:list");
+        if (cached == null || cached.isEmpty()) {
+            cached = evenementController.evenements();
+            db.putCache("events:list", cached);
+        }
         if (cached != null && !cached.isEmpty()) {
             currentEvents = cached;
             if (eventsGrid != null) {
@@ -890,7 +949,19 @@ public class EvenementPageView implements ViewInterface {
     @Override
     public void loadDataAsync() {
         if (dataLoaded) return; // Skip if already warmed up
-        
+
+        // Render from warm cache immediately when available.
+        @SuppressWarnings("unchecked")
+        List<Evenement> cached = db.getCache("events:list");
+        if (cached != null && !cached.isEmpty()) {
+            Platform.runLater(() -> {
+                currentEvents = cached;
+                if (eventsGrid != null) {
+                    rebuildEventsGrid(eventsGrid, root.getWidth());
+                }
+            });
+        }
+
         Thread.startVirtualThread(() -> {
             try {
                 refreshEventsList();
@@ -903,6 +974,7 @@ public class EvenementPageView implements ViewInterface {
 
     private void refreshEventsList() {
         List<Evenement> events = evenementController.evenements();
+        db.putCache("events:list", events);
         User currentUser = SessionManager.getInstance().getCurrentUser();
         List<Participation> history = (currentUser != null) ? participationController.participationsByUser(currentUser) : new ArrayList<>();
         
@@ -1125,9 +1197,8 @@ public class EvenementPageView implements ViewInterface {
         // Try to load event image
         if (event.getImageEvent() != null && !event.getImageEvent().isEmpty()) {
             try {
-                File imageFile = new File("uploads/event_images/" + event.getImageEvent());
-                if (imageFile.exists()) {
-                    Image eventImage = new Image(imageFile.toURI().toString());
+                Image eventImage = loadEventImage(event.getImageEvent());
+                if (eventImage != null) {
                     ImageView imageView = new ImageView(eventImage);
                     // Bind to container size so it fills completely
                     imageView.fitWidthProperty().bind(imageClipContainer.widthProperty());
@@ -1242,9 +1313,8 @@ public class EvenementPageView implements ViewInterface {
         
         if (event.getImageEvent() != null && !event.getImageEvent().isEmpty()) {
             try {
-                File imageFile = new File("uploads/event_images/" + event.getImageEvent());
-                if (imageFile.exists()) {
-                    Image eventImage = new Image(imageFile.toURI().toString());
+                Image eventImage = loadEventImage(event.getImageEvent());
+                if (eventImage != null) {
                     ImageView imageView = new ImageView(eventImage);
                     // Bind to container size so it fills completely
                     imageView.fitWidthProperty().bind(detailImageClipContainer.widthProperty());
@@ -1714,7 +1784,21 @@ public class EvenementPageView implements ViewInterface {
             
             File destFile = new File(uploadsDir, uniqueFileName);
             java.nio.file.Files.copy(sourceFile.toPath(), destFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            
+
+            // Prefer ImageKit URL, but keep local copy.
+            try {
+                ImageKitConfig cfg = ImageKitConfig.fromEnv();
+                if (cfg != null && cfg.isEnabled() && cfg.getPrivateKey() != null) {
+                    ImageKitStorageService svc = new ImageKitStorageService(cfg);
+                    ImageKitUploadResult res = svc.uploadFile(destFile, IK_FOLDER_EVENT_IMAGES);
+                    if (res != null && res.url() != null && !res.url().isBlank()) {
+                        return res.url();
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("ImageKit upload failed (event). Fallback to local: " + e.getMessage());
+            }
+
             return uniqueFileName;
         } catch (Exception e) {
             System.err.println("Failed to copy image file: " + e.getMessage());
@@ -2128,7 +2212,30 @@ public class EvenementPageView implements ViewInterface {
     }
 
     private void showNotification(String message) {
-        System.out.println("[Notification] " + message);
+        String normalized = message == null ? "" : message.toLowerCase();
+        if (normalized.contains("created")) {
+            GlobalNotificationPillManager.created("Event", message);
+        } else if (normalized.contains("updated")) {
+            GlobalNotificationPillManager.updated("Event", message);
+        } else if (normalized.contains("deleted")) {
+            GlobalNotificationPillManager.deleted("Event", message);
+        } else if (normalized.contains("failed") || normalized.contains("error")) {
+            GlobalNotificationPillManager.expandedError(
+                "Event",
+                message,
+                "Check the form values and try again.",
+                "If you uploaded an image, verify the file still exists."
+            );
+        } else if (normalized.contains("not logged in") || normalized.contains("valid number")) {
+            GlobalNotificationPillManager.validationIssue(
+                "Event",
+                message,
+                "Log in first.",
+                "Enter a valid number for guests before submitting."
+            );
+        } else {
+            GlobalNotificationPillManager.info("Event", message);
+        }
     }
 
     private VBox buildImageUploadField() {
@@ -2303,7 +2410,31 @@ public class EvenementPageView implements ViewInterface {
     }
 
     @Override
-    public void cleanup() {}
+    public void cleanup() {
+        if (updatesSubscription != null) {
+            try { updatesSubscription.close(); } catch (Exception ignored) {}
+            updatesSubscription = null;
+        }
+
+        // WebView is heavy (WebKit). Ensure it can be collected.
+        try {
+            if (webEngine != null) {
+                webEngine.load("about:blank");
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (mapView != null) {
+                mapView.getEngine().load("about:blank");
+            }
+        } catch (Exception ignored) {}
+        webEngine = null;
+        mapView = null;
+
+        // Drop large lists/grids
+        try { if (eventsGrid != null) eventsGrid.getChildren().clear(); } catch (Exception ignored) {}
+        try { if (eventsSection != null) eventsSection.getChildren().clear(); } catch (Exception ignored) {}
+        currentEvents = null;
+    }
 
     /**
      * Logic for handling map clicks (called from alert-based bridge)

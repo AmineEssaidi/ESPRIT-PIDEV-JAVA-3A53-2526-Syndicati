@@ -23,9 +23,11 @@ public class DatabaseService {
     private static DatabaseService instance;
     private static final int POOL_SIZE = 4; // Balanced pool for Clever Cloud limits
     private static final long CACHE_TTL_MS = 30000; // 30s cache
+    private static final int CACHE_MAX_ENTRIES = 256; // Hard cap to prevent RAM growth
     
     private final BlockingQueue<Connection> pool;
     private final Map<String, CacheEntry> dataCache = new ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentLinkedQueue<String> cacheOrder = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     private String dbUrl;
     private String dbUser;
@@ -53,6 +55,17 @@ public class DatabaseService {
         
         // Pre-fill pool in background
         Thread.startVirtualThread(this::initializePool);
+
+        // Periodically sweep expired cache entries so memory does not stack across navigation.
+        Thread.startVirtualThread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(10_000);
+                    sweepExpiredCache();
+                } catch (InterruptedException ignored) {
+                } catch (Exception ignored) {}
+            }
+        });
     }
 
     private void initializePool() {
@@ -145,7 +158,10 @@ public class DatabaseService {
     }
 
     public void putCache(String key, Object value) {
-        if (value != null) dataCache.put(key, new CacheEntry(value));
+        if (key == null || key.isBlank() || value == null) return;
+        dataCache.put(key, new CacheEntry(value));
+        cacheOrder.offer(key);
+        enforceCacheCap();
     }
 
     @SuppressWarnings("unchecked")
@@ -158,6 +174,35 @@ public class DatabaseService {
 
     public void clearCache(String key) { dataCache.remove(key); }
     public void clearAllCache() { dataCache.clear(); }
+
+    /**
+     * Removes expired entries and enforces cache size cap.
+     * Safe to call frequently.
+     */
+    public void sweepExpiredCache() {
+        try {
+            for (Map.Entry<String, CacheEntry> e : dataCache.entrySet()) {
+                CacheEntry v = e.getValue();
+                if (v == null || v.isExpired()) {
+                    dataCache.remove(e.getKey());
+                }
+            }
+            enforceCacheCap();
+        } catch (Exception ignored) {}
+    }
+
+    private void enforceCacheCap() {
+        int over = dataCache.size() - CACHE_MAX_ENTRIES;
+        if (over <= 0) return;
+
+        // Evict in insertion-order approximation (queue) until under cap.
+        for (int i = 0; i < over + 8; i++) {
+            String k = cacheOrder.poll();
+            if (k == null) break;
+            dataCache.remove(k);
+            if (dataCache.size() <= CACHE_MAX_ENTRIES) break;
+        }
+    }
 
     public void releaseConnection(Connection conn) {
         if (conn == null) return;

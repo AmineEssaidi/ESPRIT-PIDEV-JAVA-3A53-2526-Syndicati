@@ -5,6 +5,11 @@ import com.syndicati.controllers.syndicat.ReclamationController;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.user.User;
+import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.image.imagekit.ImageKitConfig;
+import com.syndicati.utils.image.imagekit.ImageKitStorageService;
+import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.application.Platform;
@@ -19,6 +24,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -34,6 +40,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -46,6 +53,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.time.format.TextStyle;
+import java.util.Locale;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -56,8 +65,14 @@ import java.util.List;
  */
 public class SyndicatPageView implements ViewInterface {
 
-    private static final int SUBJECT_MIN_LENGTH = 5;
+    private static final int SUBJECT_MIN_LENGTH = 10;
     private static final int SUBJECT_MAX_LENGTH = 255;
+
+    private static final String IK_FOLDER_RECLAMATION_IMAGES = "/syndicati/reclamation_images";
+
+    private boolean isUrl(String v) {
+        return v != null && (v.startsWith("http://") || v.startsWith("https://"));
+    }
     private static final int DESCRIPTION_MIN_LENGTH = 10;
     private static final int DESCRIPTION_MAX_LENGTH = 255;
 
@@ -67,6 +82,7 @@ public class SyndicatPageView implements ViewInterface {
     
     // Form fields
     private TextField subjectField;
+    private DatePicker incidentDatePicker;
     private LocalDateTime selectedDateTime;
     private TextArea descriptionField;
     private Label subjectValidationLabel;
@@ -75,6 +91,10 @@ public class SyndicatPageView implements ViewInterface {
     private List<File> selectedFiles = new ArrayList<>();
     private Text fileStatusText;
     private FlowPane previewPane;
+
+    // Calendar State
+    private LocalDate calendarMonth = LocalDate.now().withDayOfMonth(1);
+    private VBox calendarContainer;
 
     public SyndicatPageView() {
         root = new VBox(22);
@@ -95,9 +115,9 @@ public class SyndicatPageView implements ViewInterface {
         hero.setMinHeight(500);
         hero.setPadding(new Insets(92, 64, 92, 64));
         hero.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.03);" +
+            "-fx-background-color: rgba(10,10,15,0.85);" +
             "-fx-background-radius: 48px;" +
-            "-fx-border-color: rgba(255,255,255,0.08);" +
+            "-fx-border-color: rgba(60,60,80,0.5);" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 48px;"
         );
@@ -135,8 +155,8 @@ public class SyndicatPageView implements ViewInterface {
         form.prefWidthProperty().bind(Bindings.min(root.widthProperty().multiply(0.90), 1000));
         form.setPadding(new Insets(48, 48, 48, 48));
         form.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.05);" +
-            "-fx-border-color: rgba(255,255,255,0.1);" +
+            "-fx-background-color: rgba(10,10,15,0.85);" +
+            "-fx-border-color: rgba(60,60,80,0.5);" +
             "-fx-border-width: 1px;" +
             "-fx-background-radius: 40px;" +
             "-fx-border-radius: 40px;"
@@ -152,13 +172,15 @@ public class SyndicatPageView implements ViewInterface {
         subjectValidationLabel = createLiveValidationLabel("Start typing your subject...");
         subjectSection.getChildren().addAll(subjectField, subjectValidationLabel);
 
-        // Date field (Simplified to current date for now or a basic selector)
-        VBox dateSection = new VBox(6);
+        // Date field (Premium Glass Calendar)
+        VBox dateSection = new VBox(12);
         dateSection.getChildren().add(label("Date of Incident"));
-        Button dateBtn = new Button("Select Date: " + LocalDate.now());
-        dateBtn.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-background-radius: 10; -fx-padding: 10; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 10;");
-        selectedDateTime = LocalDateTime.now();
-        dateSection.getChildren().add(dateBtn);
+        
+        // Host-like Banner for Syndicat context
+        Button reportTrigger = buildReportTrigger();
+        
+        calendarContainer = buildGlassCalendar();
+        dateSection.getChildren().addAll(reportTrigger, calendarContainer);
 
         // Description field with label
         VBox descSection = new VBox(4);
@@ -169,17 +191,34 @@ public class SyndicatPageView implements ViewInterface {
         descriptionField.setPrefRowCount(6);
         descriptionField.setWrapText(true);
         descriptionField.setStyle(
-            "-fx-control-inner-background: rgba(255,255,255,0.05);" +
+            "-fx-background-color: rgba(255,255,255,0.06);" +
+            "-fx-control-inner-background: rgba(255,255,255,0.06);" +
             "-fx-text-fill: white;" +
             "-fx-prompt-text-fill: rgba(255,255,255,0.4);" +
             "-fx-background-radius: 14px;" +
             "-fx-border-color: rgba(255,255,255,0.1);" +
             "-fx-border-radius: 14px;" +
             "-fx-border-width: 1.5px;" +
+            "-fx-highlight-fill: " + tm.toRgba(tm.getAccentHex(), 0.45) + ";" +
+            "-fx-highlight-text-fill: white;" +
             "-fx-padding: 12;" +
             "-fx-font-size: 13px;"
         );
         descriptionField.setMinHeight(120);
+        // TextArea has a nested '.content' region; style it too so it doesn't appear white.
+        descriptionField.skinProperty().addListener((obs, oldSkin, newSkin) -> {
+            if (newSkin != null) {
+                Platform.runLater(() -> {
+                    var content = descriptionField.lookup(".content");
+                    if (content != null) {
+                        content.setStyle(
+                            "-fx-background-color: rgba(255,255,255,0.06);" +
+                            "-fx-background-radius: 12px;"
+                        );
+                    }
+                });
+            }
+        });
         descSection.getChildren().add(descriptionField);
         descriptionValidationLabel = createLiveValidationLabel("Describe your issue with at least 10 characters...");
         descSection.getChildren().add(descriptionValidationLabel);
@@ -232,7 +271,10 @@ public class SyndicatPageView implements ViewInterface {
     private void setupLiveValidation() {
         subjectField.textProperty().addListener((obs, oldT, newT) -> {
             if (newT.length() < SUBJECT_MIN_LENGTH) {
-                subjectValidationLabel.setText("Too short (min 5 chars)");
+                subjectValidationLabel.setText("Too short (min 10 chars)");
+                subjectValidationLabel.setTextFill(Color.web("#ef4444"));
+            } else if (!newT.isEmpty() && !Character.isLetter(newT.charAt(0))) {
+                subjectValidationLabel.setText("Must start with a letter");
                 subjectValidationLabel.setTextFill(Color.web("#ef4444"));
             } else {
                 subjectValidationLabel.setText("✓ Looks good");
@@ -243,6 +285,9 @@ public class SyndicatPageView implements ViewInterface {
         descriptionField.textProperty().addListener((obs, oldT, newT) -> {
             if (newT.length() < DESCRIPTION_MIN_LENGTH) {
                 descriptionValidationLabel.setText("Too short (min 10 chars)");
+                descriptionValidationLabel.setTextFill(Color.web("#ef4444"));
+            } else if (!newT.isEmpty() && !Character.isLetter(newT.charAt(0))) {
+                descriptionValidationLabel.setText("Must start with a letter");
                 descriptionValidationLabel.setTextFill(Color.web("#ef4444"));
             } else {
                 descriptionValidationLabel.setText("✓ Looks good");
@@ -262,8 +307,9 @@ public class SyndicatPageView implements ViewInterface {
         String subject = subjectField.getText().trim();
         String description = descriptionField.getText().trim();
 
-        if (subject.length() < SUBJECT_MIN_LENGTH || description.length() < DESCRIPTION_MIN_LENGTH) {
-            showError("Validation Error", "Please fill in all fields correctly.");
+        if (subject.length() < SUBJECT_MIN_LENGTH || (!subject.isEmpty() && !Character.isLetter(subject.charAt(0))) ||
+            description.length() < DESCRIPTION_MIN_LENGTH || (!description.isEmpty() && !Character.isLetter(description.charAt(0)))) {
+            showError("Validation Error", "Please fill in all fields correctly.\n- Both Subject & Description must be min 10 chars and start with a letter.");
             return;
         }
 
@@ -295,6 +341,10 @@ public class SyndicatPageView implements ViewInterface {
     private void clearForm() {
         subjectField.clear();
         descriptionField.clear();
+        if (incidentDatePicker != null) {
+            incidentDatePicker.setValue(LocalDate.now());
+        }
+        selectedDateTime = LocalDate.now().atStartOfDay();
         selectedFiles.clear();
         previewPane.getChildren().clear();
         fileStatusText.setText("No files selected");
@@ -324,22 +374,64 @@ public class SyndicatPageView implements ViewInterface {
         File dir = new File(uploadsPath);
         if (!dir.exists()) dir.mkdirs();
         String name = System.currentTimeMillis() + "_" + source.getName();
-        Files.copy(source.toPath(), new File(dir, name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+        File dest = new File(dir, name);
+        Files.copy(source.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        // Prefer ImageKit URL for DB.
+        try {
+            ImageKitConfig cfg = ImageKitConfig.fromEnv();
+            if (cfg != null && cfg.isEnabled() && cfg.getPrivateKey() != null) {
+                ImageKitStorageService svc = new ImageKitStorageService(cfg);
+                ImageKitUploadResult res = svc.uploadFile(dest, IK_FOLDER_RECLAMATION_IMAGES);
+                if (res != null && res.url() != null && !res.url().isBlank()) {
+                    return res.url();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("ImageKit upload failed (reclamation). Fallback to local: " + e.getMessage());
+        }
+
         return "reclamation_images" + File.separator + name;
     }
 
     private void showError(String title, String msg) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setContentText(msg);
-        alert.show();
+        if (title != null && title.toLowerCase().contains("validation")) {
+            GlobalNotificationPillManager.validationIssue(
+                title,
+                msg,
+                "Both Subject and Description need at least 10 characters.",
+                "They must start with a letter.",
+                "Avoid banned or offensive language."
+            );
+            return;
+        }
+
+        if (title != null && title.toLowerCase().contains("upload")) {
+            GlobalNotificationPillManager.expandedError(
+                title,
+                msg,
+                "Check that the image is still available on disk.",
+                "Try a JPG or PNG file again.",
+                "If it still fails, reselect the file."
+            );
+            return;
+        }
+
+        if (title != null && title.toLowerCase().contains("error")) {
+            GlobalNotificationPillManager.expandedError(
+                title,
+                msg,
+                "Make sure you are logged in.",
+                "Verify all fields before retrying."
+            );
+            return;
+        }
+
+        GlobalNotificationPillManager.error(title, msg);
     }
 
     private void showSuccess(String title, String msg) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setContentText(msg);
-        alert.show();
+        GlobalNotificationPillManager.success(title, msg);
     }
 
     private TextField input(String prompt) {
@@ -348,6 +440,50 @@ public class SyndicatPageView implements ViewInterface {
         field.setPrefHeight(44);
         field.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.4); -fx-background-radius: 14; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 14; -fx-padding: 12;");
         return field;
+    }
+
+    private void applyEventLikeDatePickerStyle(DatePicker picker) {
+        // Match Events page look-and-feel (rounded dark field + subtle border).
+        picker.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.05);" +
+            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 16px;" +
+            "-fx-border-radius: 16px;" +
+            "-fx-text-fill: " + tm.getTextColor() + ";" +
+            "-fx-padding: 10 12 10 12;"
+        );
+
+        Runnable skinPass = () -> {
+            var editor = picker.lookup(".text-field");
+            if (editor != null) {
+                editor.setStyle(
+                    "-fx-background-color: transparent;" +
+                    "-fx-control-inner-background: transparent;" +
+                    "-fx-text-fill: " + tm.getTextColor() + ";" +
+                    "-fx-prompt-text-fill: rgba(255,255,255,0.45);"
+                );
+            }
+            var arrowButton = picker.lookup(".arrow-button");
+            if (arrowButton != null) {
+                arrowButton.setStyle(
+                    "-fx-background-color: rgba(255,255,255,0.08);" +
+                    "-fx-background-radius: 0 14 14 0;"
+                );
+            }
+            var arrow = picker.lookup(".arrow");
+            if (arrow != null) {
+                arrow.setStyle("-fx-background-color: " + tm.getTextColor() + ";");
+            }
+        };
+
+        if (picker.getSkin() == null) {
+            picker.skinProperty().addListener((obs, oldSkin, newSkin) -> {
+                if (newSkin != null) Platform.runLater(skinPass);
+            });
+        } else {
+            Platform.runLater(skinPass);
+        }
     }
 
     private Text label(String txt) {
@@ -364,11 +500,213 @@ public class SyndicatPageView implements ViewInterface {
         return t;
     }
 
+    private Button buildReportTrigger() {
+        Button btn = new Button();
+        btn.setMaxWidth(Double.MAX_VALUE);
+        btn.setStyle("-fx-background-color: " + surfaceCard() + "; -fx-background-radius: 24; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1; -fx-border-radius: 24; -fx-padding: 20; -fx-cursor: hand;");
+        
+        HBox content = new HBox(18);
+        content.setAlignment(Pos.CENTER_LEFT);
+        
+        StackPane iconCircle = new StackPane();
+        iconCircle.setMinSize(54, 54);
+        iconCircle.setMaxSize(54, 54);
+        iconCircle.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + "; -fx-background-radius: 18;");
+        Text icon = line("!", 24, true, tm.getAccentHex());
+        iconCircle.getChildren().add(icon);
+        
+        VBox texts = new VBox(2);
+        texts.getChildren().addAll(
+            line("Report an Incident", 18, true, "white"),
+            line("Select the date of occurrence below", 13, false, "rgba(255,255,255,0.5)")
+        );
+        
+        Region s = new Region();
+        HBox.setHgrow(s, Priority.ALWAYS);
+        Text arrow = line(">", 18, true, "rgba(255,255,255,0.3)");
+        
+        content.getChildren().addAll(iconCircle, texts, s, arrow);
+        btn.setGraphic(content);
+        return btn;
+    }
+
+    private VBox buildGlassCalendar() {
+        VBox wrap = new VBox(14);
+        wrap.setPadding(new Insets(10, 0, 0, 0));
+
+        HBox head = new HBox(8);
+        head.setAlignment(Pos.CENTER_LEFT);
+        
+        Button prevBtn = iconButton("<");
+        prevBtn.setOnAction(e -> {
+            calendarMonth = calendarMonth.minusMonths(1);
+            refreshCalendarUI();
+        });
+        
+        Button nextBtn = iconButton(">");
+        nextBtn.setOnAction(e -> {
+            calendarMonth = calendarMonth.plusMonths(1);
+            refreshCalendarUI();
+        });
+        
+        String monthTitle = calendarMonth.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + calendarMonth.getYear();
+        Text monthLabel = line(monthTitle, 18, true, tm.getAccentHex());
+        
+        head.getChildren().addAll(monthLabel, spacer(), prevBtn, nextBtn);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        for (int i = 0; i < 7; i++) {
+            ColumnConstraints cc = new ColumnConstraints();
+            cc.setPercentWidth(14.285);
+            cc.setHgrow(Priority.ALWAYS);
+            cc.setFillWidth(true);
+            grid.getColumnConstraints().add(cc);
+        }
+
+        String[] dayLabels = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+        for (int i = 0; i < dayLabels.length; i++) {
+            Text lbl = line(dayLabels[i], 11, true, "rgba(255,255,255,0.4)");
+            StackPane labelCell = new StackPane(lbl);
+            labelCell.setMinHeight(20);
+            grid.add(labelCell, i, 0);
+        }
+
+        updateCalendarGrid(grid);
+
+        HBox tags = new HBox(8,
+            tag("#Maintenance"),
+            tag("#Security"),
+            tag("#Cleaning"),
+            tag("#Emergency")
+        );
+        tags.setPadding(new Insets(8, 0, 0, 0));
+
+        wrap.getChildren().addAll(head, grid, tags);
+        return wrap;
+    }
+
+    private void updateCalendarGrid(GridPane grid) {
+        // Clear previous day cells (rows 1 to 6)
+        grid.getChildren().removeIf(node -> GridPane.getRowIndex(node) != null && GridPane.getRowIndex(node) > 0);
+
+        LocalDate firstDay = calendarMonth.withDayOfMonth(1);
+        int dayOfWeek = firstDay.getDayOfWeek().getValue(); // 1 (Mon) to 7 (Sun)
+        int startOffset = dayOfWeek - 1;
+        int daysInMonth = calendarMonth.lengthOfMonth();
+        
+        LocalDate today = LocalDate.now();
+        int dayCounter = 1;
+        
+        for (int row = 1; row <= 6; row++) {
+            for (int col = 0; col < 7; col++) {
+                if (row == 1 && col < startOffset) {
+                    continue; // Empty cells before the first day
+                }
+                if (dayCounter > daysInMonth) {
+                    break;
+                }
+
+                int currentDay = dayCounter;
+                LocalDate date = calendarMonth.withDayOfMonth(currentDay);
+                boolean isSelected = selectedDateTime != null && selectedDateTime.toLocalDate().equals(date);
+                boolean isToday = date.equals(today);
+
+                StackPane cell = new StackPane();
+                cell.setMaxWidth(Double.MAX_VALUE);
+                cell.setMinHeight(38);
+                cell.setCursor(Cursor.HAND);
+                
+                String baseStyle = "-fx-background-radius: 12px; -fx-border-radius: 12px; -fx-border-width: 1px; ";
+                if (isSelected) {
+                    cell.setStyle(baseStyle + "-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-border-color: transparent; -fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.45) + ", 10, 0, 0, 2);");
+                } else if (isToday) {
+                    cell.setStyle(baseStyle + "-fx-background-color: " + surfaceSoft() + "; -fx-border-color: " + tm.getAccentHex() + "88;");
+                } else {
+                    cell.setStyle(baseStyle + "-fx-background-color: " + surfaceSoft() + "; -fx-border-color: transparent;");
+                }
+
+                Text d = line(String.valueOf(currentDay), 13, true, isSelected ? "white" : "rgba(255,255,255,0.8)");
+                cell.getChildren().add(d);
+
+                cell.setOnMouseClicked(e -> {
+                    selectedDateTime = date.atStartOfDay();
+                    refreshCalendarUI();
+                });
+
+                // Hover effect
+                if (!isSelected) {
+                    cell.setOnMouseEntered(e -> cell.setStyle(baseStyle + "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.2) + "; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.3) + ";"));
+                    cell.setOnMouseExited(e -> {
+                        if (date.equals(today)) {
+                            cell.setStyle(baseStyle + "-fx-background-color: " + surfaceSoft() + "; -fx-border-color: " + tm.getAccentHex() + "88;");
+                        } else {
+                            cell.setStyle(baseStyle + "-fx-background-color: " + surfaceSoft() + "; -fx-border-color: transparent;");
+                        }
+                    });
+                }
+
+                grid.add(cell, col, row);
+                dayCounter++;
+            }
+            if (dayCounter > daysInMonth) break;
+        }
+    }
+
+    private void refreshCalendarUI() {
+        if (calendarContainer != null) {
+            calendarContainer.getChildren().clear();
+            VBox newContent = buildGlassCalendar();
+            calendarContainer.getChildren().addAll(newContent.getChildren());
+        }
+    }
+
+    private String surfaceCard() {
+        return "rgba(255,255,255,0.05)";
+    }
+
+    private String surfaceSoft() {
+        return "rgba(255,255,255,0.08)";
+    }
+
+    private String borderSoft() {
+        return "rgba(255,255,255,0.12)";
+    }
+
+    private Button iconButton(String icon) {
+        Button btn = new Button(icon);
+        btn.setCursor(Cursor.HAND);
+        btn.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-text-fill: white; -fx-background-radius: 8; -fx-font-weight: bold; -fx-padding: 5 10;");
+        return btn;
+    }
+
+    private Region spacer() {
+        Region r = new Region();
+        HBox.setHgrow(r, Priority.ALWAYS);
+        return r;
+    }
+
+    private StackPane tag(String label) {
+        Text t = line(label, 10, true, "white");
+        StackPane p = new StackPane(t);
+        p.setPadding(new Insets(5, 10, 5, 10));
+        p.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 8; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1; -fx-border-radius: 8;");
+        return p;
+    }
+
     @Override
     public VBox getRoot() {
         return root;
     }
 
     @Override
-    public void cleanup() {}
+    public void cleanup() {
+        try {
+            if (selectedFiles != null) selectedFiles.clear();
+        } catch (Exception ignored) {}
+        try {
+            ImageLoaderUtil.clearCache();
+        } catch (Exception ignored) {}
+    }
 }

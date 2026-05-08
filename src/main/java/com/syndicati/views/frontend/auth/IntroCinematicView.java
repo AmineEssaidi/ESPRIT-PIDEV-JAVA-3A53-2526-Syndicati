@@ -13,6 +13,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
+import javafx.scene.media.MediaView;
 import javafx.scene.paint.*;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
@@ -23,6 +24,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import com.syndicati.utils.media.CinematicVideoCache;
 
 /**
  * IntroCinematicView - The "Volumetric Core" Edition.
@@ -34,7 +36,10 @@ public class IntroCinematicView {
     private final StackPane root;
     private final ThemeManager tm = ThemeManager.getInstance();
     private final String accentHex = tm.getAccentHex();
-    private MediaPlayer mediaPlayer;
+    private MediaPlayer videoPlayer;
+    private MediaPlayer audioPlayer;
+    private MediaView mediaView;
+    private boolean useVideoBackground = true;
     private Runnable onFinished;
     
     private Pane fogLayer;
@@ -53,10 +58,45 @@ public class IntroCinematicView {
         this.root = new StackPane();
         this.root.setStyle("-fx-background-color: #010103;");
         
-        setupAtmosphere();
-        setupNetwork();
+        // Replace the dot/network background with your cinematic video.
+        setupVideoBackground();
+        
+        // Only build/run the legacy background when video is NOT active.
+        // Even invisible animations can still burn CPU and stutter video playback.
+        if (!useVideoBackground) {
+            setupAtmosphere();
+            setupNetwork();
+        }
         setupContent();
         setupAudio();
+    }
+
+    private void setupVideoBackground() {
+        try {
+            try { CinematicVideoCache.warmupAsync(); } catch (Throwable ignored) {}
+            String src;
+            try {
+                src = CinematicVideoCache.getStartupVideoSource();
+            } catch (Throwable t) {
+                src = CinematicVideoCache.REMOTE_STARTUP_VIDEO_URL;
+            }
+            Media media = new Media(src);
+            videoPlayer = new MediaPlayer(media);
+            videoPlayer.setVolume(0.0); // Keep silent to avoid double playback.
+            videoPlayer.setAutoPlay(false);
+            videoPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+
+            mediaView = new MediaView(videoPlayer);
+            mediaView.setPreserveRatio(false);
+            mediaView.fitWidthProperty().bind(root.widthProperty());
+            mediaView.fitHeightProperty().bind(root.heightProperty());
+            mediaView.setSmooth(true);
+
+            root.getChildren().add(0, mediaView);
+        } catch (Exception e) {
+            useVideoBackground = false;
+            System.err.println("[IntroCinematic] Video background failed: " + e.getMessage());
+        }
     }
 
     public StackPane getRoot() {
@@ -72,8 +112,8 @@ public class IntroCinematicView {
             URL resource = getClass().getResource("/audio/intro.mp3");
             if (resource != null) {
                 Media media = new Media(resource.toExternalForm());
-                mediaPlayer = new MediaPlayer(media);
-                mediaPlayer.setVolume(0.5);
+                audioPlayer = new MediaPlayer(media);
+                audioPlayer.setVolume(0.5);
             }
         } catch (Exception e) {
             System.err.println("[Intro] Audio setup failed: " + e.getMessage());
@@ -234,21 +274,37 @@ public class IntroCinematicView {
     }
 
     public void play() {
-        if (mediaPlayer != null) mediaPlayer.play();
-        networkTimeline.play();
+        if (videoPlayer != null) {
+            if (videoPlayer.getStatus() == MediaPlayer.Status.READY) {
+                videoPlayer.seek(Duration.ZERO);
+                videoPlayer.play();
+            } else {
+                videoPlayer.setOnReady(() -> {
+                    try {
+                        videoPlayer.seek(Duration.ZERO);
+                        videoPlayer.play();
+                    } catch (Exception ignored) {}
+                });
+            }
+        }
+        if (!useVideoBackground && audioPlayer != null) audioPlayer.play();
         
         SequentialTransition mainSequence = new SequentialTransition();
         
         ParallelTransition reveal = new ParallelTransition();
-        FadeTransition fogFade = new FadeTransition(Duration.millis(3000), fogLayer);
-        fogFade.setToValue(1.0);
-        FadeTransition networkFade = new FadeTransition(Duration.millis(3000), networkLayer);
-        networkFade.setToValue(1.0);
-        Timeline zoom = new Timeline(new KeyFrame(Duration.millis(5000), 
-            new KeyValue(networkLayer.scaleXProperty(), 1.3, Interpolator.EASE_BOTH),
-            new KeyValue(networkLayer.scaleYProperty(), 1.3, Interpolator.EASE_BOTH)
-        ));
-        reveal.getChildren().addAll(fogFade, networkFade, zoom);
+        if (!useVideoBackground && fogLayer != null && networkLayer != null && networkTimeline != null) {
+            networkTimeline.play();
+
+            FadeTransition fogFade = new FadeTransition(Duration.millis(3000), fogLayer);
+            fogFade.setToValue(1.0);
+            FadeTransition networkFade = new FadeTransition(Duration.millis(3000), networkLayer);
+            networkFade.setToValue(1.0);
+            Timeline zoom = new Timeline(new KeyFrame(Duration.millis(5000),
+                new KeyValue(networkLayer.scaleXProperty(), 1.3, Interpolator.EASE_BOTH),
+                new KeyValue(networkLayer.scaleYProperty(), 1.3, Interpolator.EASE_BOTH)
+            ));
+            reveal.getChildren().addAll(fogFade, networkFade, zoom);
+        }
 
         ParallelTransition lettersAnim = new ParallelTransition();
         for (int i = 0; i < lettersBox.getChildren().size(); i++) {
@@ -283,7 +339,8 @@ public class IntroCinematicView {
         FadeTransition rootFadeOut = new FadeTransition(Duration.seconds(1.5), root);
         rootFadeOut.setToValue(0.0);
         rootFadeOut.setOnFinished(e -> {
-            if (mediaPlayer != null) mediaPlayer.stop();
+            if (videoPlayer != null) videoPlayer.stop();
+            if (audioPlayer != null) audioPlayer.stop();
             if (networkTimeline != null) networkTimeline.stop();
             if (onFinished != null) onFinished.run();
         });

@@ -2,6 +2,7 @@ package com.syndicati.controllers.user.user;
 
 import com.syndicati.models.user.User;
 import com.syndicati.services.user.user.UserService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 
 import java.util.List;
 import java.util.Optional;
@@ -46,14 +47,26 @@ public class UserController {
     }
 
     public int userAdd(User user) {
-        return userService.createUser(user);
+        int id = userService.createUser(user);
+        if (id > 0) {
+            GlobalNotificationPillManager.created("Account", "Account created successfully.");
+        }
+        return id;
     }
 
     public boolean userEdit(User user) {
-        return userService.updateUser(user);
+        boolean success = userService.updateUser(user);
+        if (success) {
+            GlobalNotificationPillManager.updated("Account", "Account updated successfully.");
+        }
+        return success;
     }
 
     public boolean userDelete(int idUser) {
-        return userService.deleteUser(idUser);
+        boolean success = userService.deleteUser(idUser);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Account", "Account deleted successfully.");
+        }
+        return success;
     }
 }

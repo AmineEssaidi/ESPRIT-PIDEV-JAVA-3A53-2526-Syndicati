@@ -2,6 +2,7 @@ package com.syndicati.controllers.user.profile;
 
 import com.syndicati.models.user.Profile;
 import com.syndicati.services.user.profile.ProfileService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,22 +35,42 @@ public class ProfileController {
     }
 
     public boolean profileEdit(Profile profile) {
-        return profileService.updateProfile(profile);
+        boolean success = profileService.updateProfile(profile);
+        if (success) {
+            GlobalNotificationPillManager.updated("Profile", "Profile updated successfully.");
+        }
+        return success;
     }
 
     public Optional<Integer> profileCreate(Profile profile) {
-        return profileService.createProfile(profile);
+        Optional<Integer> id = profileService.createProfile(profile);
+        if (id.isPresent() && id.get() > 0) {
+            GlobalNotificationPillManager.created("Profile", "Profile created successfully.");
+        }
+        return id;
     }
 
     public boolean profileUpdate(Profile profile) {
-        return profileService.updateProfile(profile);
+        boolean success = profileService.updateProfile(profile);
+        if (success) {
+            GlobalNotificationPillManager.updated("Profile", "Profile updated successfully.");
+        }
+        return success;
     }
 
     public boolean updateProfile(Profile profile) {
-        return profileService.updateProfile(profile);
+        boolean success = profileService.updateProfile(profile);
+        if (success) {
+            GlobalNotificationPillManager.updated("Profile", "Profile updated successfully.");
+        }
+        return success;
     }
 
     public boolean profileDelete(int idProfile) {
-        return profileService.deleteProfile(idProfile);
+        boolean success = profileService.deleteProfile(idProfile);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Profile", "Profile deleted successfully.");
+        }
+        return success;
     }
 }

@@ -10,6 +10,7 @@ import com.syndicati.services.mail.AsyncMailerService;
 import com.syndicati.services.mail.SyndicatiEmailComposer;
 import com.syndicati.services.google.GoogleDriveService;
 import com.syndicati.services.pdf.PdfExportService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import java.time.LocalDateTime;
 import java.io.IOException;
 import java.util.List;
@@ -56,6 +57,7 @@ public class ReclamationController {
         Integer createdId = reclamationService.create(titre, description, date, image, user);
         
         if (createdId != null && createdId > 0) {
+            GlobalNotificationPillManager.created("Reclamation", "Reclamation created successfully.");
             uploadReclamationPdfToDrive(reclamationById(createdId).orElse(null));
 
             // Notify admins and syndics
@@ -86,6 +88,7 @@ public class ReclamationController {
     public boolean reclamationUpdate(Integer id, String titre, String description, LocalDateTime date, String statut) {
         boolean success = reclamationService.update(id, titre, description, date, statut);
         if (success) {
+            GlobalNotificationPillManager.updated("Reclamation", "Reclamation updated successfully.");
             reclamationById(id).ifPresent(rec -> {
                 // Upload updated PDF to Google Drive (Replacing old)
                 uploadReclamationPdfToDrive(rec);
@@ -110,6 +113,7 @@ public class ReclamationController {
     public boolean reclamationUpdateStatut(Integer id, String statut) {
         boolean success = reclamationService.updateStatut(id, statut);
         if (success) {
+            GlobalNotificationPillManager.updated("Reclamation", "Reclamation status updated successfully.");
             reclamationById(id).ifPresent(rec -> {
                 // Upload updated PDF to Google Drive (Replacing old)
                 uploadReclamationPdfToDrive(rec);
@@ -132,7 +136,11 @@ public class ReclamationController {
     }
 
     public boolean reclamationDelete(Integer id) {
-        return reclamationService.delete(id);
+        boolean success = reclamationService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Reclamation", "Reclamation deleted successfully.");
+        }
+        return success;
     }
 
     // Reponse CRUD
@@ -156,6 +164,7 @@ public class ReclamationController {
         Integer createdId = reponseService.create(titre, message, image, reclamation, user);
         
         if (createdId != null && createdId > 0 && reclamation != null && reclamation.getUser() != null) {
+            GlobalNotificationPillManager.created("Response", "Reclamation response added successfully.");
             uploadReclamationPdfToDrive(reclamation);
 
             String adminName = (user.getFirstName() + " " + user.getLastName()).trim();
@@ -179,7 +188,11 @@ public class ReclamationController {
     }
 
     public boolean reponseUpdate(Integer id, String titre, String message, String image) {
-        return reponseService.update(id, titre, message, image);
+        boolean success = reponseService.update(id, titre, message, image);
+        if (success) {
+            GlobalNotificationPillManager.updated("Response", "Reclamation response updated successfully.");
+        }
+        return success;
     }
 
     public boolean reponseUpdate(Integer id, String titre, String message) {
@@ -187,7 +200,11 @@ public class ReclamationController {
     }
 
     public boolean reponseDelete(Integer id) {
-        return reponseService.delete(id);
+        boolean success = reponseService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Response", "Reclamation response deleted successfully.");
+        }
+        return success;
     }
 
     public ReclamationService getReclamationService() {
@@ -205,16 +222,8 @@ public class ReclamationController {
             try {
                 List<Reponse> responses = reponseService.listByReclamation(rec);
                 java.io.File pdfFile = PdfExportService.generateReclamationPdf(rec, responses);
-                
-                String driveFilename = (rec.getTitreReclamations() != null ? rec.getTitreReclamations() : "reclamation")
-                        .replaceAll("[^a-zA-Z0-9-_]", "_") + ".pdf";
-                
-                // Use User Name for folder instead of Email
-                String folderName = (rec.getUser().getFirstName() + " " + rec.getUser().getLastName()).trim();
-                if (folderName.isEmpty()) folderName = rec.getUser().getEmailUser();
-
-                GoogleDriveService.uploadOrUpdateFile(folderName, driveFilename, pdfFile);
-                System.out.println("[GoogleDrive] Successfully uploaded/updated PDF for: " + folderName);
+                GoogleDriveService.uploadOrUpdateReclamationPdf(rec, pdfFile);
+                System.out.println("[GoogleDrive] Successfully uploaded/updated PDF for reclamation: " + rec.getIdReclamations());
             } catch (IOException e) {
                 System.err.println("[GoogleDrive] Failed to generate/upload PDF: " + e.getMessage());
                 e.printStackTrace();

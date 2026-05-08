@@ -110,8 +110,13 @@ public class ResidenceRepository {
             stmt.setString(2, residence.getAddressResidence());
             stmt.setString(3, residence.getImageResidence());
             stmt.setString(4, residence.getDateAdded());
-            stmt.setObject(5, residence.getNumberApartments());
-            stmt.setObject(6, residence.getNumberFloors());
+            
+            if (residence.getNumberApartments() != null) stmt.setString(5, String.valueOf(residence.getNumberApartments()));
+            else stmt.setNull(5, java.sql.Types.VARCHAR);
+            
+            if (residence.getNumberFloors() != null) stmt.setString(6, String.valueOf(residence.getNumberFloors()));
+            else stmt.setNull(6, java.sql.Types.VARCHAR);
+            
             stmt.setString(7, residence.getNumberBlocks());
 
             int affectedRows = stmt.executeUpdate();
@@ -141,8 +146,13 @@ public class ResidenceRepository {
             stmt.setString(1, name);
             stmt.setString(2, address);
             stmt.setString(3, image);
-            stmt.setObject(4, numberApartments);
-            stmt.setObject(5, numberFloors);
+            
+            if (numberApartments != null) stmt.setString(4, String.valueOf(numberApartments));
+            else stmt.setNull(4, java.sql.Types.VARCHAR);
+            
+            if (numberFloors != null) stmt.setString(5, String.valueOf(numberFloors));
+            else stmt.setNull(5, java.sql.Types.VARCHAR);
+            
             stmt.setString(6, numberBlocks);
             stmt.setInt(7, id);
 

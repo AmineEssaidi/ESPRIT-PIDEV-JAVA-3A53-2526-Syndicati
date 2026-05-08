@@ -11,6 +11,9 @@ import com.syndicati.services.forum.ReactionService;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.image.imagekit.ImageKitConfig;
+import com.syndicati.utils.image.imagekit.ImageKitStorageService;
+import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.session.SessionManager;
 import javafx.animation.FadeTransition;
@@ -49,6 +52,9 @@ import java.io.File;
  * Enhanced Forum section with working filters and details panel.
  */
 public class ProfileForumSectionEnhanced {
+
+    private static final String IK_FOLDER_FORUM_IMAGES = "/syndicati/forum_images";
+    private static final String IK_FOLDER_COMMENT_IMAGES = "/syndicati/commentaire_images";
 
     private final VBox root = new VBox(16);
     private final PublicationController publicationController;
@@ -939,7 +945,20 @@ public class ProfileForumSectionEnhanced {
             fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.gif"));
             java.io.File file = fc.showOpenDialog(root.getScene().getWindow());
             if (file != null) {
-                selectedCommentImagePath = file.getName();
+                try {
+                    File uploadsDir = new File(System.getProperty("user.dir") + File.separator + "uploads" + File.separator + "commentaire_images");
+                    if (!uploadsDir.exists()) uploadsDir.mkdirs();
+
+                    File dest = new File(uploadsDir, file.getName());
+                    java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+                    String fallback = file.getName();
+                    String url = tryUploadToImageKit(dest, IK_FOLDER_COMMENT_IMAGES);
+                    selectedCommentImagePath = (url != null) ? url : fallback;
+                } catch (Exception ex) {
+                    // Fallback: store filename; resolveImage will try local fallback paths.
+                    selectedCommentImagePath = file.getName();
+                }
                 fileLabel.setText("📎 " + file.getName());
                 fileLabel.setTextFill(Color.web("#818cf8"));
             }
@@ -1401,11 +1420,33 @@ public class ProfileForumSectionEnhanced {
         }
 
         String path = dbValue.trim();
-        
+
+        boolean urlCandidate = isUrl(path);
+
         // Try exact path first (already includes uploads/ or is a URL)
         Image img = ImageLoaderUtil.loadImage(path);
         if (img != null) return img;
 
+        // If DB stores an ImageKit URL and ImageKit is down, fall back to local by filename.
+        if (urlCandidate) {
+            String filename = filenameFromUrl(path);
+            if (filename != null && !filename.isBlank()) {
+                img = ImageLoaderUtil.loadImage("uploads/" + filename);
+                if (img != null) return img;
+
+                if (fallbackFolder != null) {
+                    img = ImageLoaderUtil.loadImage("uploads/" + fallbackFolder + "/" + filename);
+                    if (img != null) return img;
+                }
+
+                img = ImageLoaderUtil.loadImage("uploads/forum_images/" + filename);
+                if (img != null) return img;
+
+                img = ImageLoaderUtil.loadImage("uploads/commentaire_images/" + filename);
+                if (img != null) return img;
+            }
+        }
+        
         // Try with uploads/ prefix
         if (!path.startsWith("uploads/") && !path.startsWith("uploads\\")) {
             img = ImageLoaderUtil.loadImage("uploads/" + path);
@@ -1426,6 +1467,37 @@ public class ProfileForumSectionEnhanced {
         if (img != null) return img;
 
         return null;
+    }
+
+    private String tryUploadToImageKit(File localFile, String imageKitFolder) {
+        if (localFile == null || !localFile.exists() || !localFile.isFile()) return null;
+        try {
+            ImageKitConfig cfg = ImageKitConfig.fromEnv();
+            if (cfg != null && cfg.isEnabled() && cfg.getPrivateKey() != null) {
+                ImageKitStorageService svc = new ImageKitStorageService(cfg);
+                ImageKitUploadResult res = svc.uploadFile(localFile, imageKitFolder);
+                if (res != null && res.url() != null && !res.url().isBlank()) {
+                    return res.url();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("ImageKit upload failed (profile forum). Fallback to local: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private boolean isUrl(String v) {
+        return v != null && (v.startsWith("http://") || v.startsWith("https://"));
+    }
+
+    private String filenameFromUrl(String url) {
+        if (url == null) return null;
+        String u = url.trim();
+        int q = u.indexOf('?');
+        if (q >= 0) u = u.substring(0, q);
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < u.length() - 1) return u.substring(lastSlash + 1);
+        return u;
     }
 
     private void asyncRefresh() {
@@ -1491,9 +1563,11 @@ public class ProfileForumSectionEnhanced {
                     
                     File dest = new File(uploadsDir, file.getName());
                     java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    
-                    currentImgPath[0] = file.getName();
-                    preview.setImage(new Image(dest.toURI().toString()));
+
+                    String fallback = file.getName();
+                    String url = tryUploadToImageKit(dest, IK_FOLDER_FORUM_IMAGES);
+                    currentImgPath[0] = (url != null) ? url : fallback;
+                    preview.setImage((url != null) ? new Image(url, true) : new Image(dest.toURI().toString()));
                 } catch (Exception ex) {
                     System.err.println("Upload failed: " + ex.getMessage());
                 }
@@ -1584,8 +1658,11 @@ public class ProfileForumSectionEnhanced {
                     if (!uploadsDir.exists()) uploadsDir.mkdirs();
                     File dest = new File(uploadsDir, file.getName());
                     java.nio.file.Files.copy(file.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    currentImgPath[0] = file.getName();
-                    preview.setImage(new Image(dest.toURI().toString()));
+
+                    String fallback = file.getName();
+                    String url = tryUploadToImageKit(dest, IK_FOLDER_COMMENT_IMAGES);
+                    currentImgPath[0] = (url != null) ? url : fallback;
+                    preview.setImage((url != null) ? new Image(url, true) : new Image(dest.toURI().toString()));
                 } catch (Exception ex) {
                     System.err.println("Comment Image Upload failed: " + ex.getMessage());
                 }

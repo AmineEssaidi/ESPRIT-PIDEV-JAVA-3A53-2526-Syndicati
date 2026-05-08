@@ -7,6 +7,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 /**
@@ -113,6 +115,15 @@ public class AsyncMailerService {
             .thenCompose(validTo -> sendWithRetry(validTo, subject, html, 0));
     }
 
+    public CompletableFuture<Void> sendHtmlAsync(List<String> recipients, String subject, String html) {
+        String joinedRecipients = normalizeRecipients(recipients);
+        return CompletableFuture.supplyAsync(() -> {
+            validateEmailList(joinedRecipients);
+            return joinedRecipients;
+        }, executorService)
+            .thenCompose(validRecipients -> sendWithRetry(validRecipients, subject, html, 0));
+    }
+
     /**
      * Send email asynchronously with callback for result handling.
      */
@@ -125,6 +136,20 @@ public class AsyncMailerService {
             .exceptionally(ex -> {
                 callback.accept(SendResult.failure(rootMessage(ex)));
                 deliveryLog.logFailure(to, subject, rootMessage(ex));
+                return null;
+            });
+    }
+
+    public void sendHtmlAsync(List<String> recipients, String subject, String html, Consumer<SendResult> callback) {
+        String joinedRecipients = normalizeRecipients(recipients);
+        sendHtmlAsync(recipients, subject, html)
+            .thenAccept(v -> {
+                callback.accept(SendResult.success());
+                deliveryLog.logSuccess(joinedRecipients, subject);
+            })
+            .exceptionally(ex -> {
+                callback.accept(SendResult.failure(rootMessage(ex)));
+                deliveryLog.logFailure(joinedRecipients, subject, rootMessage(ex));
                 return null;
             });
     }
@@ -288,6 +313,28 @@ public class AsyncMailerService {
             } else {
                 throw e;
             }
+        }
+    }
+
+    private String normalizeRecipients(List<String> recipients) {
+        if (recipients == null || recipients.isEmpty()) {
+            throw new IllegalArgumentException("At least one recipient is required");
+        }
+
+        return recipients.stream()
+            .filter(email -> email != null && !email.isBlank())
+            .map(String::trim)
+            .distinct()
+            .collect(Collectors.joining(","));
+    }
+
+    private void validateEmailList(String recipients) {
+        if (recipients == null || recipients.isBlank()) {
+            throw new IllegalArgumentException("At least one valid recipient is required");
+        }
+
+        for (String recipient : recipients.split(",")) {
+            validateEmail(recipient.trim());
         }
     }
 

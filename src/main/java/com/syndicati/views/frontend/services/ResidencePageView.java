@@ -6,17 +6,26 @@ import com.syndicati.controllers.residence.ResidenceController;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.residence.Apartment;
 import com.syndicati.models.residence.Maintenance;
+import com.syndicati.models.residence.Review;
 import com.syndicati.models.residence.Residence;
+import com.syndicati.services.DatabaseService;
+import com.syndicati.services.events.DataUpdateBus;
+import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
+import javafx.beans.value.ChangeListener;
+import javafx.geometry.Rectangle2D;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
@@ -27,13 +36,17 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Residence page mirrored from /templates/frontend/residence with switcher flow:
@@ -46,19 +59,24 @@ public class ResidencePageView implements ViewInterface {
     private final ThemeManager tm = ThemeManager.getInstance();
     private final ResidenceController residenceController = new ResidenceController();
     private final MaintenanceController maintenanceController = new MaintenanceController();
+    private final DatabaseService db = DatabaseService.getInstance();
+    private final DataUpdateBus updates = DataUpdateBus.getInstance();
+    private AutoCloseable updatesSubscription;
 
     private final StackPane switcher = new StackPane();
     private final VBox residenceFace = new VBox(28);
     private final VBox apartmentsFace = new VBox(20);
     private final VBox detailsFace = new VBox(20);
     private final VBox paginationBox = new VBox(12);
+    private ChangeListener<Number> residenceWidthListener;
+    private ChangeListener<Number> apartmentsWidthListener;
 
     private Integer selectedResidenceId = null;  // Use ID instead of index
     private Apartment selectedApartment;
 
     // Display records
-    private record ResidenceDisplay(Integer id, String name, String address, Integer floors, Integer units, Integer blocks, Integer year) {}
-    private record ApartmentDisplay(Integer id, String type, String bloc, Integer floor, Boolean available, Integer rent, Integer area, Boolean parking, String description) {}
+    private record ResidenceDisplay(Integer id, String name, String address, Integer floors, Integer units, Integer blocks, Integer year, String image) {}
+    private record ApartmentDisplay(Integer id, String type, String bloc, Integer floor, Boolean available, Double rent, Double area, Boolean parking, String description, String image) {}
 
     public ResidencePageView() {
         root = new VBox(28);
@@ -75,6 +93,25 @@ public class ResidencePageView implements ViewInterface {
 
         rebuildResidenceFace();
         switchToFace("main");
+
+        updatesSubscription = updates.subscribe(DataUpdateBus.Topic.RESIDENCE, t -> {
+            // Clear cache for residence/apartment lists so next rebuild reflects DB changes.
+            db.clearCache("residence:list");
+            if (selectedResidenceId != null) {
+                db.clearCache("apartments:residence:" + selectedResidenceId);
+            }
+            javafx.application.Platform.runLater(() -> {
+                try {
+                    if (residenceFace.isVisible()) {
+                        rebuildResidenceFace();
+                    } else if (apartmentsFace.isVisible()) {
+                        rebuildApartmentsFace();
+                    } else if (detailsFace.isVisible()) {
+                        rebuildDetailsFace();
+                    }
+                } catch (Exception ignored) {}
+            });
+        });
     }
 
     private StackPane buildHero() {
@@ -179,8 +216,13 @@ public class ResidencePageView implements ViewInterface {
         Text s = text("Discover the perfect space that suits your lifestyle.", 18, false, textMuted());
         sectionLabel.getChildren().addAll(h, s);
 
-        // Load residences from database
-        List<Residence> dbResidences = residenceController.residences();
+        // Load residences (cache-first).
+        @SuppressWarnings("unchecked")
+        List<Residence> cachedResidences = db.getCache("residence:list");
+        List<Residence> dbResidences = (cachedResidences != null) ? cachedResidences : residenceController.residences();
+        if (cachedResidences == null) {
+            db.putCache("residence:list", dbResidences);
+        }
         List<ResidenceDisplay> displayResidences = dbResidences.stream()
             .map(r -> new ResidenceDisplay(
                 r.getIdResidence(),
@@ -189,7 +231,8 @@ public class ResidencePageView implements ViewInterface {
                 r.getNumberFloors(),
                 r.getNumberApartments(),
                 parseBlocksCount(r.getNumberBlocks()),
-                2026  // Default year
+                2026,  // Default year
+                r.getImageResidence()  // Load image from database
             ))
             .toList();
 
@@ -199,9 +242,12 @@ public class ResidencePageView implements ViewInterface {
             cardNodes.add(residenceCard(res));
         }
         rebuildResponsiveGrid(cards, cardNodes, residenceFace.getWidth(), 3, 2, 1);
-        residenceFace.widthProperty().addListener((obs, oldW, newW) ->
-            rebuildResponsiveGrid(cards, cardNodes, newW.doubleValue(), 3, 2, 1)
-        );
+        if (residenceWidthListener != null) {
+            residenceFace.widthProperty().removeListener(residenceWidthListener);
+        }
+        residenceWidthListener = (obs, oldW, newW) ->
+            rebuildResponsiveGrid(cards, cardNodes, newW.doubleValue(), 3, 2, 1);
+        residenceFace.widthProperty().addListener(residenceWidthListener);
 
         residenceFace.getChildren().addAll(sectionLabel, cards);
     }
@@ -220,6 +266,114 @@ public class ResidencePageView implements ViewInterface {
         }
     }
 
+    private Image resolveUploadsImage(String dbValue, String fallbackFolder) {
+        if (dbValue == null || dbValue.isBlank()) {
+            return null;
+        }
+
+        String path = dbValue.trim();
+
+        // URL case (ImageKit)
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            Image urlImg = ImageLoaderUtil.loadImage(path);
+            if (urlImg != null) return urlImg;
+
+            // ImageKit down: fallback to local by filename.
+            String filename = filenameFromUrl(path);
+            if (filename != null && !filename.isBlank()) {
+                Image local = ImageLoaderUtil.loadImage("uploads/" + filename);
+                if (local != null) return local;
+                if (fallbackFolder != null && !fallbackFolder.isBlank()) {
+                    local = ImageLoaderUtil.loadImage("uploads/" + fallbackFolder + "/" + filename);
+                    if (local != null) return local;
+                }
+            }
+            return null;
+        }
+
+        // Try exact path first (already includes uploads/ or is a URL or absolute path)
+        Image img = ImageLoaderUtil.loadImage(path);
+        if (img != null) return img;
+
+        // Try with uploads/ prefix (handles old stored values like "residence_images/x.jpg")
+        if (!path.startsWith("uploads/") && !path.startsWith("uploads\\") && !path.startsWith("/")) {
+            img = ImageLoaderUtil.loadImage("uploads/" + path);
+            if (img != null) return img;
+        }
+
+        // Try with folder-specific path when DB stores just filename
+        if (fallbackFolder != null && !fallbackFolder.isBlank()) {
+            img = ImageLoaderUtil.loadImage("uploads/" + fallbackFolder + "/" + path);
+            if (img != null) return img;
+        }
+
+        return null;
+    }
+
+    private String filenameFromUrl(String url) {
+        if (url == null || url.isBlank()) return null;
+        String u = url.trim();
+        int q = u.indexOf('?');
+        if (q >= 0) u = u.substring(0, q);
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < u.length() - 1) return u.substring(lastSlash + 1);
+        return u;
+    }
+
+    private Rectangle roundedClip(Region target, double radius) {
+        Rectangle clip = new Rectangle();
+        clip.setArcWidth(radius * 2);
+        clip.setArcHeight(radius * 2);
+        clip.widthProperty().bind(target.widthProperty());
+        clip.heightProperty().bind(target.heightProperty());
+        return clip;
+    }
+
+    /**
+     * Create an "object-fit: cover" ImageView that fills the container,
+     * crops via viewport to preserve aspect ratio, and clips to rounded corners.
+     */
+    private ImageView coverImage(Image image, Region container, double radius) {
+        ImageView iv = new ImageView(image);
+        iv.setSmooth(true);
+        iv.setPreserveRatio(false);
+        iv.fitWidthProperty().bind(container.widthProperty());
+        iv.fitHeightProperty().bind(container.heightProperty());
+
+        // Clip image to rounded container.
+        iv.setClip(roundedClip(container, radius));
+
+        Runnable updateViewport = () -> {
+            double vw = container.getWidth();
+            double vh = container.getHeight();
+            if (vw <= 1 || vh <= 1) return;
+
+            double iw = image.getWidth();
+            double ih = image.getHeight();
+            if (iw <= 1 || ih <= 1) return;
+
+            double viewRatio = vw / vh;
+            double imgRatio = iw / ih;
+
+            if (imgRatio > viewRatio) {
+                // Image is wider -> crop width
+                double newW = ih * viewRatio;
+                double x = (iw - newW) / 2.0;
+                iv.setViewport(new Rectangle2D(x, 0, newW, ih));
+            } else {
+                // Image is taller -> crop height
+                double newH = iw / viewRatio;
+                double y = (ih - newH) / 2.0;
+                iv.setViewport(new Rectangle2D(0, y, iw, newH));
+            }
+        };
+
+        // Update once and whenever container size changes.
+        container.layoutBoundsProperty().addListener((obs, o, n) -> updateViewport.run());
+        updateViewport.run();
+        return iv;
+    }
+
     private VBox residenceCard(ResidenceDisplay r) {
         VBox card = new VBox();
         card.setStyle(
@@ -233,23 +387,17 @@ public class ResidencePageView implements ViewInterface {
 
         StackPane media = new StackPane();
         media.setMinHeight(280);
+        media.setPrefHeight(280);
+        media.setMaxHeight(280);
         media.setStyle(
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.22) + ";" +
             "-fx-background-radius: 32px 32px 0 0;"
         );
 
-        StackPane yearTag = new StackPane(text(String.valueOf(r.year), 12, true, "#ffffff"));
-        yearTag.setPadding(new Insets(7, 12, 7, 12));
-        yearTag.setStyle(
-            "-fx-background-color: rgba(0,0,0,0.6);" +
-            "-fx-background-radius: 20px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 20px;"
-        );
-        StackPane.setAlignment(yearTag, Pos.TOP_RIGHT);
-        StackPane.setMargin(yearTag, new Insets(20, 20, 0, 0));
-        media.getChildren().add(yearTag);
+        Image image = resolveUploadsImage(r.image, "residence_images");
+        if (image != null && !image.isError()) {
+            media.getChildren().add(coverImage(image, media, 32));
+        }
 
         VBox body = new VBox(14);
         body.setPadding(new Insets(26, 22, 22, 22));
@@ -301,9 +449,8 @@ public class ResidencePageView implements ViewInterface {
     private void rebuildApartmentsFace() {
         apartmentsFace.getChildren().clear();
         
-        // Fetch residence and apartments from database
-        Residence residence = residenceController.residenceById(selectedResidenceId)
-            .orElse(null);
+        // Fetch residence and apartments (cache-first where possible)
+        Residence residence = residenceController.residenceById(selectedResidenceId).orElse(null);
         
         if (residence == null) {
             apartmentsFace.getChildren().add(text("Residence not found", 20, false, textMuted()));
@@ -318,7 +465,12 @@ public class ResidencePageView implements ViewInterface {
         );
 
         // Load apartments from database and convert to display records
-        List<Apartment> apartments = residenceController.apartmentsByResidence(selectedResidenceId);
+        @SuppressWarnings("unchecked")
+        List<Apartment> cachedApts = db.getCache("apartments:residence:" + selectedResidenceId);
+        List<Apartment> apartments = (cachedApts != null) ? cachedApts : residenceController.apartmentsByResidence(selectedResidenceId);
+        if (cachedApts == null) {
+            db.putCache("apartments:residence:" + selectedResidenceId, apartments);
+        }
         List<ApartmentDisplay> displayApartments = apartments.stream()
             .map(a -> new ApartmentDisplay(
                 a.getIdApartment(),
@@ -326,10 +478,11 @@ public class ResidencePageView implements ViewInterface {
                 "Block A",  // Placeholder
                 1,  // Placeholder floor
                 a.getAvailable() != null && a.getAvailable() == 1,
-                a.getRentalPrice() != null ? a.getRentalPrice() : 0,
-                a.getArea() != null ? a.getArea() : 0,
+                a.getRentalPrice() != null ? a.getRentalPrice() : 0.0,
+                a.getArea() != null ? a.getArea() : 0.0,
                 a.getParking() != null && a.getParking() == 1,
-                a.getApartmentInfo()
+                a.getApartmentInfo(),
+                a.getImageApartment()  // Load image from database
             ))
             .toList();
         
@@ -339,9 +492,12 @@ public class ResidencePageView implements ViewInterface {
             nodes.add(apartmentCard(apt));
         }
         rebuildResponsiveGrid(cards, nodes, apartmentsFace.getWidth(), 3, 2, 1);
-        apartmentsFace.widthProperty().addListener((obs, oldW, newW) ->
-            rebuildResponsiveGrid(cards, nodes, newW.doubleValue(), 3, 2, 1)
-        );
+        if (apartmentsWidthListener != null) {
+            apartmentsFace.widthProperty().removeListener(apartmentsWidthListener);
+        }
+        apartmentsWidthListener = (obs, oldW, newW) ->
+            rebuildResponsiveGrid(cards, nodes, newW.doubleValue(), 3, 2, 1);
+        apartmentsFace.widthProperty().addListener(apartmentsWidthListener);
 
         apartmentsFace.getChildren().addAll(header, cards);
     }
@@ -358,10 +514,17 @@ public class ResidencePageView implements ViewInterface {
 
         StackPane media = new StackPane();
         media.setMinHeight(240);
+        media.setPrefHeight(240);
+        media.setMaxHeight(240);
         media.setStyle(
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
             "-fx-background-radius: 32px 32px 0 0;"
         );
+
+        Image image = resolveUploadsImage(apt.image, "appartement_images");
+        if (image != null && !image.isError()) {
+            media.getChildren().add(coverImage(image, media, 32));
+        }
 
         StackPane availability = pill(apt.available ? "Available" : "Rented", 11, 0.12, 0.25);
         StackPane.setAlignment(availability, Pos.TOP_RIGHT);
@@ -431,8 +594,14 @@ public class ResidencePageView implements ViewInterface {
         top.setAlignment(Pos.TOP_LEFT);
 
         StackPane image = new StackPane();
+        // Fixed height prevents layout feedback loop (ImageView fitHeight bound to container height).
         image.setMinHeight(400);
+        image.setPrefHeight(400);
+        image.setMaxHeight(400);
+        image.setMinWidth(620);
         image.setPrefWidth(620);
+        image.setMaxWidth(620);
+        HBox.setHgrow(image, Priority.NEVER);
         image.setStyle(
             "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.20) + ";" +
             "-fx-background-radius: 24px;" +
@@ -441,9 +610,23 @@ public class ResidencePageView implements ViewInterface {
             "-fx-border-radius: 24px;"
         );
 
+        // Load apartment image if available (from details page, get fresh data)
+        Apartment fullApt = residenceController.apartmentById(selectedApartment.getIdApartment()).orElse(selectedApartment);
+        Image loadedImage = resolveUploadsImage(fullApt.getImageApartment(), "appartement_images");
+        if (loadedImage != null && !loadedImage.isError()) {
+            image.getChildren().add(coverImage(loadedImage, image, 24));
+        }
+
         VBox info = new VBox(12);
         info.setPadding(new Insets(22));
-        info.setStyle(shell(22, "rgba(255,255,255,0.03)", 1.2));
+        info.setStyle(
+            "-fx-background-color: rgba(10,12,18,0.90);" +
+            "-fx-background-radius: 22px;" +
+            "-fx-border-color: rgba(255,255,255,0.14);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 22px;" +
+            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.30), 18, 0.12, 0, 6);"
+        );
         HBox.setHgrow(info, Priority.ALWAYS);
 
         info.getChildren().addAll(
@@ -452,9 +635,9 @@ public class ResidencePageView implements ViewInterface {
             infoRow("Loyer", (apt.getRentalPrice() != null ? apt.getRentalPrice() : 0) + " TND"),
             infoRow("Surface", (apt.getArea() != null ? apt.getArea() : 0) + " m2"),
             infoRow("Type", apt.getTypeApartment() != null ? apt.getTypeApartment() : "N/A"),
-            infoRow("Info", apt.getApartmentInfo() != null ? apt.getApartmentInfo() : "N/A"),
-            infoRow("Rating", rating + " (" + reviewCount + " reviews)")
+            infoRow("Rating", (rating.equals("No ratings") ? rating : (rating + "/10")) + " (" + reviewCount + " reviews)")
         );
+        info.getChildren().add(buildApartmentInfoPanel(apt.getApartmentInfo()));
         if (apt.getParking() != null && apt.getParking() == 1) {
             info.getChildren().add(featureTag("Parking inclus"));
         }
@@ -467,6 +650,7 @@ public class ResidencePageView implements ViewInterface {
                 info.getChildren().add(infoRow("AI Recommendation", latestMaintenance.getAiRecommendation()));
             }
         }
+        info.getChildren().add(buildReviewEditor(apt));
 
         top.getChildren().addAll(image, info);
 
@@ -477,7 +661,12 @@ public class ResidencePageView implements ViewInterface {
         recGrid.setVgap(12);
 
         // Get apartments for similar recommendations
-        List<Apartment> apartments = residenceController.apartmentsByResidence(selectedResidenceId);
+        @SuppressWarnings("unchecked")
+        List<Apartment> cachedApts = db.getCache("apartments:residence:" + selectedResidenceId);
+        List<Apartment> apartments = (cachedApts != null) ? cachedApts : residenceController.apartmentsByResidence(selectedResidenceId);
+        if (cachedApts == null) {
+            db.putCache("apartments:residence:" + selectedResidenceId, apartments);
+        }
         for (Apartment rec : apartments) {
             if (!rec.getIdApartment().equals(apt.getIdApartment())) {
                 recGrid.getChildren().add(recommendationCard(rec));
@@ -487,6 +676,185 @@ public class ResidencePageView implements ViewInterface {
         VBox contact = buildContactSection();
 
         detailsFace.getChildren().addAll(header, top, recommendations, recGrid, contact);
+    }
+
+    private VBox buildReviewEditor(Apartment apartment) {
+        VBox box = new VBox(10);
+        box.setPadding(new Insets(10, 0, 0, 0));
+        box.setStyle("-fx-border-color: " + borderSoft() + " transparent transparent transparent; -fx-border-width: 1px 0 0 0;");
+
+        Text title = text("Your review", 15, true, "#ffffff");
+        Text hint = text("Rate this apartment from 0 to 10 stars.", 12, false, textMuted());
+        Text selectedScore = text("Selected: 0/10", 12, true, tm.getAccentHex());
+        Text status = text("", 12, false, textMuted());
+
+        Integer currentUserId = getCurrentUserId();
+        Optional<Review> existing = currentUserId != null
+            ? maintenanceController.userReviewForApartment(currentUserId, apartment.getIdApartment())
+            : Optional.empty();
+        int initialScore = existing.map(Review::getScore).orElse(0);
+        final int[] selected = {Math.max(0, Math.min(10, initialScore))};
+        selectedScore.setText("Selected: " + selected[0] + "/10");
+
+        HBox stars = new HBox(4);
+        List<Button> starButtons = new ArrayList<>();
+        for (int i = 1; i <= 10; i++) {
+            final int score = i;
+            Button star = new Button("★");
+            star.setOnAction(e -> {
+                selected[0] = score;
+                updateStarButtons(starButtons, selected[0]);
+                selectedScore.setText("Selected: " + selected[0] + "/10");
+                status.setText("");
+            });
+            starButtons.add(star);
+        }
+        stars.getChildren().addAll(starButtons);
+        updateStarButtons(starButtons, selected[0]);
+
+        Button clear = new Button("Set 0");
+        clear.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.08);" +
+            "-fx-text-fill: " + textSoft() + ";" +
+            "-fx-background-radius: 8px;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-padding: 6 10 6 10;"
+        );
+        clear.setOnAction(e -> {
+            selected[0] = 0;
+            updateStarButtons(starButtons, 0);
+            selectedScore.setText("Selected: 0/10");
+            status.setText("");
+        });
+
+        Button submit = mainBtn(existing.isPresent() ? "Update review" : "Submit review");
+        submit.setOnAction(e -> {
+            Integer userId = getCurrentUserId();
+            if (userId == null || userId <= 0) {
+                status.setText("Log in required to submit a review.");
+                status.setFill(Color.web("#ffb4b4"));
+                return;
+            }
+            boolean ok;
+            Optional<Review> current = maintenanceController.userReviewForApartment(userId, apartment.getIdApartment());
+            if (current.isPresent()) {
+                ok = maintenanceController.reviewUpdate(current.get().getIdReview(), selected[0]);
+            } else {
+                ok = maintenanceController.reviewCreate(userId, apartment.getIdApartment(), selected[0]) > 0;
+            }
+            if (ok) {
+                status.setText("Review saved: " + selected[0] + "/10");
+                status.setFill(Color.web("#9ff0b0"));
+                rebuildDetailsFace();
+                updates.publish(DataUpdateBus.Topic.RESIDENCE);
+            } else {
+                status.setText("Could not save review. Please retry.");
+                status.setFill(Color.web("#ffb4b4"));
+            }
+        });
+        submit.setMaxWidth(Double.MAX_VALUE);
+
+        HBox actions = new HBox(8, clear, submit);
+        HBox.setHgrow(submit, Priority.ALWAYS);
+        box.getChildren().addAll(title, hint, stars, selectedScore, actions, status);
+        return box;
+    }
+
+    private VBox buildApartmentInfoPanel(String rawInfo) {
+        VBox panel = new VBox(8);
+        panel.setPadding(new Insets(10));
+        panel.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)") + ";" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.14)" : borderSoft()) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 12px;"
+        );
+
+        panel.getChildren().add(text("Apartment details", 13, true, tm.isDarkMode() ? "#ffffff" : tm.getAccentHex()));
+
+        Map<String, String> parsed = parseApartmentInfo(rawInfo);
+        if (parsed.isEmpty()) {
+            panel.getChildren().add(text("No additional details available.", 12, false, textMuted()));
+            return panel;
+        }
+
+        FlowPane tags = new FlowPane();
+        tags.setHgap(8);
+        tags.setVgap(8);
+        for (Map.Entry<String, String> entry : parsed.entrySet()) {
+            tags.getChildren().add(metaTag(entry.getKey(), entry.getValue()));
+        }
+        panel.getChildren().add(tags);
+        return panel;
+    }
+
+    private Map<String, String> parseApartmentInfo(String rawInfo) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (rawInfo == null || rawInfo.isBlank()) {
+            return out;
+        }
+
+        String value = rawInfo.trim();
+        if (value.startsWith("{") && value.endsWith("}")) {
+            value = value.substring(1, value.length() - 1);
+        }
+
+        String[] pairs = value.split(",");
+        for (String pair : pairs) {
+            String[] kv = pair.split(":", 2);
+            if (kv.length < 2) continue;
+
+            String key = kv[0].trim().replace("\"", "");
+            String val = kv[1].trim().replace("\"", "");
+            if (key.isBlank() || val.isBlank()) continue;
+
+            String label = switch (key.toLowerCase()) {
+                case "bloc" -> "Block";
+                case "floor" -> "Floor";
+                case "number" -> "Unit";
+                case "parking" -> "Parking";
+                case "disponible", "available" -> "Available";
+                default -> Character.toUpperCase(key.charAt(0)) + key.substring(1);
+            };
+
+            if ("true".equalsIgnoreCase(val)) val = "Yes";
+            if ("false".equalsIgnoreCase(val)) val = "No";
+            out.put(label, val);
+        }
+        return out;
+    }
+
+    private StackPane metaTag(String label, String value) {
+        Text t = text(label + ": " + value, 12, true, tm.isDarkMode() ? "#ffffff" : "#1f2937");
+        StackPane tag = new StackPane(t);
+        tag.setPadding(new Insets(6, 10, 6, 10));
+        tag.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.10)" : tm.toRgba(tm.getAccentHex(), 0.12)) + ";" +
+            "-fx-border-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.20)" : tm.toRgba(tm.getAccentHex(), 0.26)) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-background-radius: 8px;" +
+            "-fx-border-radius: 8px;"
+        );
+        return tag;
+    }
+
+    private void updateStarButtons(List<Button> buttons, int selectedScore) {
+        for (int i = 0; i < buttons.size(); i++) {
+            Button b = buttons.get(i);
+            boolean active = i < selectedScore;
+            b.setStyle(
+                "-fx-background-color: transparent;" +
+                "-fx-text-fill: " + (active ? tm.getAccentHex() : "rgba(255,255,255,0.34)") + ";" +
+                "-fx-font-size: 18px;" +
+                "-fx-padding: 0 2 0 2;"
+            );
+        }
+    }
+
+    private Integer getCurrentUserId() {
+        var user = SessionManager.getInstance().getCurrentUser();
+        return user != null ? user.getIdUser() : null;
     }
 
 
@@ -504,7 +872,17 @@ public class ResidencePageView implements ViewInterface {
 
         StackPane image = new StackPane();
         image.setMinHeight(120);
+        image.setPrefHeight(120);
+        image.setMaxHeight(120);
         image.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.16) + "; -fx-background-radius: 14px;");
+
+        // Load apartment image if available
+        if (apt.getImageApartment() != null && !apt.getImageApartment().isBlank()) {
+            Image loadedImage = resolveUploadsImage(apt.getImageApartment(), "appartement_images");
+            if (loadedImage != null && !loadedImage.isError()) {
+                image.getChildren().add(coverImage(loadedImage, image, 14));
+            }
+        }
 
         Button view = mainBtn("Consulter");
         view.setStyle(view.getStyle() + "-fx-font-size: 11px; -fx-padding: 8 10 8 10;");
@@ -659,9 +1037,16 @@ public class ResidencePageView implements ViewInterface {
         HBox row = new HBox(8);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(8, 10, 8, 10));
-        row.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 10px;");
+        row.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.08)") + ";" +
+            "-fx-background-radius: 10px;" +
+            "-fx-border-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.12)") + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 10px;"
+        );
+        String labelColor = tm.isDarkMode() ? "rgba(255,230,240,0.96)" : "rgba(30,41,59,0.92)";
         row.getChildren().addAll(
-            text(label + ":", 13, true, tm.getAccentHex()),
+            text(label + ":", 13, true, labelColor),
             text(value, 13, false, textSoft())
         );
         return row;
@@ -686,11 +1071,11 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private StackPane featureTag(String value) {
-        StackPane tag = new StackPane(text(value, 11, true, tm.getAccentHex()));
+        StackPane tag = new StackPane(text(value, 11, true, "#ffffff"));
         tag.setPadding(new Insets(6, 10, 6, 10));
         tag.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.10) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.22) + ";" +
+            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.08)" : tm.toRgba(tm.getAccentHex(), 0.10)) + ";" +
+            "-fx-border-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.16)" : tm.toRgba(tm.getAccentHex(), 0.22)) + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 8px;" +
             "-fx-background-radius: 8px;"
@@ -898,6 +1283,19 @@ public class ResidencePageView implements ViewInterface {
     }
 
     @Override
-    public void cleanup() {}
+    public void cleanup() {
+        if (residenceWidthListener != null) {
+            residenceFace.widthProperty().removeListener(residenceWidthListener);
+            residenceWidthListener = null;
+        }
+        if (apartmentsWidthListener != null) {
+            apartmentsFace.widthProperty().removeListener(apartmentsWidthListener);
+            apartmentsWidthListener = null;
+        }
+        if (updatesSubscription != null) {
+            try { updatesSubscription.close(); } catch (Exception ignored) {}
+            updatesSubscription = null;
+        }
+    }
 }
 

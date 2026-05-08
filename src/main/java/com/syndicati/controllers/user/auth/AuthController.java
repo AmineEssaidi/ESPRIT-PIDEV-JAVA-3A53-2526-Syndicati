@@ -5,6 +5,7 @@ import com.syndicati.services.user.auth.AuthCodeService;
 import com.syndicati.services.user.user.UserService;
 import com.syndicati.services.security.LoginRateLimiter;
 import com.syndicati.services.security.TOTPService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.util.Optional;
@@ -139,6 +140,7 @@ public class AuthController {
         }
 
         user.setIdUser(newId);
+        GlobalNotificationPillManager.created("Account", "Account created successfully. You can now sign in.");
         return AuthResult.success(user, "Account created successfully. You can now sign in.");
     }
 

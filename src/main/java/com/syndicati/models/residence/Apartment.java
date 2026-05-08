@@ -13,16 +13,16 @@ public class Apartment {
     private String imageApartment;
     private String typeApartment;
     private String apartmentInfo;
-    private Integer area;  // square meters
-    private Integer rentalPrice;
-    private Integer salePrice;
+    private Double area;  // square meters
+    private Double rentalPrice;
+    private Double salePrice;
     private String dateConstructed;
     private Maintenance maintenance;
 
     public Apartment() {}
 
     public Apartment(Integer idResidence, Integer idUser, Integer parking, Integer available, String imageApartment,
-                     String typeApartment, String apartmentInfo, Integer area, Integer rentalPrice, Integer salePrice,
+                     String typeApartment, String apartmentInfo, Double area, Double rentalPrice, Double salePrice,
                      String dateConstructed) {
         this.idResidence = idResidence;
         this.idUser = idUser;
@@ -38,7 +38,7 @@ public class Apartment {
     }
 
     public Apartment(Integer idResidence, Integer idUser, Integer parking, Integer available, String imageApartment,
-                     String typeApartment, String apartmentInfo, Integer area, Integer rentalPrice, Integer salePrice,
+                     String typeApartment, String apartmentInfo, Double area, Double rentalPrice, Double salePrice,
                      String dateConstructed, Integer idApartment) {
         this(idResidence, idUser, parking, available, imageApartment, typeApartment, apartmentInfo, area,
              rentalPrice, salePrice, dateConstructed);
@@ -109,27 +109,27 @@ public class Apartment {
         this.apartmentInfo = apartmentInfo;
     }
 
-    public Integer getArea() {
+    public Double getArea() {
         return area;
     }
 
-    public void setArea(Integer area) {
+    public void setArea(Double area) {
         this.area = area;
     }
 
-    public Integer getRentalPrice() {
+    public Double getRentalPrice() {
         return rentalPrice;
     }
 
-    public void setRentalPrice(Integer rentalPrice) {
+    public void setRentalPrice(Double rentalPrice) {
         this.rentalPrice = rentalPrice;
     }
 
-    public Integer getSalePrice() {
+    public Double getSalePrice() {
         return salePrice;
     }
 
-    public void setSalePrice(Integer salePrice) {
+    public void setSalePrice(Double salePrice) {
         this.salePrice = salePrice;
     }
 

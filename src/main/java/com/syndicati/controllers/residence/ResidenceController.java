@@ -4,6 +4,7 @@ import com.syndicati.models.residence.Apartment;
 import com.syndicati.models.residence.Residence;
 import com.syndicati.services.residence.ApartmentService;
 import com.syndicati.services.residence.ResidenceService;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,16 +37,28 @@ public class ResidenceController {
 
     public Integer residenceCreate(String name, String address, String image, Integer numberApartments,
                                    Integer numberFloors, String numberBlocks) {
-        return residenceService.create(name, address, image, numberApartments, numberFloors, numberBlocks);
+        Integer id = residenceService.create(name, address, image, numberApartments, numberFloors, numberBlocks);
+        if (id != null && id > 0) {
+            GlobalNotificationPillManager.created("Residence", "Residence created successfully.");
+        }
+        return id;
     }
 
     public boolean residenceUpdate(Integer id, String name, String address, String image, Integer numberApartments,
                                    Integer numberFloors, String numberBlocks) {
-        return residenceService.update(id, name, address, image, numberApartments, numberFloors, numberBlocks);
+        boolean success = residenceService.update(id, name, address, image, numberApartments, numberFloors, numberBlocks);
+        if (success) {
+            GlobalNotificationPillManager.updated("Residence", "Residence updated successfully.");
+        }
+        return success;
     }
 
     public boolean residenceDelete(Integer id) {
-        return residenceService.delete(id);
+        boolean success = residenceService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Residence", "Residence deleted successfully.");
+        }
+        return success;
     }
 
     public Integer residenceApartmentCount(Integer residenceId) {
@@ -79,21 +92,33 @@ public class ResidenceController {
     }
 
     public Integer apartmentCreate(Integer residenceId, Integer userId, Integer parking, Integer available,
-                                   String image, String type, String info, Integer area, Integer rentalPrice,
-                                   Integer salePrice, String dateConstructed) {
-        return apartmentService.create(residenceId, userId, parking, available, image, type, info,
+                                   String image, String type, String info, Double area, Double rentalPrice,
+                                   Double salePrice, String dateConstructed) {
+        Integer id = apartmentService.create(residenceId, userId, parking, available, image, type, info,
                                       area, rentalPrice, salePrice, dateConstructed);
+        if (id != null && id > 0) {
+            GlobalNotificationPillManager.created("Apartment", "Apartment created successfully.");
+        }
+        return id;
     }
 
     public boolean apartmentUpdate(Integer id, Integer residenceId, Integer userId, Integer parking, Integer available,
-                                   String image, String type, String info, Integer area, Integer rentalPrice,
-                                   Integer salePrice, String dateConstructed) {
-        return apartmentService.update(id, residenceId, userId, parking, available, image, type, info,
+                                   String image, String type, String info, Double area, Double rentalPrice,
+                                   Double salePrice, String dateConstructed) {
+        boolean success = apartmentService.update(id, residenceId, userId, parking, available, image, type, info,
                                       area, rentalPrice, salePrice, dateConstructed);
+        if (success) {
+            GlobalNotificationPillManager.updated("Apartment", "Apartment updated successfully.");
+        }
+        return success;
     }
 
     public boolean apartmentDelete(Integer id) {
-        return apartmentService.delete(id);
+        boolean success = apartmentService.delete(id);
+        if (success) {
+            GlobalNotificationPillManager.deleted("Apartment", "Apartment deleted successfully.");
+        }
+        return success;
     }
 
     public boolean apartmentMarkAvailable(Integer id) {
