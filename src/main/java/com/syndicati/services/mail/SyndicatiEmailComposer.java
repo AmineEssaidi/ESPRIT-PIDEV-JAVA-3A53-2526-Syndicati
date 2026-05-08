@@ -129,6 +129,24 @@ public final class SyndicatiEmailComposer {
         return wrap(body, footerExtra);
     }
 
+    public static String reclamationConfirmation(String firstName, String reclamationTitle, String description) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Request Received</h2>" +
+            "<p>Hello " + esc(nameOrFallback(firstName)) + ",</p>" +
+            "<p>We have successfully received your reclamation. Our team will review the details and get back to you as soon as possible.</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<h3 style='margin-bottom:15px;color:#ffffff;font-size:20px;letter-spacing:-0.5px;'>" + esc(reclamationTitle) + "</h3>" +
+            "<div style='background:rgba(0,0,0,0.4);padding:25px;border-radius:16px;border:1px solid rgba(255,255,255,0.05);line-height:1.6;color:rgba(255,255,255,0.8);'>" +
+            esc(description).replace("\n", "<br>") +
+            "</div>" +
+            "</div>" +
+            "<p style='font-size:15px;color:rgba(255,255,255,0.7);'>You will receive an email notification for every update or response to this request.</p>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Operations - Support Confirmation Unit</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: REC-CONF-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " - Confirmation Receipt</p>";
+        return wrap(body, footerExtra);
+    }
+
     public static String responseNotification(String firstName, String reclamationTitle, String adminName, String responseTitle, String responseMessage, String responseImage) {
         String body =
             "<h2 style='color:#ff4b5c;'>Resolution Update</h2>" +
@@ -165,6 +183,21 @@ public final class SyndicatiEmailComposer {
             "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Workflow - Status Monitoring Division</p>";
 
         String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: STA-UPD-" + DateTimeFormatter.ofPattern("yyyyMMdd-HHmm").format(LocalDateTime.now()) + " - Status Sync</p>";
+        return wrap(body, footerExtra);
+    }
+
+    public static String genericMessage(String recipientName, String message) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Notification Syndicati</h2>" +
+            "<p>Hello " + esc(nameOrFallback(recipientName)) + ",</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<div style='background:rgba(0,0,0,0.4);padding:25px;border-radius:16px;border:1px solid rgba(255,255,255,0.05);line-height:1.6;color:rgba(255,255,255,0.8);'>" +
+            esc(message).replace("\n", "<br>") +
+            "</div>" +
+            "</div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Neural Network - Advanced Identity Protection</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: GEN-MSG-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " - Secure Protocol</p>";
         return wrap(body, footerExtra);
     }
 

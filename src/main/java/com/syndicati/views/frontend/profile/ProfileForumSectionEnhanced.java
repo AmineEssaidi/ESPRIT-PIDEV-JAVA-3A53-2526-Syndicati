@@ -118,7 +118,7 @@ public class ProfileForumSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
 
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
         card.setPrefHeight(600);
 
         switcherContainer.setPrefHeight(500);
@@ -658,8 +658,8 @@ public class ProfileForumSectionEnhanced {
     private VBox clickableRow(Runnable onClick) {
         VBox item = new VBox(8);
         item.setStyle(
-            "-fx-background-color: rgba(99, 102, 241, 0.05); " +
-            "-fx-border-color: rgba(99, 102, 241, 0.1); " +
+            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
             "-fx-border-width: 1; " +
             "-fx-background-radius: 12; " +
             "-fx-border-radius: 12; " +
@@ -668,8 +668,8 @@ public class ProfileForumSectionEnhanced {
         );
         item.setOnMouseClicked(e -> onClick.run());
         item.setOnMouseEntered(e -> item.setStyle(
-            "-fx-background-color: rgba(99, 102, 241, 0.1); " +
-            "-fx-border-color: rgba(99, 102, 241, 0.2); " +
+            "-fx-background-color: rgba(255, 255, 255, 0.07); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.15); " +
             "-fx-border-width: 1; " +
             "-fx-background-radius: 12; " +
             "-fx-border-radius: 12; " +
@@ -677,8 +677,8 @@ public class ProfileForumSectionEnhanced {
             "-fx-cursor: hand;"
         ));
         item.setOnMouseExited(e -> item.setStyle(
-            "-fx-background-color: rgba(99, 102, 241, 0.05); " +
-            "-fx-border-color: rgba(99, 102, 241, 0.1); " +
+            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
             "-fx-border-width: 1; " +
             "-fx-background-radius: 12; " +
             "-fx-border-radius: 12; " +

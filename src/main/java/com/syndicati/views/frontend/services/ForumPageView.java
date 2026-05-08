@@ -1103,6 +1103,12 @@ public class ForumPageView implements ViewInterface {
             currentHeroImage = loadForumImage(img, "forum_images");
             detailHeroImage.setImage(currentHeroImage);
             detailHeroImage.setVisible(currentHeroImage != null);
+            
+            if (currentHeroImage != null) {
+                currentHeroImage.widthProperty().addListener((obs, o, n) -> refreshHeroViewport());
+                currentHeroImage.heightProperty().addListener((obs, o, n) -> refreshHeroViewport());
+            }
+            
             refreshHeroViewport();
         } else {
             detailHeroImage.setImage(null);

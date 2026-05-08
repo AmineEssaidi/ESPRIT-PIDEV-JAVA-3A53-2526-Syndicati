@@ -376,7 +376,7 @@ public class ProfileView implements ViewInterface {
         VBox card = new VBox(0);
         card.setMaxWidth(1600);
         card.setAlignment(Pos.TOP_CENTER);
-        card.setStyle(shell(34, "rgba(10,10,15,0.90)", 0.16));
+        card.setStyle(shell(34, "#0a0a0c", 0.16));
 
         StackPane banner = new StackPane();
         banner.setMinHeight(180);
@@ -1230,7 +1230,7 @@ public class ProfileView implements ViewInterface {
     private VBox residenceItem(String residence, String unit, String relation, String availability, String parking) {
         VBox row = new VBox(8);
         row.setPadding(new Insets(16));
-        row.setStyle(shell(16, "rgba(255,255,255,0.03)", 0.08));
+        row.setStyle(shell(16, "rgba(255, 255, 255, 0.03)", 0.06));
 
         HBox top = new HBox();
         VBox info = new VBox(4,
@@ -2813,7 +2813,7 @@ public class ProfileView implements ViewInterface {
 
     private String surfaceCard() {
         return tm.isDarkMode()
-            ? "linear-gradient(from 0% 0% to 100% 100%, rgba(10,10,10,0.94) 0%, rgba(14,14,14,0.94) 62%, " + tm.toRgba(tm.getAccentHex(), 0.10) + " 100%)"
+            ? "#0a0a0c"
             : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)";
     }
 

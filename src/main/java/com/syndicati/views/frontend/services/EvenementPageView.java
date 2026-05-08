@@ -150,6 +150,58 @@ public class EvenementPageView implements ViewInterface {
     private final TicketService ticketService = new TicketService();
     private final VoiceService voiceService = new VoiceService();
     
+    /**
+     * Create an "object-fit: cover" ImageView that fills the container,
+     * crops via viewport to preserve aspect ratio, and clips to rounded corners.
+     */
+    private ImageView coverImage(Image image, Region container, double radius) {
+        ImageView iv = new ImageView(image);
+        iv.setSmooth(true);
+        iv.setPreserveRatio(false);
+        iv.fitWidthProperty().bind(container.widthProperty());
+        iv.fitHeightProperty().bind(container.heightProperty());
+
+        // Clip image to rounded container.
+        javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
+        clip.setArcWidth(radius * 2);
+        clip.setArcHeight(radius * 2);
+        clip.widthProperty().bind(container.widthProperty());
+        clip.heightProperty().bind(container.heightProperty());
+        iv.setClip(clip);
+
+        Runnable updateViewport = () -> {
+            double vw = container.getWidth();
+            double vh = container.getHeight();
+            if (vw <= 1 || vh <= 1) return;
+
+            double iw = image.getWidth();
+            double ih = image.getHeight();
+            if (iw <= 1 || ih <= 1) return;
+
+            double viewRatio = vw / vh;
+            double imgRatio = iw / ih;
+
+            if (imgRatio > viewRatio) {
+                // Image is wider -> crop width
+                double newW = ih * viewRatio;
+                double x = (iw - newW) / 2.0;
+                iv.setViewport(new javafx.geometry.Rectangle2D(x, 0, newW, ih));
+            } else {
+                // Image is taller -> crop height
+                double newH = iw / viewRatio;
+                double y = (ih - newH) / 2.0;
+                iv.setViewport(new javafx.geometry.Rectangle2D(0, y, iw, newH));
+            }
+        };
+
+        // Update once and whenever container size or image metadata changes.
+        container.layoutBoundsProperty().addListener((obs, o, n) -> updateViewport.run());
+        image.widthProperty().addListener((obs, o, n) -> updateViewport.run());
+        image.heightProperty().addListener((obs, o, n) -> updateViewport.run());
+        updateViewport.run();
+        return iv;
+    }
+
     // Recommendations Container
     private VBox recommendationsBox;
     private TextField searchField;
@@ -1126,12 +1178,12 @@ public class EvenementPageView implements ViewInterface {
         card.setMinWidth(280);
         card.setMaxWidth(Double.MAX_VALUE);
         card.setStyle(
-            "-fx-background-color: " + tm.toRgba("#1a1a2e", 0.6) + ";" +
+            "-fx-background-color: " + tm.toRgba("#0a0a0c", 0.94) + ";" +
             "-fx-background-radius: 32px;" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.2) + ";" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 32px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 20, 0.15, 0, 8);"
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 20, 0.15, 0, 8);"
         );
         
         // Dynamic clip for card to prevent overflow
@@ -1198,14 +1250,8 @@ public class EvenementPageView implements ViewInterface {
         if (event.getImageEvent() != null && !event.getImageEvent().isEmpty()) {
             try {
                 Image eventImage = loadEventImage(event.getImageEvent());
-                if (eventImage != null) {
-                    ImageView imageView = new ImageView(eventImage);
-                    // Bind to container size so it fills completely
-                    imageView.fitWidthProperty().bind(imageClipContainer.widthProperty());
-                    imageView.fitHeightProperty().bind(imageClipContainer.heightProperty());
-                    imageView.setPreserveRatio(false);
-                    StackPane.setAlignment(imageView, Pos.CENTER);
-                    imageClipContainer.getChildren().add(imageView);
+                if (eventImage != null && !eventImage.isError()) {
+                    imageClipContainer.getChildren().add(coverImage(eventImage, imageClipContainer, 20));
                 }
             } catch (Exception e) {
                 System.err.println("Failed to load event image: " + e.getMessage());
@@ -1314,14 +1360,8 @@ public class EvenementPageView implements ViewInterface {
         if (event.getImageEvent() != null && !event.getImageEvent().isEmpty()) {
             try {
                 Image eventImage = loadEventImage(event.getImageEvent());
-                if (eventImage != null) {
-                    ImageView imageView = new ImageView(eventImage);
-                    // Bind to container size so it fills completely
-                    imageView.fitWidthProperty().bind(detailImageClipContainer.widthProperty());
-                    imageView.fitHeightProperty().bind(detailImageClipContainer.heightProperty());
-                    imageView.setPreserveRatio(false);
-                    StackPane.setAlignment(imageView, Pos.CENTER);
-                    detailImageClipContainer.getChildren().add(imageView);
+                if (eventImage != null && !eventImage.isError()) {
+                    detailImageClipContainer.getChildren().add(coverImage(eventImage, detailImageClipContainer, 16));
                 }
             } catch (Exception e) {
                 System.err.println("Failed to load image: " + e.getMessage());

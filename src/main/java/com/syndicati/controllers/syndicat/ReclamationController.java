@@ -60,11 +60,26 @@ public class ReclamationController {
             GlobalNotificationPillManager.created("Reclamation", "Reclamation created successfully.");
             uploadReclamationPdfToDrive(reclamationById(createdId).orElse(null));
 
+            // Notify creator (confirmation copy)
+            String confirmationHtml = SyndicatiEmailComposer.reclamationConfirmation(
+                user.getFirstName(),
+                titre,
+                description
+            );
+            mailerService.sendHtmlAsync(
+                user.getEmailUser(),
+                "Confirmation: We received your request",
+                confirmationHtml
+            );
+
             // Notify admins and syndics
             String userName = (user.getFirstName() + " " + user.getLastName()).trim();
             List<User> allUsers = userService.listUsers();
             
             for (User recipient : allUsers) {
+                // Don't notify the creator again as an admin
+                if (recipient.getIdUser().equals(user.getIdUser())) continue;
+
                 String role = recipient.getRoleUser();
                 if ("ADMIN".equalsIgnoreCase(role) || "SYNDIC".equalsIgnoreCase(role) || "SUPERADMIN".equalsIgnoreCase(role)) {
                     String html = SyndicatiEmailComposer.reclamationNotification(
@@ -167,21 +182,24 @@ public class ReclamationController {
             GlobalNotificationPillManager.created("Response", "Reclamation response added successfully.");
             uploadReclamationPdfToDrive(reclamation);
 
-            String adminName = (user.getFirstName() + " " + user.getLastName()).trim();
-            String html = SyndicatiEmailComposer.responseNotification(
-                reclamation.getUser().getFirstName(),
-                reclamation.getTitreReclamations(),
-                adminName,
-                titre,
-                message,
-                image
-            );
-            
-            mailerService.sendHtmlAsync(
-                reclamation.getUser().getEmailUser(),
-                "Response to your reclamation: " + reclamation.getTitreReclamations(),
-                html
-            );
+            // Notify the reclamation owner, but only if someone else replied
+            if (!user.getIdUser().equals(reclamation.getUser().getIdUser())) {
+                String responderName = (user.getFirstName() + " " + user.getLastName()).trim();
+                String html = SyndicatiEmailComposer.responseNotification(
+                    reclamation.getUser().getFirstName(),
+                    reclamation.getTitreReclamations(),
+                    responderName,
+                    titre,
+                    message,
+                    image
+                );
+                
+                mailerService.sendHtmlAsync(
+                    reclamation.getUser().getEmailUser(),
+                    "New reply to your reclamation: " + reclamation.getTitreReclamations(),
+                    html
+                );
+            }
         }
         
         return createdId;

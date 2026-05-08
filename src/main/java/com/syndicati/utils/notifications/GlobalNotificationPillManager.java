@@ -299,7 +299,7 @@ public final class GlobalNotificationPillManager {
         return wrapper;
     }
 
-    private enum Kind {
+    public enum Kind {
         SUCCESS("\u2713", ThemeManager.getInstance().getAccentHex(), "rgba(255,255,255,0.12)"),
         INFO("\u2139", ThemeManager.getInstance().getAccentHex(), "rgba(255,255,255,0.12)"),
         WARNING("\u26a0", "#f59e0b", "rgba(245,158,11,0.25)"),

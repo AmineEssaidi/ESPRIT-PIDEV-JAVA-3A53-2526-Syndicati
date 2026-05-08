@@ -10,7 +10,14 @@ import com.syndicati.models.residence.Review;
 import com.syndicati.models.residence.Residence;
 import com.syndicati.services.DatabaseService;
 import com.syndicati.services.events.DataUpdateBus;
+import com.syndicati.controllers.user.user.UserController;
+import com.syndicati.models.user.User;
+import com.syndicati.services.mail.AsyncMailerService;
+import com.syndicati.services.mail.SyndicatiEmailComposer;
+import com.syndicati.services.residence.SmsService;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.image.QRCodeUtil;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import javafx.animation.ScaleTransition;
@@ -59,6 +66,9 @@ public class ResidencePageView implements ViewInterface {
     private final ThemeManager tm = ThemeManager.getInstance();
     private final ResidenceController residenceController = new ResidenceController();
     private final MaintenanceController maintenanceController = new MaintenanceController();
+    private final UserController userController = new UserController();
+    private final AsyncMailerService mailerService = AsyncMailerService.getInstance();
+    private final SmsService smsService = new SmsService();
     private final DatabaseService db = DatabaseService.getInstance();
     private final DataUpdateBus updates = DataUpdateBus.getInstance();
     private AutoCloseable updatesSubscription;
@@ -368,8 +378,10 @@ public class ResidencePageView implements ViewInterface {
             }
         };
 
-        // Update once and whenever container size changes.
+        // Update once and whenever container size or image metadata changes.
         container.layoutBoundsProperty().addListener((obs, o, n) -> updateViewport.run());
+        image.widthProperty().addListener((obs, o, n) -> updateViewport.run());
+        image.heightProperty().addListener((obs, o, n) -> updateViewport.run());
         updateViewport.run();
         return iv;
     }
@@ -902,50 +914,176 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private VBox buildContactSection() {
-        VBox box = new VBox(14);
-        box.setPadding(new Insets(22));
-        box.setStyle(shell(24, "rgba(255,255,255,0.03)", 1.2));
+        VBox box = new VBox(20);
+        box.setPadding(new Insets(32));
+        box.setStyle(
+            "-fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.05), rgba(255,255,255,0.02));" +
+            "-fx-background-radius: 32px;" +
+            "-fx-border-color: rgba(255,255,255,0.12);" +
+            "-fx-border-width: 1.5px;" +
+            "-fx-border-radius: 32px;"
+        );
 
-        HBox row = new HBox(16);
+        HBox row = new HBox(32);
+        row.setAlignment(Pos.TOP_LEFT);
 
-        VBox left = new VBox(10);
+        VBox left = new VBox(16);
         HBox.setHgrow(left, Priority.ALWAYS);
-        left.getChildren().addAll(
-            text("Contacter le proprietaire", 28, true, "#ffffff"),
-            text("Envoyez une demande directe. UI only preview (no network submit).", 14, false, textMuted())
+        
+        Text title = text("Contacter le propriétaire", 32, true, "#ffffff");
+        Text subtitle = text("Envoyez une demande directe à l'hôte pour réserver ou poser des questions.", 15, false, textMuted());
+        subtitle.setWrappingWidth(500);
+
+        left.getChildren().addAll(title, subtitle);
+
+        User currentUser = SessionManager.getInstance().getCurrentUser();
+        String defaultName = currentUser != null ? (currentUser.getFirstName() + " " + currentUser.getLastName()) : "";
+        String defaultEmail = currentUser != null ? currentUser.getEmailUser() : "";
+
+        TextField nameInput = input("Votre nom complet");
+        nameInput.setText(defaultName);
+        TextField emailInput = input("Votre email");
+        emailInput.setText(defaultEmail);
+        
+        TextArea msgInput = new TextArea();
+        msgInput.setPromptText("Écrivez votre message ici...");
+        msgInput.setPrefRowCount(4);
+        msgInput.setWrapText(true);
+        msgInput.setStyle(
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: " + tm.getTextColor() + ";" +
+            "-fx-prompt-text-fill: " + textMuted() + ";" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-color: " + borderSoft() + ";" +
+            "-fx-border-radius: 12px;" +
+            "-fx-padding: 8;"
         );
 
-        TextField name = input("Votre nom complet");
-        TextField email = input("Votre email");
-        TextArea msg = new TextArea();
-        msg.setPromptText("Votre message (optionnel)");
-        msg.setPrefRowCount(3);
-        msg.setStyle(name.getStyle());
+        Button sendBtn = mainBtn("Envoyer le message");
+        sendBtn.setPrefHeight(50);
+        sendBtn.setMaxWidth(Double.MAX_VALUE);
+        
+        sendBtn.setOnAction(e -> {
+            String n = nameInput.getText().trim();
+            String em = emailInput.getText().trim();
+            String m = msgInput.getText().trim();
 
-        Button send = mainBtn("Envoyer le message");
-        send.setMaxWidth(Double.MAX_VALUE);
+            if (n.isEmpty() || em.isEmpty() || m.isEmpty()) {
+                GlobalNotificationPillManager.error("Contact", "Veuillez remplir tous les champs.");
+                return;
+            }
 
-        left.getChildren().addAll(name, email, msg, send);
+            if (selectedApartment != null && selectedApartment.getIdUser() != null) {
+                userController.userById(selectedApartment.getIdUser()).ifPresentOrElse(owner -> {
+                    // Send to owner
+                    String ownerSubject = "Nouvelle demande pour votre appartement";
+                    String ownerBody = SyndicatiEmailComposer.genericMessage(
+                        owner.getFirstName(),
+                        "Vous avez reçu une nouvelle demande de " + n + " (" + em + ") pour votre appartement.\n\nMessage:\n" + m
+                    );
+                    mailerService.sendHtmlAsync(owner.getEmailUser(), ownerSubject, ownerBody);
 
-        VBox right = new VBox(10);
+                    // Send copy to sender
+                    String senderSubject = "Copie de votre demande - Syndicati";
+                    String senderBody = SyndicatiEmailComposer.genericMessage(
+                        n,
+                        "Ceci est une copie de votre message envoyé au propriétaire.\n\nVotre message:\n" + m
+                    );
+                    mailerService.sendHtmlAsync(em, senderSubject, senderBody);
+
+                    GlobalNotificationPillManager.show("Message Envoyé", "Votre message a été transmis au propriétaire. Une copie vous a été envoyée.", GlobalNotificationPillManager.Kind.SUCCESS);
+                    msgInput.clear();
+                }, () -> {
+                    GlobalNotificationPillManager.error("Contact", "Impossible de trouver les coordonnées du propriétaire.");
+                });
+            }
+        });
+
+        left.getChildren().addAll(nameInput, emailInput, msgInput, sendBtn);
+
+        VBox right = new VBox(20);
         right.setAlignment(Pos.TOP_CENTER);
-        right.setPrefWidth(260);
+        right.setPrefWidth(280);
+        right.setPadding(new Insets(10, 0, 0, 0));
 
-        StackPane qr = new StackPane(text("QR", 34, true, tm.getTextColor()));
-        qr.setPrefSize(180, 180);
-        qr.setStyle(
-            "-fx-background-color: white;" +
-            "-fx-background-radius: 16px;"
+        StackPane qrFrame = new StackPane();
+        qrFrame.setPrefSize(220, 220);
+        qrFrame.setMaxSize(220, 220);
+        qrFrame.setStyle(
+            "-fx-background-color: " + (tm.isDarkMode() ? "#f8fafc" : "white") + ";" +
+            "-fx-background-radius: 24px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 30, 0, 0, 10);" +
+            "-fx-padding: 20;"
         );
 
-        right.getChildren().addAll(
-            qr,
-            text("Scannez pour envoyer un SMS", 12, false, textSoft()),
-            mainBtn("Envoyer demande via SMS")
+        // Generate QR Code for SMS
+        ImageView qrView = new ImageView();
+        if (selectedApartment != null && selectedApartment.getIdUser() != null) {
+            userController.userById(selectedApartment.getIdUser()).ifPresent(owner -> {
+                String phone = owner.getPhone() != null ? owner.getPhone() : "+21600000000";
+                String smsUri = "sms:" + phone + "?body=Bonjour, je vous contacte à propos de votre appartement sur Syndicati.";
+                Image qrImg = QRCodeUtil.generateQRCode(smsUri, 180, 180);
+                if (qrImg != null) {
+                    qrView.setImage(qrImg);
+                }
+            });
+        }
+        qrFrame.getChildren().add(qrView);
+
+        Text qrHint = text("Scannez pour envoyer un SMS", 13, true, "#ffffff");
+        Text qrSub = text("Contact rapide via mobile", 11, false, textMuted());
+
+        Button smsBtn = new Button("Envoyer via SMS");
+        smsBtn.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.08);" +
+            "-fx-text-fill: white;" +
+            "-fx-background-radius: 14px;" +
+            "-fx-border-color: rgba(255,255,255,0.15);" +
+            "-fx-border-radius: 14px;" +
+            "-fx-padding: 10 24 10 24;" +
+            "-fx-font-weight: bold;" +
+            "-fx-cursor: hand;"
         );
+        smsBtn.setMaxWidth(200);
+
+        smsBtn.setOnAction(e -> {
+            if (selectedApartment != null && selectedApartment.getIdUser() != null) {
+                userController.userById(selectedApartment.getIdUser()).ifPresentOrElse(owner -> {
+                    String phone = owner.getPhone() != null ? owner.getPhone() : "";
+                    if (phone.isEmpty()) {
+                        GlobalNotificationPillManager.error("SMS", "Le propriétaire n'a pas de numéro de téléphone.");
+                        return;
+                    }
+                    
+                    String msg = "Bonjour " + owner.getFirstName() + ", je suis intéressé par votre appartement sur Syndicati.";
+                    smsService.sendSmsAsync(phone, msg).thenAccept(resp -> {
+                        javafx.application.Platform.runLater(() -> {
+                            if (resp.contains("Error")) {
+                                GlobalNotificationPillManager.error("SMS", "Échec de l'envoi du SMS.");
+                            } else {
+                                GlobalNotificationPillManager.show("SMS Envoyé", "Une notification SMS a été envoyée au propriétaire.", GlobalNotificationPillManager.Kind.SUCCESS);
+                            }
+                        });
+                    });
+                }, () -> GlobalNotificationPillManager.error("SMS", "Propriétaire introuvable."));
+            }
+        });
+
+        right.getChildren().addAll(qrFrame, new VBox(4, qrHint, qrSub) {{ setAlignment(Pos.CENTER); }}, smsBtn);
 
         row.getChildren().addAll(left, right);
         box.getChildren().add(row);
+        
+        // Simple entrance animation
+        box.setOpacity(0);
+        box.setTranslateY(20);
+        javafx.animation.FadeTransition ft = new javafx.animation.FadeTransition(Duration.millis(800), box);
+        ft.setToValue(1);
+        javafx.animation.TranslateTransition tt = new javafx.animation.TranslateTransition(Duration.millis(800), box);
+        tt.setToY(0);
+        new javafx.animation.ParallelTransition(ft, tt).play();
+
         return box;
     }
 

@@ -73,7 +73,7 @@ public class ProfileEventsSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
         
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
         card.setPrefHeight(600);
         
         // Switcher container
@@ -373,8 +373,8 @@ public class ProfileEventsSectionEnhanced {
         Evenement event = entry.event();
         VBox item = new VBox(8);
         item.setStyle(
-            "-fx-background-color: rgba(99, 102, 241, 0.05); " +
-            "-fx-border-color: rgba(99, 102, 241, 0.1); " +
+            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
             "-fx-border-width: 1; " +
             "-fx-background-radius: 12; " +
             "-fx-border-radius: 12; " +
@@ -385,8 +385,8 @@ public class ProfileEventsSectionEnhanced {
         
         // Hover effect
         item.setOnMouseEntered(e -> item.setStyle(
-            "-fx-background-color: rgba(99, 102, 241, 0.1); " +
-            "-fx-border-color: rgba(99, 102, 241, 0.2); " +
+            "-fx-background-color: rgba(255, 255, 255, 0.07); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.15); " +
             "-fx-border-width: 1; " +
             "-fx-background-radius: 12; " +
             "-fx-border-radius: 12; " +
@@ -394,8 +394,8 @@ public class ProfileEventsSectionEnhanced {
             "-fx-cursor: hand;"
         ));
         item.setOnMouseExited(e -> item.setStyle(
-            "-fx-background-color: rgba(99, 102, 241, 0.05); " +
-            "-fx-border-color: rgba(99, 102, 241, 0.1); " +
+            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
+            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
             "-fx-border-width: 1; " +
             "-fx-background-radius: 12; " +
             "-fx-border-radius: 12; " +

@@ -48,7 +48,7 @@ public class ProfileAccountSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
         
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: rgba(10,10,15,0.85); -fx-border-color: rgba(60,60,80,0.5); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
         card.setPrefHeight(600);
         
         // Switcher container
@@ -110,7 +110,7 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createAccountInfoCard() {
         VBox card = new VBox(12);
-        card.setStyle("-fx-background-color: rgba(10,10,15,0.80); -fx-border-color: rgba(60,60,80,0.4); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.08); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
         
         Label cardTitle = new Label("Account Information");
         cardTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
@@ -136,7 +136,7 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createOnboardingCard() {
         VBox card = new VBox(12);
-        card.setStyle("-fx-background-color: rgba(10,10,15,0.80); -fx-border-color: rgba(60,60,80,0.4); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.08); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
         
         Label cardTitle = new Label("✓ Onboarding Choices");
         cardTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));

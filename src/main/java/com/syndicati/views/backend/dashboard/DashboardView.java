@@ -2523,7 +2523,8 @@ public class DashboardView implements ViewInterface {
                             try {
                                 ImageKitConfig cfg = ImageKitConfig.fromEnv();
                                 ImageKitStorageService svc = new ImageKitStorageService(cfg);
-                                ImageKitUploadResult res = svc.uploadFile(selected, "dashboard_assets");
+                                String ikFolder = getImageKitFolderForEntity(entityLabel);
+                                ImageKitUploadResult res = svc.uploadFile(selected, ikFolder);
                                 javafx.application.Platform.runLater(() -> {
                                     urlField.setText(res.url());
                                     uploadBtn.setText("Change");
@@ -3926,6 +3927,21 @@ public class DashboardView implements ViewInterface {
         btn.setCursor(Cursor.HAND);
         btn.setStyle("-fx-background-color:rgba(255,255,255,0.05);-fx-text-fill:white;-fx-background-radius:6;-fx-padding:2 6;-fx-font-size:10;");
         return btn;
+    }
+
+    private String getImageKitFolderForEntity(String entityLabel) {
+        if (entityLabel == null) return "/syndicati/dashboard_assets";
+        String normalized = entityLabel.trim().toLowerCase();
+        return switch (normalized) {
+            case "publication" -> "/syndicati/forum_images";
+            case "comment", "commentaire" -> "/syndicati/commentaire_images";
+            case "reclamation", "reponse" -> "/syndicati/reclamation_images";
+            case "evenement", "event" -> "/syndicati/event_images";
+            case "residence" -> "/syndicati/residence_images";
+            case "appartement", "apartment" -> "/syndicati/apartment_images";
+            case "user", "profile" -> "/syndicati/profile_images";
+            default -> "/syndicati/dashboard_assets";
+        };
     }
 }
 
