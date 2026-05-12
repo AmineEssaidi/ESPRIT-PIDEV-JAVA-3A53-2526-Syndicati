@@ -1611,7 +1611,8 @@ public class EvenementPageView implements ViewInterface {
         noteField.setPrefRowCount(3);
         noteField.setPromptText("Anything we should know?");
         noteField.setStyle(
-            "-fx-control-inner-background: " + tm.toRgba("ffffff", 0.05) + ";" +
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
+            "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-font-size: 12;" +
             "-fx-font-family: '" + MainApplication.getInstance().getLightFontFamily() + "';" +
             "-fx-text-fill: white;" +
@@ -1619,6 +1620,7 @@ public class EvenementPageView implements ViewInterface {
             "-fx-border-color: " + tm.toRgba("ffffff", 0.1) + ";" +
             "-fx-border-width: 1;" +
             "-fx-border-radius: 12;" +
+            "-fx-background-radius: 12;" +
             "-fx-focus-color: " + tm.getAccentHex() + ";"
         );
         
@@ -1712,7 +1714,8 @@ public class EvenementPageView implements ViewInterface {
         editDescField.setWrapText(true);
         editDescField.setPrefRowCount(3);
         editDescField.setStyle(
-            "-fx-control-inner-background: " + tm.toRgba("ffffff", 0.05) + ";" +
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
+            "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-font-size: 12;" +
             "-fx-font-family: '" + MainApplication.getInstance().getLightFontFamily() + "';" +
             "-fx-text-fill: white;" +
@@ -1720,6 +1723,7 @@ public class EvenementPageView implements ViewInterface {
             "-fx-border-color: " + tm.toRgba("ffffff", 0.1) + ";" +
             "-fx-border-width: 1;" +
             "-fx-border-radius: 12;" +
+            "-fx-background-radius: 12;" +
             "-fx-focus-color: " + tm.getAccentHex() + ";"
         );
         
@@ -1729,10 +1733,16 @@ public class EvenementPageView implements ViewInterface {
             editDatePicker.setValue(event.getDateEvent().toLocalDate());
         }
         editDatePicker.setStyle(
-            "-fx-background-color: " + tm.toRgba("ffffff", 0.05) + ";" +
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
+            "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-border-color: " + tm.toRgba("ffffff", 0.1) + ";" +
             "-fx-border-radius: 12;" +
-            "-fx-padding: 10;"
+            "-fx-padding: 2 4 2 4;"
+        );
+        editDatePicker.getEditor().setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: white;" +
+            "-fx-font-size: 12px;"
         );
         
         ComboBox<String> editTypeCombo = new ComboBox<>();
@@ -2047,6 +2057,7 @@ public class EvenementPageView implements ViewInterface {
             field.setText(initialValue);
         }
         field.setStyle(
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
             "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
@@ -2054,7 +2065,8 @@ public class EvenementPageView implements ViewInterface {
             "-fx-border-radius: 16px;" +
             "-fx-text-fill: " + tm.getTextColor() + ";" +
             "-fx-padding: 10 12 10 12;" +
-            "-fx-font-size: 12px;"
+            "-fx-font-size: 12px;" +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.3);"
         );
         return field;
     }
@@ -2065,6 +2077,7 @@ public class EvenementPageView implements ViewInterface {
         area.setPrefRowCount(4);
         area.setWrapText(true);
         area.setStyle(
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
             "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
@@ -2072,7 +2085,8 @@ public class EvenementPageView implements ViewInterface {
             "-fx-border-radius: 16px;" +
             "-fx-text-fill: " + tm.getTextColor() + ";" +
             "-fx-padding: 10 12 10 12;" +
-            "-fx-font-size: 12px;"
+            "-fx-font-size: 12px;" +
+            "-fx-prompt-text-fill: rgba(255,255,255,0.3);"
         );
         return area;
     }
@@ -2080,13 +2094,19 @@ public class EvenementPageView implements ViewInterface {
     private DatePicker createDatePicker() {
         DatePicker picker = new DatePicker();
         picker.setStyle(
+            "-fx-control-inner-background: " + surfaceSoft() + ";" +
             "-fx-background-color: " + surfaceSoft() + ";" +
             "-fx-border-color: " + borderSoft() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-background-radius: 16px;" +
             "-fx-border-radius: 16px;" +
             "-fx-text-fill: " + tm.getTextColor() + ";" +
-            "-fx-padding: 10 12 10 12;"
+            "-fx-padding: 2 4 2 4;"
+        );
+        picker.getEditor().setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: " + tm.getTextColor() + ";" +
+            "-fx-font-size: 12px;"
         );
         picker.setValue(java.time.LocalDate.now().plusDays(7));
         return picker;

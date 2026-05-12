@@ -192,29 +192,25 @@ public class MainApplication extends Application {
                         Thread.startVirtualThread(() -> {
                             try {
                                 com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
-                                recoveryView.setProgress(0.4, "Restoring profile...");
+                                recoveryView.setProgress(0.18, "Restoring profile...");
                                 sm.setCurrentProfile(new com.syndicati.controllers.user.profile.ProfileController().profileByUserId(recoveryUser.getIdUser()).orElse(null));
                                 
-                                recoveryView.setProgress(0.8, "Connecting...");
+                                recoveryView.setProgress(0.48, "Syncing session...");
                                 com.syndicati.controllers.user.relationship.UserRelationshipController rc = new com.syndicati.controllers.user.relationship.UserRelationshipController();
-                                sm.setCircleData(rc.findFriends(recoveryUser, 24), rc.findPendingRequestsFor(recoveryUser), rc.countFriends(recoveryUser), rc.countPendingRequests(recoveryUser));
+                                sm.setCircleData(rc.findFriends(recoveryUser, 12), java.util.List.of(), 0, 0);
                                 
                                 // CRITICAL: Set user and update UI before finalizing progress
                                 sm.setCurrentUser(recoveryUser);
-                                // Refresh navigation managers with the existing user
-                                com.syndicati.utils.navigation.NavigationManager nm = com.syndicati.utils.navigation.NavigationManager.getInstance();
-                                nm.warmup();
-                                
-                                // Give warmup a moment to fetch profile data from DB
-                                Thread.sleep(1000);
                                 
                                 recoveryView.updateUser(recoveryUser);
                                 
-                                // CRITICAL: One-time pre-load of heavy views during session recovery
-                                nm.initializeHeavyViews();
-                                
-                                recoveryView.setProgress(0.8, com.syndicati.utils.localization.LocalizationManager.getInstance().get("warming_workspace"));
-                                Thread.sleep(800);
+                                recoveryView.setProgress(0.78, "Preparing workspace...");
+                                Thread.startVirtualThread(() -> {
+                                    try {
+                                        com.syndicati.utils.navigation.NavigationManager.getInstance().warmup();
+                                    } catch (Exception ignored) {}
+                                });
+
                                 recoveryView.setProgress(1.0, com.syndicati.utils.localization.LocalizationManager.getInstance().get("ready_to_enter"));
                             } catch (Exception e) {
                                 javafx.application.Platform.runLater(() -> primaryStage.getScene().setRoot(loginView.getRoot()));
@@ -396,22 +392,8 @@ public class MainApplication extends Application {
             // Use the new Unified Recovery View for a premium transition
             com.syndicati.views.frontend.auth.SessionRecoveryView recoveryView = new com.syndicati.views.frontend.auth.SessionRecoveryView();
             
-            // IMMEDIATELY start warm-starting the LandingPageView as soon as the recovery screen appears.
-            javafx.application.Platform.runLater(() -> {
-                if (landingPageView == null) {
-                    System.out.println("[INFO] Immediate warm-start of LandingPageView initiated...");
-                    landingPageView = new com.syndicati.views.frontend.home.LandingPageView();
-                    
-                    // PRE-INITIALIZE Forum and Events views during the idle intro period
-                    // This moves their heavy UI construction off the navigation path.
-                    com.syndicati.utils.navigation.NavigationManager nm = com.syndicati.utils.navigation.NavigationManager.getInstance();
-                    com.syndicati.interfaces.ViewInterface forumView = nm.getView("forum");
-                    com.syndicati.interfaces.ViewInterface eventsView = nm.getView("events");
-                    
-                    // Trigger early data hydration so they are ready immediately
-                    if (forumView != null) forumView.loadDataAsync();
-                    if (eventsView != null) eventsView.loadDataAsync();
-                }
+            Thread.startVirtualThread(() -> {
+                try { com.syndicati.services.DatabaseService.getInstance().isDatabaseAvailable(); } catch (Exception ignored) {}
             });
 
             recoveryView.setOnGoHome(() -> {
@@ -437,15 +419,25 @@ public class MainApplication extends Application {
 
             primaryStage.getScene().setRoot(recoveryView.getRoot());
             
-            // Background sync (ensure profile and metadata are warm in memory)
+            // Lightweight background sync. Heavy view construction is deferred until after entry.
             Thread.startVirtualThread(() -> {
                 try {
-                    // Full warmup orchestration (data + views) while recovery cinematic is displayed.
-                    com.syndicati.services.warmup.WarmupOrchestrator orchestrator = new com.syndicati.services.warmup.WarmupOrchestrator();
-                    orchestrator.runFullWarmup((p, status) -> recoveryView.setProgress(p, status));
-
+                    recoveryView.setProgress(0.25, "Restoring session...");
                     User user = SessionManager.getInstance().getCurrentUser();
+                    if (user != null) {
+                        com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
+                        if (!sm.isProfileFresh()) {
+                            new com.syndicati.controllers.user.profile.ProfileController()
+                                .findOneByUserId(user.getIdUser())
+                                .ifPresent(sm::setCurrentProfile);
+                        }
+                    }
+                    recoveryView.setProgress(0.75, "Preparing workspace...");
                     recoveryView.updateUser(user);
+                    recoveryView.setProgress(1.0, com.syndicati.utils.localization.LocalizationManager.getInstance().get("ready_to_enter"));
+                    Thread.startVirtualThread(() -> {
+                        try { com.syndicati.utils.navigation.NavigationManager.getInstance().warmup(); } catch (Exception ignored) {}
+                    });
                 } catch (Exception e) {
                     System.err.println("[ERROR] Preloading failed: " + e.getMessage());
                     javafx.application.Platform.runLater(() -> showLandingPage(currentWidth, currentHeight, currentX, currentY, wasMaximized, false));
@@ -982,5 +974,3 @@ public class MainApplication extends Application {
         launch(args);
     }
 }
-
-

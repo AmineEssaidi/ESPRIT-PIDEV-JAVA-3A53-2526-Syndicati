@@ -42,6 +42,15 @@ public final class MemoryPressureUtil {
         try { System.gc(); } catch (Exception ignored) {}
     }
 
+    public static void onNavigationSwap() {
+        try { DatabaseService.getInstance().sweepExpiredCache(); } catch (Exception ignored) {}
+        try { ImageLoaderUtil.trimCache(10); } catch (Exception ignored) {}
+
+        if (isHeapUnderPressure()) {
+            onViewDisposed();
+        }
+    }
+
     private static boolean isHeapUnderPressure() {
         try {
             MemoryMXBean mx = ManagementFactory.getMemoryMXBean();

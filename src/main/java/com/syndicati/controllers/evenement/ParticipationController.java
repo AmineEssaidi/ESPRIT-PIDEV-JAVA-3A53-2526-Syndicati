@@ -47,6 +47,20 @@ public class ParticipationController {
         Integer id = participationService.create(event, user, nbAccompagnants, commentaire);
         if (id != null && id > 0) {
             GlobalNotificationPillManager.created("Participation", "Participation created successfully.");
+            
+            // Send email confirmation to participant
+            if (user != null && user.getEmailUser() != null && !user.getEmailUser().isBlank() && event != null) {
+                try {
+                    com.syndicati.services.mail.AsyncMailerService mailer = com.syndicati.services.mail.AsyncMailerService.getInstance();
+                    String dateStr = event.getDateEvent() != null ? event.getDateEvent().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : "To be determined";
+                    String emailContent = com.syndicati.services.mail.SyndicatiEmailComposer.eventParticipationConfirmation(
+                        user.getFirstName(), event.getTitreEvent(), dateStr, event.getLieuEvent()
+                    );
+                    mailer.sendHtmlAsync(user.getEmailUser(), "Syndicati: Participation Confirmed!", emailContent);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
         return id;
     }

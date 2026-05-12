@@ -70,6 +70,7 @@ final class DashboardEvenementSection {
             String image = view.safe(e.getImageEvent());
 
             baseRows.add(new String[]{
+                String.valueOf(e.getIdEvent()),
                 view.safe(e.getTitreEvent()),
                 view.safe(e.getTypeEvent()),
                 description,
@@ -163,9 +164,9 @@ final class DashboardEvenementSection {
             }
 
             boolean matches = switch (scope) {
-                case "title"  -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
-                case "type"   -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
-                case "date"   -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "title"  -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "type"   -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "date"   -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(scopedTerm);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {
@@ -192,7 +193,7 @@ final class DashboardEvenementSection {
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"No events found", "-", "-", "-", "-", "-", "-", "-"}};
+            visibleRows = new String[][]{{"No events found", "-", "-", "-", "-", "-", "-", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
@@ -252,6 +253,7 @@ final class DashboardEvenementSection {
             String dateStr = p.getDateParticipation() != null ? p.getDateParticipation().format(formatter) : "TBD";
 
             baseRows.add(new String[]{
+                String.valueOf(p.getIdParticipation()),
                 eventTitle,
                 userName.trim(),
                 seats,
@@ -342,9 +344,9 @@ final class DashboardEvenementSection {
             }
 
             boolean matches = switch (scope) {
-                case "event"   -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
-                case "resident" -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
-                case "status"  -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "event"   -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "resident" -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "status"  -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(scopedTerm);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {
@@ -371,7 +373,7 @@ final class DashboardEvenementSection {
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"No participations found", "-", "-", "-", "-"}};
+            visibleRows = new String[][]{{"No participations found", "-", "-", "-", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }

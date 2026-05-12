@@ -78,6 +78,7 @@ final class DashboardUsersSection {
             String status = u.isDisabled() ? "Disabled" : (u.isVerified() ? "Active" : "Pending");
 
             baseRows.add(new String[]{
+                String.valueOf(u.getIdUser()),
                 fullName,
                 view.safe(u.getEmailUser()),
                 view.safe(u.getRoleUser()),
@@ -174,11 +175,11 @@ final class DashboardUsersSection {
 
             boolean matches;
             matches = switch (scope) {
-                case "name"     -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
-                case "email"    -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
-                case "role"     -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
-                case "verified" -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
-                case "status"   -> row[4] != null && row[4].toLowerCase().contains(scopedTerm);
+                case "name"     -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "email"    -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "role"     -> row.length > 3 && row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "verified" -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(scopedTerm);
+                case "status"   -> row.length > 5 && row[5] != null && row[5].toLowerCase().contains(scopedTerm);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {
@@ -205,7 +206,7 @@ final class DashboardUsersSection {
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"No users found", "-", "-", "-", "-"}};
+            visibleRows = new String[][]{{"No users found", "-", "-", "-", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
@@ -299,6 +300,7 @@ final class DashboardUsersSection {
         List<String[]> baseRows = new ArrayList<>();
         for (Profile p : profiles) {
             baseRows.add(new String[]{
+                String.valueOf(p.getIdProfile()),
                 view.safe(p.getLocale()),
                 p.getTheme() == null ? "-" : String.valueOf(p.getTheme()),
                 p.getTimezone() == null ? "-" : String.valueOf(p.getTimezone()),
@@ -392,6 +394,7 @@ final class DashboardUsersSection {
         List<String[]> baseRows = new ArrayList<>();
         for (Onboarding o : onboardings) {
             baseRows.add(new String[]{
+                String.valueOf(o.getIdOnboarding()),
                 String.valueOf(o.getStep()),
                 o.isCompleted() ? "Yes" : "No",
                 view.safe(o.getSelectedLocale()),
@@ -485,10 +488,10 @@ final class DashboardUsersSection {
 
             boolean matches;
             matches = switch (scope) {
-                case "locale"   -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
-                case "theme"    -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
-                case "timezone" -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
-                case "avatar"   -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "locale"   -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "theme"    -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "timezone" -> row.length > 3 && row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "avatar"   -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(scopedTerm);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {
@@ -515,7 +518,7 @@ final class DashboardUsersSection {
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"-", "-", "No profiles found", "-"}};
+            visibleRows = new String[][]{{"-", "-", "No profiles found", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
@@ -554,10 +557,10 @@ final class DashboardUsersSection {
 
             boolean matches;
             matches = switch (scope) {
-                case "step"      -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
-                case "completed" -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
-                case "locale"    -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
-                case "theme"     -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "step"      -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "completed" -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "locale"    -> row.length > 3 && row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "theme"     -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(scopedTerm);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {
@@ -584,7 +587,7 @@ final class DashboardUsersSection {
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"1", "No", "No onboarding found", "-", "-"}};
+            visibleRows = new String[][]{{"1", "No", "No onboarding found", "-", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }

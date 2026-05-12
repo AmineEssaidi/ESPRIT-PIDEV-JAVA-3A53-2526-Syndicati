@@ -9,6 +9,10 @@ import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.models.residence.Residence;
 import com.syndicati.models.residence.Apartment;
+import com.syndicati.models.residence.Maintenance;
+import com.syndicati.controllers.residence.ResidenceController;
+import com.syndicati.controllers.residence.MaintenanceController;
+import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import javafx.animation.PauseTransition;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -1818,6 +1822,128 @@ public class DashboardView implements ViewInterface {
                 viewBtn.setOnAction(ignored -> switchToModalFace(faceContainer, spec, entityLabel, "view", cols, rowData));
                 rowActions.getChildren().add(viewBtn);
 
+                if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
+                    Button aiGenRowBtn = pillAction("✨ AI", true);
+                    aiGenRowBtn.setOnAction(ignored -> {
+                        aiGenRowBtn.setDisable(true);
+                        aiGenRowBtn.setText("...");
+                        
+                        Integer maintId = extractId(rowData[0]);
+                        Integer aptId = extractId(rowData[1]);
+                        
+                        if (maintId != null && aptId != null) {
+                            new Thread(() -> {
+                                try {
+                                    MaintenanceController mCtrl = new MaintenanceController();
+                                    ResidenceController rCtrl = new ResidenceController();
+                                    Apartment aptObj = rCtrl.apartmentById(aptId).orElse(null);
+                                    Maintenance maintObj = mCtrl.maintenanceById(maintId).orElse(null);
+                                    
+                                    if (aptObj != null && maintObj != null) {
+                                        String rec = mCtrl.generateMistralRecommendation(aptObj, maintObj);
+                                        if (mCtrl.maintenanceUpdate(maintId, 
+                                                maintObj.getGeneralCondition(), maintObj.getPlumbingCondition(),
+                                                maintObj.getElectricalCondition(), maintObj.getHeatingCondition(),
+                                                maintObj.getDescription(), rec)) {
+                                            
+                                            javafx.application.Platform.runLater(() -> {
+                                                String finalRec = (rec == null || rec.isBlank() || "null".equalsIgnoreCase(rec)) 
+                                                    ? "Mistral AI returned no data. Please retry." : rec;
+
+                                                // Column index for AI Recommendation in Maintenance table is 7 (ID=0, Apt=1, G=2, P=3, E=4, H=5, D=6, AI=7)
+                                                if (rowData.length > 7) {
+                                                    rowData[7] = finalRec;
+                                                    refreshTable[0].run();
+                                                }
+                                                GlobalNotificationPillManager.show("AI Updated", "Maintenance recommendation regenerated successfully.", GlobalNotificationPillManager.Kind.SUCCESS);
+                                                aiGenRowBtn.setDisable(false);
+                                                aiGenRowBtn.setText("✨ AI");
+                                            });
+                                        }
+                                    }
+                                } catch (Exception ex) {
+                                    ex.printStackTrace();
+                                    javafx.application.Platform.runLater(() -> {
+                                        aiGenRowBtn.setDisable(false);
+                                        aiGenRowBtn.setText("✨ AI");
+                                        GlobalNotificationPillManager.error("AI Error", "Failed to regenerate recommendation.");
+                                    });
+                                }
+                            }).start();
+                        } else {
+                             aiGenRowBtn.setDisable(false);
+                             aiGenRowBtn.setText("✨ AI");
+                        }
+                    });
+                    rowActions.getChildren().add(aiGenRowBtn);
+                }
+
+                if ("Appartement".equalsIgnoreCase(entityLabel)) {
+                    Button aiAptBtn = pillAction("🛠️ AI", true);
+                    aiAptBtn.setOnAction(ignored -> {
+                        aiAptBtn.setDisable(true);
+                        aiAptBtn.setText("...");
+                        
+                        Integer aptId = extractId(rowData[0]);
+                        if (aptId != null) {
+                            new Thread(() -> {
+                                try {
+                                    MaintenanceController mCtrl = new MaintenanceController();
+                                    ResidenceController rCtrl = new ResidenceController();
+                                    Apartment aptObj = rCtrl.apartmentById(aptId).orElse(null);
+                                    
+                                    if (aptObj != null) {
+                                        Maintenance maintObj = mCtrl.latestMaintenance(aptId).orElse(null);
+                                        if (maintObj == null) {
+                                            mCtrl.maintenanceCreate(aptId, "Unknown", "Unknown", "Unknown", "Unknown", "Automatic AI Initial Scan", "Pending analysis...");
+                                            maintObj = mCtrl.latestMaintenance(aptId).orElse(null);
+                                        }
+                                        
+                                        if (maintObj != null) {
+                                            String rec = mCtrl.generateMistralRecommendation(aptObj, maintObj);
+                                            mCtrl.maintenanceUpdate(maintObj.getIdMaintenance(), 
+                                                maintObj.getGeneralCondition(), maintObj.getPlumbingCondition(),
+                                                maintObj.getElectricalCondition(), maintObj.getHeatingCondition(),
+                                                maintObj.getDescription(), rec);
+                                            
+                                            javafx.application.Platform.runLater(() -> {
+                                                String finalRec = (rec == null || rec.isBlank() || "null".equalsIgnoreCase(rec)) 
+                                                    ? "Mistral AI returned no data. Please retry." : rec;
+
+                                                // Update table cell live if it's the Maintenance table (idx 7)
+                                                if (rowData.length == 8) {
+                                                    rowData[7] = finalRec;
+                                                    refreshTable[0].run();
+                                                }
+                                                GlobalNotificationPillManager.show("AI Analysis", "Mistral AI generated insights for Apartment " + aptId, GlobalNotificationPillManager.Kind.SUCCESS);
+                                                aiAptBtn.setDisable(false);
+                                                aiAptBtn.setText("🛠️ AI");
+                                                
+                                                // Also update cell if it's the Appartement table (idx 11)
+                                                if (rowData.length == 12) {
+                                                    rowData[11] = finalRec;
+                                                    refreshTable[0].run();
+                                                }
+                                            });
+                                        }
+                                    }
+                                } catch (Exception ex) {
+                                    ex.printStackTrace();
+                                    javafx.application.Platform.runLater(() -> {
+                                        aiAptBtn.setDisable(false);
+                                        aiAptBtn.setText("🛠️ AI");
+                                        GlobalNotificationPillManager.error("AI Error", "Failed to generate apartment insights: " + ex.getMessage());
+                                    });
+                                }
+                            }).start();
+                        } else {
+                            aiAptBtn.setDisable(false);
+                            aiAptBtn.setText("🛠️ AI");
+                        }
+                    });
+                    rowActions.getChildren().add(aiAptBtn);
+                }
+
                 tbl.add(rowActions, cols.length, (r - fromIndex) + 1);
             }
 
@@ -2194,12 +2320,13 @@ public class DashboardView implements ViewInterface {
     }
 
     private VBox publicationInsightCard(String[] rowData) {
-        String imagePath = rowData != null && rowData.length > 3 ? rowData[3] : "";
-        int likes = parseIntCell(rowData, 5);
-        int dislikes = parseIntCell(rowData, 6);
-        int bookmarks = parseIntCell(rowData, 7);
-        int reports = parseIntCell(rowData, 8);
-        String emojiSummary = rowData != null && rowData.length > 9 ? rowData[9] : "None";
+        // Since we added an ID at index 0, all data indices are shifted by 1
+        String imagePath = rowData != null && rowData.length > 4 ? rowData[4] : "";
+        int likes = parseIntCell(rowData, 6);
+        int dislikes = parseIntCell(rowData, 7);
+        int bookmarks = parseIntCell(rowData, 8);
+        int reports = parseIntCell(rowData, 9);
+        String emojiSummary = rowData != null && rowData.length > 10 ? rowData[10] : "None";
 
         VBox wrap = new VBox(14);
         wrap.getChildren().add(sectionTitle("Publication Insights"));
@@ -2613,7 +2740,7 @@ public class DashboardView implements ViewInterface {
                 if ("Residence ID".equalsIgnoreCase(label)) {
                     ComboBox<String> resSelect = new ComboBox<>();
                     resSelect.getItems().addAll(residenceOptions(value));
-                    styleSelect(resSelect, "Select Residence", Function.identity());
+                    styleSelect(resSelect, "Select Residence", this::hideIdFormatter);
                     if (value != null && !value.isBlank() && !"-".equals(value)) {
                         // Find match by ID
                         resSelect.getItems().stream()
@@ -2628,7 +2755,7 @@ public class DashboardView implements ViewInterface {
                 if ("User ID".equalsIgnoreCase(label)) {
                     ComboBox<String> userSelect = new ComboBox<>();
                     userSelect.getItems().addAll(fullUserOptions(value));
-                    styleSelect(userSelect, "Select User", Function.identity());
+                    styleSelect(userSelect, "Select User", this::hideIdFormatter);
                     if (value != null && !value.isBlank() && !"-".equals(value)) {
                         userSelect.getItems().stream()
                             .filter(opt -> opt.startsWith(value + " -"))
@@ -2650,6 +2777,21 @@ public class DashboardView implements ViewInterface {
                     row.getChildren().addAll(lbl, typeSelect, liveHint);
                     return row;
                 }
+            }
+
+            if ("Maintenance Ticket".equalsIgnoreCase(entityLabel) && "Apartment ID".equalsIgnoreCase(label)) {
+                ComboBox<String> aptSelect = new ComboBox<>();
+                aptSelect.getItems().addAll(apartmentOptions(value));
+                styleSelect(aptSelect, "Select Apartment", this::hideIdFormatter);
+                if (value != null && !value.isBlank() && !"-".equals(value)) {
+                    aptSelect.getItems().stream()
+                        .filter(opt -> opt.startsWith(value + " -"))
+                        .findFirst()
+                        .ifPresent(aptSelect::setValue);
+                }
+                installLiveValidation(aptSelect, liveHint, entityLabel, label);
+                row.getChildren().addAll(lbl, aptSelect, liveHint);
+                return row;
             }
 
                 if ("Blocks".equalsIgnoreCase(label)) {
@@ -2722,6 +2864,83 @@ public class DashboardView implements ViewInterface {
                 }
                 installLiveValidation(scoreSelect, liveHint, entityLabel, label);
                 row.getChildren().addAll(lbl, scoreSelect, liveHint);
+                return row;
+            }
+
+            if ("Maintenance Ticket".equalsIgnoreCase(entityLabel) && "AI Recommendation".equalsIgnoreCase(label)) {
+                TextField field = new TextField(value != null ? value : "");
+                field.setPromptText("Click 'Generate' to use Mistral AI...");
+                field.setStyle("-fx-background-color:rgba(255,255,255,0.05);-fx-text-fill:white;-fx-border-color:rgba(255,255,255,0.1);-fx-border-radius:100;-fx-background-radius:100;-fx-padding:8 12 8 12;");
+                HBox.setHgrow(field, Priority.ALWAYS);
+                
+                Button genBtn = pillAction("Generate", true);
+                genBtn.setPadding(new Insets(8, 16, 8, 16));
+                
+                genBtn.setOnAction(e -> {
+                    genBtn.setDisable(true);
+                    genBtn.setText("...");
+                    
+                    // Need to find Apartment ID in the form to generate recommendation
+                    VBox parentFields = (VBox) row.getParent();
+                    Integer apartmentId = null;
+                    if (parentFields != null) {
+                        for (Node node : parentFields.getChildren()) {
+                            if (node instanceof VBox rowNode) {
+                                for (Node child : rowNode.getChildren()) {
+                                    if (child instanceof ComboBox<?> cb && "Select Apartment".equals(cb.getPromptText())) {
+                                        String selected = (String) cb.getValue();
+                                        if (selected != null && selected.contains(" - ")) {
+                                            try {
+                                                apartmentId = Integer.parseInt(selected.split(" - ")[0]);
+                                            } catch (Exception ignored) {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (apartmentId == null) {
+                        genBtn.setDisable(false);
+                        genBtn.setText("Generate");
+                        liveHint.setText("Select Apartment first!");
+                        liveHint.setTextFill(Color.web("#ff3b30"));
+                        return;
+                    }
+                    
+                    final Integer finalAptId = apartmentId;
+                    new Thread(() -> {
+                        try {
+                            ResidenceController resCtrl = new ResidenceController();
+                            MaintenanceController maintCtrl = new MaintenanceController();
+                            Apartment aptObj = resCtrl.apartmentById(finalAptId).orElse(null);
+                            Maintenance maintObj = maintCtrl.latestMaintenance(finalAptId).orElse(null);
+                            
+                            if (aptObj != null) {
+                                String rec = maintCtrl.generateMistralRecommendation(aptObj, maintObj);
+                                javafx.application.Platform.runLater(() -> {
+                                    field.setText(rec);
+                                    genBtn.setDisable(false);
+                                    genBtn.setText("Generate");
+                                    liveHint.setText("✓ AI Recommendation generated");
+                                    liveHint.setTextFill(Color.web(accentHex()));
+                                });
+                            }
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                            javafx.application.Platform.runLater(() -> {
+                                genBtn.setDisable(false);
+                                genBtn.setText("Retry");
+                                liveHint.setText("✗ AI generation failed");
+                                liveHint.setTextFill(Color.web("#ff3b30"));
+                            });
+                        }
+                    }).start();
+                });
+                
+                HBox hBox = new HBox(8, field, genBtn);
+                hBox.setAlignment(Pos.CENTER_LEFT);
+                row.getChildren().addAll(lbl, hBox, liveHint);
                 return row;
             }
 
@@ -3243,6 +3462,11 @@ public class DashboardView implements ViewInterface {
             case "termine" -> "Completed";
             default -> "Select Status";
         };
+    }
+
+    private String hideIdFormatter(String value) {
+        if (value == null || !value.contains(" - ")) return value;
+        return value.split(" - ", 2)[1];
     }
 
     private void styleSelect(ComboBox<String> select, String placeholder, Function<String, String> displayFormatter) {
@@ -3775,6 +3999,14 @@ public class DashboardView implements ViewInterface {
         return list;
     }
 
+    private List<String> apartmentOptions(String current) {
+        List<String> list = new ArrayList<>();
+        for (Apartment a : dashboardAdminService.apartments()) {
+            list.add(a.getIdApartment() + " - " + a.getTypeApartment() + " (Block " + (a.getIdResidence() != null ? a.getIdResidence() : "?") + ")");
+        }
+        return list;
+    }
+
     private List<String> apartmentTypeOptions() {
         return List.of("STUDIO", "S1", "S2", "S3", "S4", "S5");
     }
@@ -3942,6 +4174,14 @@ public class DashboardView implements ViewInterface {
             case "user", "profile" -> "/syndicati/profile_images";
             default -> "/syndicati/dashboard_assets";
         };
+    }
+
+    private Integer extractId(String value) {
+        if (value == null || value.isBlank() || "-".equals(value)) return null;
+        if (value.contains(" - ")) {
+            try { return Integer.parseInt(value.split(" - ")[0]); } catch (Exception e) { return null; }
+        }
+        try { return Integer.parseInt(value); } catch (Exception e) { return null; }
     }
 }
 

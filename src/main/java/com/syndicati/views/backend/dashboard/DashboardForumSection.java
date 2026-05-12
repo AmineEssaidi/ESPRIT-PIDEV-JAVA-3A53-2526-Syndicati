@@ -79,6 +79,7 @@ final class DashboardForumSection {
             PublicationReactionSummary summary = summaryByPublication.getOrDefault(pub.getIdPublication(), PublicationReactionSummary.empty());
 
             baseRows.add(new String[]{
+                String.valueOf(pub.getIdPublication()),
                 title,
                 category,
                 description,
@@ -213,6 +214,7 @@ final class DashboardForumSection {
             String date = comment.getCreatedAt() != null ? comment.getCreatedAt().toLocalDate().toString() : "";
 
             baseRows.add(new String[]{
+                String.valueOf(comment.getIdCommentaire()),
                 publication,
                 author.trim(),
                 description,
@@ -320,6 +322,7 @@ final class DashboardForumSection {
             String date = reaction.getUpdatedAt() != null ? reaction.getUpdatedAt().format(dateFormat) : "N/A";
 
             baseRows.add(new String[]{
+                String.valueOf(reaction.getIdReaction()),
                 user,
                 target,
                 kind,
@@ -433,14 +436,14 @@ final class DashboardForumSection {
 
             String term = queryState.searchTerm.trim().toLowerCase();
             boolean matches = switch (scope) {
-                case "title" -> row.length > 0 && row[0] != null && row[0].toLowerCase().contains(term);
-                case "category" -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(term);
-                case "publication" -> row.length > 0 && row[0] != null && row[0].toLowerCase().contains(term);
-                case "author" -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(term);
-                case "user" -> row.length > 0 && row[0] != null && row[0].toLowerCase().contains(term);
-                case "target" -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(term);
-                case "type" -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(term);
-                case "date" -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(term);
+                case "title" -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(term);
+                case "category" -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(term);
+                case "publication" -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(term);
+                case "author" -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(term);
+                case "user" -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(term);
+                case "target" -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(term);
+                case "type" -> row.length > 3 && row[3] != null && row[3].toLowerCase().contains(term);
+                case "date" -> row.length > 5 && row[5] != null && row[5].toLowerCase().contains(term);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {

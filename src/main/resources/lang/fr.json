@@ -16,7 +16,6 @@
   "title_placeholder": "Titre",
   "reply": "Répondre",
   "events": "Événements ",
-  "evenement": "Événement",
   "dashboard": "Tableau de bord",
   "sign_in": "S’authentifier",
   "no_image_selected": "Aucune image sélectionnée",
@@ -25,6 +24,7 @@
   "edit": "editer",
   "explore_events_btn": "Découvrir les événements",
   "profile": "Profil",
+  "desc_placeholder": "Désignation",
   "otp": "OTP",
   "forum_title": "Forum communautaire",
   "community": "Communauté",
@@ -74,5 +74,6 @@
   "explore_events": "Découvrir les événements",
   "syncing_community": "Synchronisation de la communauté...",
   "community_experiences": "Expériences communautaires",
+  "evenement": "Événement",
   "forgot_password": "Vous avez oublié votre mot de passe ?"
 }

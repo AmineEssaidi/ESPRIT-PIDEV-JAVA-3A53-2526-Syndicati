@@ -84,6 +84,7 @@ final class DashboardSyndicatSection {
             int replyCount = replyCounts.getOrDefault(rec.getIdReclamations(), 0);
 
             baseRows.add(new String[]{
+                String.valueOf(rec.getIdReclamations()),
                 title,
                 userName,
                 status,
@@ -177,10 +178,10 @@ final class DashboardSyndicatSection {
             }
 
             boolean matches = switch (scope) {
-                case "title"  -> row[0] != null && row[0].toLowerCase().contains(scopedTerm);
-                case "user"   -> row[1] != null && row[1].toLowerCase().contains(scopedTerm);
-                case "status" -> row[2] != null && row[2].toLowerCase().contains(scopedTerm);
-                case "date"   -> row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "title"  -> row.length > 1 && row[1] != null && row[1].toLowerCase().contains(scopedTerm);
+                case "user"   -> row.length > 2 && row[2] != null && row[2].toLowerCase().contains(scopedTerm);
+                case "status" -> row.length > 3 && row[3] != null && row[3].toLowerCase().contains(scopedTerm);
+                case "date"   -> row.length > 4 && row[4] != null && row[4].toLowerCase().contains(scopedTerm);
                 default -> {
                     boolean found = false;
                     for (String cell : row) {
@@ -207,7 +208,7 @@ final class DashboardSyndicatSection {
 
         String[][] visibleRows;
         if (result.pageRows.isEmpty()) {
-            visibleRows = new String[][]{{"No reclamations found", "-", "-", "-", "-"}};
+            visibleRows = new String[][]{{"No reclamations found", "-", "-", "-", "-", "-"}};
         } else {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
@@ -253,6 +254,7 @@ final class DashboardSyndicatSection {
             String date = rep.getCreatedAt() != null ? rep.getCreatedAt().toString().substring(0, 10) : "-";
 
             baseRows.add(new String[]{
+                String.valueOf(rep.getIdReponses()),
                 message,
                 userName,
                 reclamationTitle,
@@ -261,7 +263,7 @@ final class DashboardSyndicatSection {
         }
 
         String[][] visibleRows = baseRows.isEmpty()
-            ? new String[][]{{"No reponses", "-", "-", "-"}}
+            ? new String[][]{{"No reponses", "-", "-", "-", "-"}}
             : baseRows.toArray(new String[0][]);
 
         wrap.getChildren().addAll(stats, view.dataTableWithCrud(

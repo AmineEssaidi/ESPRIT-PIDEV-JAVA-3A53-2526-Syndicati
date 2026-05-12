@@ -11,6 +11,8 @@ import com.syndicati.services.mail.SyndicatiEmailComposer;
 import com.syndicati.services.google.GoogleDriveService;
 import com.syndicati.services.pdf.PdfExportService;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
+import com.syndicati.utils.security.AccessControlService;
+import com.syndicati.utils.session.SessionManager;
 import java.time.LocalDateTime;
 import java.io.IOException;
 import java.util.List;
@@ -80,8 +82,7 @@ public class ReclamationController {
                 // Don't notify the creator again as an admin
                 if (recipient.getIdUser().equals(user.getIdUser())) continue;
 
-                String role = recipient.getRoleUser();
-                if ("ADMIN".equalsIgnoreCase(role) || "SYNDIC".equalsIgnoreCase(role) || "SUPERADMIN".equalsIgnoreCase(role)) {
+                if (AccessControlService.canAccessAdminArea(recipient)) {
                     String html = SyndicatiEmailComposer.reclamationNotification(
                         recipient.getFirstName(),
                         titre,
@@ -120,6 +121,21 @@ public class ReclamationController {
                         html
                     );
                 }
+
+                // Notify the performing admin as well
+                User performer = SessionManager.getInstance().getCurrentUser();
+                if (performer != null) {
+                    String adminHtml = SyndicatiEmailComposer.statusChangeNotification(
+                        performer.getFirstName(),
+                        rec.getTitreReclamations(),
+                        statut
+                    );
+                    mailerService.sendHtmlAsync(
+                        performer.getEmailUser(),
+                        "Confirmation: Status updated for " + rec.getTitreReclamations(),
+                        adminHtml
+                    );
+                }
             });
         }
         return success;
@@ -143,6 +159,21 @@ public class ReclamationController {
                         rec.getUser().getEmailUser(),
                         "Update on your reclamation: " + rec.getTitreReclamations(),
                         html
+                    );
+                }
+
+                // Notify the performing admin as well
+                User performer = SessionManager.getInstance().getCurrentUser();
+                if (performer != null) {
+                    String adminHtml = SyndicatiEmailComposer.statusChangeNotification(
+                        performer.getFirstName(),
+                        rec.getTitreReclamations(),
+                        statut
+                    );
+                    mailerService.sendHtmlAsync(
+                        performer.getEmailUser(),
+                        "Confirmation: Status updated for " + rec.getTitreReclamations(),
+                        adminHtml
                     );
                 }
             });

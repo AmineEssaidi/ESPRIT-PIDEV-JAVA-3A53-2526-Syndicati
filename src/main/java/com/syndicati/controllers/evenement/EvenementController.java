@@ -43,6 +43,20 @@ public class EvenementController {
         Integer id = evenementService.create(titre, description, dateEvent, lieu, nbPlaces, type, image, user);
         if (id != null && id > 0) {
             GlobalNotificationPillManager.created("Event", "Event created successfully.");
+            
+            // Send email notification to creator
+            if (user != null && user.getEmailUser() != null && !user.getEmailUser().isBlank()) {
+                try {
+                    com.syndicati.services.mail.AsyncMailerService mailer = com.syndicati.services.mail.AsyncMailerService.getInstance();
+                    String dateStr = dateEvent != null ? dateEvent.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : "To be determined";
+                    String emailContent = com.syndicati.services.mail.SyndicatiEmailComposer.eventCreationNotification(
+                        user.getFirstName(), titre, dateStr, lieu
+                    );
+                    mailer.sendHtmlAsync(user.getEmailUser(), "Syndicati: Your event is live!", emailContent);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
         return id;
     }

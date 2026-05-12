@@ -9,10 +9,16 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.reflect.Proxy;
 
 /**
@@ -21,11 +27,17 @@ import java.lang.reflect.Proxy;
 public class DatabaseService {
     
     private static DatabaseService instance;
-    private static final int POOL_SIZE = 4; // Balanced pool for Clever Cloud limits
-    private static final long CACHE_TTL_MS = 30000; // 30s cache
-    private static final int CACHE_MAX_ENTRIES = 256; // Hard cap to prevent RAM growth
+    private static final int POOL_SIZE = 8;
+    private static final int MIN_IDLE_CONNECTIONS = 4;
+    private static final long CACHE_TTL_MS = 120000; // Aiven round trips are remote; keep hot data a little longer.
+    private static final int CACHE_MAX_ENTRIES = 512;
+    private static final int FX_THREAD_WAIT_MS = 250;
+    private static final int WORKER_THREAD_WAIT_MS = 900;
+    private static final ExecutorService DB_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
     
     private final BlockingQueue<Connection> pool;
+    private final Semaphore connectionSlots = new Semaphore(POOL_SIZE);
+    private final AtomicBoolean refillScheduled = new AtomicBoolean(false);
     private final Map<String, CacheEntry> dataCache = new ConcurrentHashMap<>();
     private final java.util.concurrent.ConcurrentLinkedQueue<String> cacheOrder = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
@@ -53,8 +65,9 @@ public class DatabaseService {
         this.connectionTimeout = 5000;
         this.pool = new LinkedBlockingQueue<>(POOL_SIZE);
         
-        // Pre-fill pool in background
+        // Pre-fill pool in background.
         Thread.startVirtualThread(this::initializePool);
+        Thread.startVirtualThread(this::maintainPool);
 
         // Periodically sweep expired cache entries so memory does not stack across navigation.
         Thread.startVirtualThread(() -> {
@@ -69,7 +82,7 @@ public class DatabaseService {
     }
 
     private void initializePool() {
-        for (int i = 0; i < POOL_SIZE; i++) {
+        for (int i = 0; i < MIN_IDLE_CONNECTIONS; i++) {
             boolean success = false;
             for (int retry = 0; retry < 3 && !success; retry++) {
                 try {
@@ -86,20 +99,87 @@ public class DatabaseService {
                     }
                 }
             }
-            // Add a substantial delay between successful connection creations to avoid triggering rate limits
-            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
+            try { Thread.sleep(250); } catch (InterruptedException ignored) {}
+        }
+    }
+
+    private void maintainPool() {
+        while (true) {
+            try {
+                ensureMinimumIdle();
+                keepAliveIdleConnections();
+                Thread.sleep(30_000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private void scheduleRefill() {
+        if (!refillScheduled.compareAndSet(false, true)) {
+            return;
+        }
+        Thread.startVirtualThread(() -> {
+            try {
+                ensureMinimumIdle();
+            } finally {
+                refillScheduled.set(false);
+            }
+        });
+    }
+
+    private void ensureMinimumIdle() {
+        while (pool.size() < MIN_IDLE_CONNECTIONS && pool.remainingCapacity() > 0) {
+            try {
+                Connection connection = createNewConnection();
+                if (!pool.offer(connection, 250, TimeUnit.MILLISECONDS)) {
+                    closePhysicalConnection(connection);
+                    return;
+                }
+            } catch (Exception ignored) {
+                return;
+            }
+        }
+    }
+
+    private void keepAliveIdleConnections() {
+        int count = pool.size();
+        for (int i = 0; i < count; i++) {
+            Connection conn = pool.poll();
+            if (conn == null) {
+                return;
+            }
+            try {
+                if (!conn.isClosed() && conn.isValid(2)) {
+                    pool.offer(conn);
+                } else {
+                    closePhysicalConnection(conn);
+                }
+            } catch (SQLException e) {
+                closePhysicalConnection(conn);
+            }
         }
     }
 
     private Connection createNewConnection() throws SQLException {
+        boolean acquired = false;
+        try {
+            connectionSlots.acquire();
+            acquired = true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SQLException("Interrupted while waiting for a database connection slot", e);
+        }
+
         Properties props = new Properties();
         props.setProperty("user", dbUser);
         props.setProperty("password", dbPassword);
-        props.setProperty("connectTimeout", "15000"); // 15 seconds for Clever Cloud cold starts
-        props.setProperty("socketTimeout", "30000"); // Longer socket timeout for queries
+        props.setProperty("connectTimeout", "5000");
+        props.setProperty("socketTimeout", "15000");
         props.setProperty("autoReconnect", "true");
         props.setProperty("useSSL", "true");
-        props.setProperty("requireSSL", "false");
+        props.setProperty("requireSSL", "true");
         props.setProperty("enabledTLSProtocols", "TLSv1.2,TLSv1.3");
         props.setProperty("allowPublicKeyRetrieval", "true");
         props.setProperty("serverTimezone", "UTC");
@@ -108,7 +188,22 @@ public class DatabaseService {
         props.setProperty("cachePrepStmts", "true");
         props.setProperty("prepStmtCacheSize", "250");
         props.setProperty("prepStmtCacheSqlLimit", "2048");
-        return DriverManager.getConnection(dbUrl, props);
+        props.setProperty("rewriteBatchedStatements", "true");
+
+        Connection connection = null;
+        try {
+            connection = DriverManager.getConnection(dbUrl, props);
+            connection.setNetworkTimeout(DB_EXECUTOR, 15_000);
+            return connection;
+        } catch (SQLException e) {
+            if (connection != null) {
+                try { connection.close(); } catch (SQLException ignore) {}
+            }
+            if (acquired) {
+                connectionSlots.release();
+            }
+            throw e;
+        }
     }
     
     public static synchronized DatabaseService getInstance() {
@@ -120,18 +215,27 @@ public class DatabaseService {
     
     public Connection getConnection() {
         try {
-            // Try to get an existing connection from the pool quickly (1s timeout)
-            Connection conn = pool.poll(1, TimeUnit.SECONDS);
+            int waitMs = isFxApplicationThread() ? FX_THREAD_WAIT_MS : WORKER_THREAD_WAIT_MS;
+            Connection conn = pool.poll(waitMs, TimeUnit.MILLISECONDS);
             if (conn != null) {
                 if (!conn.isClosed()) {
                     return createPooledProxy(conn);
                 }
-                // If closed, create a replacement
+                closePhysicalConnection(conn);
+                scheduleRefill();
+                if (isFxApplicationThread()) {
+                    return null;
+                }
                 return createNewConnectionFallback();
             }
 
-            // Pool is empty - create an emergency connection if we're under the limit
-            System.out.println("[WARN] Connection pool empty. Creating emergency connection.");
+            scheduleRefill();
+            if (isFxApplicationThread()) {
+                System.err.println("[WARN] Database pool empty on JavaFX thread; skipped blocking remote connection creation.");
+                return null;
+            }
+
+            System.out.println("[WARN] Connection pool empty. Creating worker-thread connection.");
             return createNewConnectionFallback();
         } catch (Exception e) {
             System.err.println("[ERROR] Failed to get database connection: " + e.getMessage());
@@ -139,18 +243,38 @@ public class DatabaseService {
         }
     }
 
+    public <T> CompletableFuture<T> supplyAsync(Callable<T> task) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return task.call();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }, DB_EXECUTOR);
+    }
+
+    public CompletableFuture<Void> runAsync(Runnable task) {
+        return CompletableFuture.runAsync(task, DB_EXECUTOR);
+    }
+
     private synchronized Connection createNewConnectionFallback() throws SQLException {
         return createNewConnection();
     }
 
     private Connection createPooledProxy(final Connection physicalConn) {
+        AtomicBoolean returned = new AtomicBoolean(false);
         return (Connection) Proxy.newProxyInstance(
             Connection.class.getClassLoader(),
             new Class<?>[]{Connection.class},
             (proxy, method, args) -> {
                 if ("close".equals(method.getName())) {
-                    releaseConnection(physicalConn);
+                    if (returned.compareAndSet(false, true)) {
+                        releaseConnection(physicalConn);
+                    }
                     return null;
+                }
+                if (returned.get()) {
+                    throw new SQLException("Connection has already been returned to the pool");
                 }
                 return method.invoke(physicalConn, args);
             }
@@ -209,13 +333,34 @@ public class DatabaseService {
         try {
             if (!conn.isClosed()) {
                 if (!pool.offer(conn)) {
-                    conn.close(); // Pool full
+                    closePhysicalConnection(conn);
                 }
             } else {
-                conn.close();
+                closePhysicalConnection(conn);
             }
         } catch (SQLException e) {
-            try { conn.close(); } catch (SQLException ignore) {}
+            closePhysicalConnection(conn);
+        }
+    }
+
+    private void closePhysicalConnection(Connection conn) {
+        try {
+            if (conn != null && !conn.isClosed()) {
+                conn.close();
+            }
+        } catch (SQLException ignore) {
+        } finally {
+            connectionSlots.release();
+        }
+    }
+
+    private boolean isFxApplicationThread() {
+        try {
+            Class<?> platform = Class.forName("javafx.application.Platform");
+            Object result = platform.getMethod("isFxApplicationThread").invoke(null);
+            return Boolean.TRUE.equals(result);
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
@@ -321,11 +466,8 @@ public class DatabaseService {
         java.util.List<Connection> connections = new java.util.ArrayList<>();
         pool.drainTo(connections);
         for (Connection conn : connections) {
-            try {
-                if (conn != null && !conn.isClosed()) {
-                    conn.close();
-                }
-            } catch (SQLException ignore) {}
+            closePhysicalConnection(conn);
         }
+        DB_EXECUTOR.shutdownNow();
     }
 }

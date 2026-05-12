@@ -43,6 +43,7 @@ public class SessionRecoveryView {
     private Label statusLabel;
     private final List<Particle> particles = new ArrayList<>();
     private Timeline particleTimeline;
+    private final java.util.List<Animation> activeAnimations = new java.util.ArrayList<>();
     
     private VBox statusBox;
     private HBox actionsBox;
@@ -51,6 +52,7 @@ public class SessionRecoveryView {
     private Label nameLabel;
 
     private MediaPlayer videoPlayer;
+    private MediaView mediaView;
     private boolean useVideoBackground = true;
     
     private Runnable onGoHome;
@@ -167,13 +169,13 @@ public class SessionRecoveryView {
             videoPlayer.setAutoPlay(false);
             videoPlayer.setCycleCount(MediaPlayer.INDEFINITE);
 
-            MediaView mv = new MediaView(videoPlayer);
-            mv.setPreserveRatio(false);
-            mv.fitWidthProperty().bind(root.widthProperty());
-            mv.fitHeightProperty().bind(root.heightProperty());
-            mv.setSmooth(true);
+            mediaView = new MediaView(videoPlayer);
+            mediaView.setPreserveRatio(false);
+            mediaView.fitWidthProperty().bind(root.widthProperty());
+            mediaView.fitHeightProperty().bind(root.heightProperty());
+            mediaView.setSmooth(true);
 
-            root.getChildren().add(0, mv);
+            root.getChildren().add(0, mediaView);
         } catch (Exception e) {
             useVideoBackground = false;
             System.err.println("[SessionRecovery] Video background failed: " + e.getMessage());
@@ -207,7 +209,9 @@ public class SessionRecoveryView {
         ft.setToValue(1);
         TranslateTransition tt = new TranslateTransition(Duration.seconds(1), userCard);
         tt.setToY(0);
-        new ParallelTransition(ft, tt).play();
+        ParallelTransition intro = new ParallelTransition(ft, tt);
+        activeAnimations.add(intro);
+        intro.play();
 
         if (videoPlayer != null) {
             if (videoPlayer.getStatus() == MediaPlayer.Status.READY) {
@@ -254,6 +258,9 @@ public class SessionRecoveryView {
     }
 
     private void showDestinationButtons() {
+        if (actionsBox.isManaged()) {
+            return;
+        }
         User user = SessionManager.getInstance().getCurrentUser();
         if (user == null) {
             // Fallback: if user is still null in session manager, try to use the one we might have cached or wait
@@ -288,6 +295,7 @@ public class SessionRecoveryView {
             slideUp.setFromY(20); slideUp.setToY(0);
             slideUp.play();
         });
+        activeAnimations.add(fadeOut);
         fadeOut.play();
     }
 
@@ -323,8 +331,29 @@ public class SessionRecoveryView {
     }
 
     public void cleanup() {
-        if (particleTimeline != null) particleTimeline.stop();
-        if (videoPlayer != null) videoPlayer.stop();
+        try {
+            if (particleTimeline != null) {
+                particleTimeline.stop();
+                particleTimeline = null;
+            }
+        } catch (Exception ignored) {}
+        for (Animation animation : java.util.List.copyOf(activeAnimations)) {
+            try { animation.stop(); } catch (Exception ignored) {}
+        }
+        activeAnimations.clear();
+        try {
+            if (videoPlayer != null) {
+                videoPlayer.stop();
+                videoPlayer.dispose();
+            }
+        } catch (Exception ignored) {}
+        videoPlayer = null;
+        if (mediaView != null) {
+            try { mediaView.setMediaPlayer(null); } catch (Exception ignored) {}
+            mediaView = null;
+        }
+        try { avatarView.setImage(null); } catch (Exception ignored) {}
+        try { root.getChildren().clear(); } catch (Exception ignored) {}
     }
 
     // --- INNER CLASSES ---

@@ -35,6 +35,8 @@ public class LoadingCinematicView {
 
     private MediaPlayer videoPlayer;
     private MediaView mediaView;
+    private SequentialTransition activeSequence;
+    private final java.util.List<Animation> ambientAnimations = new java.util.ArrayList<>();
     private boolean useVideoBackground = true;
     
     private Pane backgroundLayer;
@@ -86,6 +88,7 @@ public class LoadingCinematicView {
             tt.setAutoReverse(true);
             tt.setInterpolator(Interpolator.EASE_BOTH);
             tt.play();
+            ambientAnimations.add(tt);
             
             // Subtle pulse
             ScaleTransition st = new ScaleTransition(Duration.seconds(2 + rand.nextDouble() * 2), p);
@@ -93,6 +96,7 @@ public class LoadingCinematicView {
             st.setCycleCount(Timeline.INDEFINITE);
             st.setAutoReverse(true);
             st.play();
+            ambientAnimations.add(st);
         }
         
         root.getChildren().add(backgroundLayer);
@@ -183,12 +187,37 @@ public class LoadingCinematicView {
             onFinished.run();
         });
         
-        SequentialTransition seq = new SequentialTransition(
+        activeSequence = new SequentialTransition(
             new ParallelTransition(f1, t1, f2, t2),
             pause,
             fadeOut
         );
-        seq.play();
+        activeSequence.play();
+    }
+
+    public void cleanup() {
+        try {
+            if (activeSequence != null) {
+                activeSequence.stop();
+                activeSequence = null;
+            }
+        } catch (Exception ignored) {}
+        for (Animation animation : java.util.List.copyOf(ambientAnimations)) {
+            try { animation.stop(); } catch (Exception ignored) {}
+        }
+        ambientAnimations.clear();
+        try {
+            if (videoPlayer != null) {
+                videoPlayer.stop();
+                videoPlayer.dispose();
+            }
+        } catch (Exception ignored) {}
+        videoPlayer = null;
+        if (mediaView != null) {
+            try { mediaView.setMediaPlayer(null); } catch (Exception ignored) {}
+        }
+        mediaView = null;
+        try { root.getChildren().clear(); } catch (Exception ignored) {}
     }
 
     private String getHumanReadableName(String pageName) {

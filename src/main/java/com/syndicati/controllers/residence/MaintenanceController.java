@@ -1,7 +1,9 @@
 package com.syndicati.controllers.residence;
 
+import com.syndicati.models.residence.Apartment;
 import com.syndicati.models.residence.Maintenance;
 import com.syndicati.models.residence.Review;
+import com.syndicati.services.ai.MistralAIService;
 import com.syndicati.services.residence.MaintenanceService;
 import com.syndicati.services.residence.ReviewService;
 import java.util.List;
@@ -14,10 +16,12 @@ public class MaintenanceController {
 
     private final MaintenanceService maintenanceService;
     private final ReviewService reviewService;
+    private final MistralAIService mistralAIService;
 
     public MaintenanceController() {
         this.maintenanceService = new MaintenanceService();
         this.reviewService = new ReviewService();
+        this.mistralAIService = new MistralAIService();
     }
 
     // ===== MAINTENANCE METHODS =====
@@ -54,6 +58,10 @@ public class MaintenanceController {
                                     String aiRecommendation) {
         return maintenanceService.update(id, generalCondition, plumbingCondition,
                                         electricalCondition, heatingCondition, description, aiRecommendation);
+    }
+
+    public String generateMistralRecommendation(Apartment apartment, Maintenance maintenance) {
+        return mistralAIService.generateRecommendation(apartment, maintenance);
     }
 
     public boolean maintenanceDelete(Integer id) {

@@ -17,6 +17,7 @@ import com.syndicati.views.frontend.services.EvenementPageView;
 import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.controllers.log.ActivityLogController;
+import com.syndicati.utils.perf.NodeTreeDisposer;
 import javafx.scene.control.Alert;
 
 /**
@@ -53,8 +54,21 @@ public class NavigationManager {
     }
 
     public void clearAllViews(boolean includeHeavy) {
-        this.servicesView = null;
-        this.aboutView = null;
+        disposeCachedView(servicesView);
+        disposeCachedView(aboutView);
+        disposeCachedView(serviceDetailView);
+        disposeCachedView(aboutDetailView);
+        disposeCachedView(settingsView);
+        disposeCachedView(residenceView);
+        disposeCachedView(forumView);
+        disposeCachedView(syndicatView);
+        disposeCachedView(evenementView);
+        if (includeHeavy) {
+            disposeCachedView(profileView);
+            disposeCachedView(dashboardView);
+        }
+        disposeCachedView(servicesView); this.servicesView = null;
+        disposeCachedView(aboutView); this.aboutView = null;
         if (includeHeavy) {
             this.profileView = null;
             this.dashboardView = null;
@@ -122,15 +136,15 @@ public class NavigationManager {
         
         this.servicesView = null;
         this.aboutView = null;
-        if (!"profile".equals(active)) this.profileView = null;
-        this.dashboardView = null;
-        this.serviceDetailView = null;
-        this.aboutDetailView = null;
-        if (!"settings".equals(active)) this.settingsView = null;
-        this.residenceView = null;
-        this.forumView = null;
-        this.syndicatView = null;
-        this.evenementView = null;
+        if (!"profile".equals(active)) { disposeCachedView(profileView); this.profileView = null; }
+        disposeCachedView(dashboardView); this.dashboardView = null;
+        disposeCachedView(serviceDetailView); this.serviceDetailView = null;
+        disposeCachedView(aboutDetailView); this.aboutDetailView = null;
+        if (!"settings".equals(active)) { disposeCachedView(settingsView); this.settingsView = null; }
+        disposeCachedView(residenceView); this.residenceView = null;
+        disposeCachedView(forumView); this.forumView = null;
+        disposeCachedView(syndicatView); this.syndicatView = null;
+        disposeCachedView(evenementView); this.evenementView = null;
     }
 
     private synchronized ServicesView servicesView() {
@@ -249,57 +263,57 @@ public class NavigationManager {
             switch (normalized) {
                 case "services":
                     System.out.println("[Dispose] servicesView=" + (servicesView != null));
-                    if (servicesView != null) servicesView.cleanup();
+                    disposeCachedView(servicesView);
                     servicesView = null;
                     break;
                 case "about":
                     System.out.println("[Dispose] aboutView=" + (aboutView != null));
-                    if (aboutView != null) aboutView.cleanup();
+                    disposeCachedView(aboutView);
                     aboutView = null;
                     break;
                 case "profile":
                     System.out.println("[Dispose] profileView=" + (profileView != null));
-                    if (profileView != null) profileView.cleanup();
+                    disposeCachedView(profileView);
                     profileView = null;
                     break;
                 case "dashboard":
                     System.out.println("[Dispose] dashboardView=" + (dashboardView != null));
-                    if (dashboardView != null) dashboardView.cleanup();
+                    disposeCachedView(dashboardView);
                     dashboardView = null;
                     break;
                 case "service-detail":
                     System.out.println("[Dispose] serviceDetailView=" + (serviceDetailView != null));
-                    if (serviceDetailView != null) serviceDetailView.cleanup();
+                    disposeCachedView(serviceDetailView);
                     serviceDetailView = null;
                     break;
                 case "about-detail":
                     System.out.println("[Dispose] aboutDetailView=" + (aboutDetailView != null));
-                    if (aboutDetailView != null) aboutDetailView.cleanup();
+                    disposeCachedView(aboutDetailView);
                     aboutDetailView = null;
                     break;
                 case "settings":
                     System.out.println("[Dispose] settingsView=" + (settingsView != null));
-                    if (settingsView != null) settingsView.cleanup();
+                    disposeCachedView(settingsView);
                     settingsView = null;
                     break;
                 case "services/residence":
                     System.out.println("[Dispose] residenceView=" + (residenceView != null));
-                    if (residenceView != null) residenceView.cleanup();
+                    disposeCachedView(residenceView);
                     residenceView = null;
                     break;
                 case "services/forum":
                     System.out.println("[Dispose] forumView=" + (forumView != null));
-                    if (forumView != null) forumView.cleanup();
+                    disposeCachedView(forumView);
                     forumView = null;
                     break;
                 case "services/syndicat":
                     System.out.println("[Dispose] syndicatView=" + (syndicatView != null));
-                    if (syndicatView != null) syndicatView.cleanup();
+                    disposeCachedView(syndicatView);
                     syndicatView = null;
                     break;
                 case "services/evenement":
                     System.out.println("[Dispose] evenementView=" + (evenementView != null));
-                    if (evenementView != null) evenementView.cleanup();
+                    disposeCachedView(evenementView);
                     evenementView = null;
                     break;
                 default:
@@ -317,6 +331,14 @@ public class NavigationManager {
 
         // After dropping references, run a best-effort memory trim under pressure.
         try { com.syndicati.utils.perf.MemoryPressureUtil.onViewDisposed(); } catch (Exception ignored) {}
+    }
+
+    private void disposeCachedView(ViewInterface view) {
+        if (view == null) {
+            return;
+        }
+        try { view.cleanup(); } catch (Exception ignored) {}
+        try { NodeTreeDisposer.dispose(view.getRoot()); } catch (Exception ignored) {}
     }
 
     public Pane getPage(String pageName) {
@@ -380,5 +402,3 @@ public class NavigationManager {
         return dashboardView();
     }
 }
-
-

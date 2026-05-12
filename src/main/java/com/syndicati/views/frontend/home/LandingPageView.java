@@ -33,6 +33,8 @@ public class LandingPageView implements ViewInterface {
     private String currentPageName = "home";
     private final java.util.Map<String, javafx.scene.Node> pageCache = new java.util.HashMap<>();
     private String lastPageName = "home";
+    private final java.util.concurrent.atomic.AtomicLong navigationVersion = new java.util.concurrent.atomic.AtomicLong();
+    private com.syndicati.views.frontend.auth.LoadingCinematicView activeLoading;
     
     public LandingPageView() {
         this("home");
@@ -195,7 +197,9 @@ public class LandingPageView implements ViewInterface {
     }
     
     public void navigateToHome() {
+        long navToken = navigationVersion.incrementAndGet();
         showLoadingTransition("home", () -> {
+            if (navToken != navigationVersion.get()) return;
             currentPageName = "home";
             if (!darkPanel.getChildren().contains(contentRow)) {
                 darkPanel.getChildren().clear();
@@ -210,10 +214,7 @@ public class LandingPageView implements ViewInterface {
                 try {
                     System.out.println("[Dispose] LandingPageView.navigateToHome disposing " + lastPageName);
                     // Remove all non-home pages from the scene graph and clear cache.
-                    for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
-                        if (homeContent != null && node == homeContent.getRoot()) continue;
-                        mainContent.getChildren().remove(node);
-                    }
+                    removeNonHomePageNodes();
                     pageCache.clear();
                     NavigationManager.getInstance().disposeView(lastPageName);
                 } catch (Exception ignored) {}
@@ -242,7 +243,9 @@ public class LandingPageView implements ViewInterface {
     }
 
     public void enterDashboardMode() {
+        long navToken = navigationVersion.incrementAndGet();
         showLoadingTransition("Admin Dashboard", () -> {
+            if (navToken != navigationVersion.get()) return;
             currentPageName = "dashboard";
 
             // Dispose previous non-dashboard view before entering dashboard mode.
@@ -252,10 +255,7 @@ public class LandingPageView implements ViewInterface {
                 && !"home".equalsIgnoreCase(lastPageName)) {
                 try {
                     System.out.println("[Dispose] LandingPageView.enterDashboardMode disposing " + lastPageName);
-                    for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
-                        if (homeContent != null && node == homeContent.getRoot()) continue;
-                        mainContent.getChildren().remove(node);
-                    }
+                    removeNonHomePageNodes();
                     pageCache.clear();
                     NavigationManager.getInstance().disposeView(lastPageName);
                 } catch (Exception ignored) {}
@@ -282,8 +282,10 @@ public class LandingPageView implements ViewInterface {
     
     public void navigateToPage(String pageName) {
         if (pageName == null) return;
+        long navToken = navigationVersion.incrementAndGet();
         
         showLoadingTransition(pageName, () -> {
+            if (navToken != navigationVersion.get()) return;
             String normalizedPage = pageName.toLowerCase();
             currentPageName = normalizedPage;
 
@@ -318,10 +320,7 @@ public class LandingPageView implements ViewInterface {
                 && !"dashboard".equalsIgnoreCase(lastPageName)
                 && !lastPageName.equalsIgnoreCase(normalizedPage)) {
                 // Remove all non-home pages from the scene graph.
-                for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
-                    if (homeContent != null && node == homeContent.getRoot()) continue;
-                    mainContent.getChildren().remove(node);
-                }
+                removeNonHomePageNodes();
                 pageCache.clear();
                 NavigationManager.getInstance().disposeView(lastPageName);
                 try { com.syndicati.utils.perf.MemoryPressureUtil.onViewDisposed(); } catch (Exception ignored) {}
@@ -349,27 +348,53 @@ public class LandingPageView implements ViewInterface {
 
                 // Trigger async data load for everything except Profile (which is built in bg)
                 if (!(view instanceof ProfileView)) {
-                    Thread.startVirtualThread(view::loadDataAsync);
+                    Thread.startVirtualThread(() -> {
+                        if (navToken == navigationVersion.get()) {
+                            view.loadDataAsync();
+                        }
+                    });
                 }
             }
 
             lastPageName = normalizedPage;
+            try { com.syndicati.utils.perf.MemoryPressureUtil.onNavigationSwap(); } catch (Exception ignored) {}
         });
     }
 
     private void showLoadingTransition(String viewName, Runnable midAction) {
+        if (activeLoading != null) {
+            try {
+                root.getChildren().remove(activeLoading.getRoot());
+                activeLoading.cleanup();
+            } catch (Exception ignored) {}
+            activeLoading = null;
+        }
         com.syndicati.views.frontend.auth.LoadingCinematicView loading = new com.syndicati.views.frontend.auth.LoadingCinematicView(viewName);
+        activeLoading = loading;
         root.getChildren().add(loading.getRoot());
         loading.getRoot().toFront();
         
         loading.play(() -> {
             root.getChildren().remove(loading.getRoot());
+            if (activeLoading == loading) {
+                activeLoading = null;
+            }
+            loading.cleanup();
         });
 
         // Small delay to ensure the loading screen is rendered before the UI swap potentially lags the FX thread
         javafx.animation.PauseTransition shortDelay = new javafx.animation.PauseTransition(javafx.util.Duration.millis(50));
         shortDelay.setOnFinished(e -> midAction.run());
         shortDelay.play();
+    }
+
+    private void removeNonHomePageNodes() {
+        if (mainContent == null) return;
+        for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
+            if (homeContent != null && node == homeContent.getRoot()) continue;
+            mainContent.getChildren().remove(node);
+            try { com.syndicati.utils.perf.NodeTreeDisposer.dispose(node); } catch (Exception ignored) {}
+        }
     }
 
     private void applyThemeStyling() {
@@ -433,9 +458,15 @@ public class LandingPageView implements ViewInterface {
     }
     
     public void cleanup() {
+        navigationVersion.incrementAndGet();
         ThemeManager.getInstance().removeAccentChangeListener(accentRefreshListener);
         if (header != null) header.cleanup();
         if (footer != null) footer.cleanup();
+        if (activeLoading != null) {
+            try { activeLoading.cleanup(); } catch (Exception ignored) {}
+            activeLoading = null;
+        }
+        removeNonHomePageNodes();
 
         // Dispose cached pages/views to release memory.
         try {

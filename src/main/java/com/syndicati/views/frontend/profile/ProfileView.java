@@ -92,8 +92,10 @@ public class ProfileView implements ViewInterface {
 
     private final Map<String, VBox> detailTabs = new LinkedHashMap<>();
     private final Map<String, Button> detailTabButtons = new LinkedHashMap<>();
+    private final List<javafx.animation.Animation> ownedAnimations = new java.util.ArrayList<>();
     private long lastXpInteractionAt = 0L;
     private volatile boolean avatarUpdateInProgress = false;
+    private VBox contentHost;
 
     private StackPane quickActionsContainer;
     private VBox quickActionsDefaultView;
@@ -103,6 +105,7 @@ public class ProfileView implements ViewInterface {
     private final InsightFaceService insightFaceService;
     /** Prevents duplicate concurrent loadDataAsync() runs. */
     private final AtomicBoolean isLoading = new AtomicBoolean(false);
+    private volatile boolean disposed = false;
 
     public ProfileView() {
         this.tm = ThemeManager.getInstance();
@@ -129,6 +132,7 @@ public class ProfileView implements ViewInterface {
     private void buildContentAsync() {
         // Build the structure in slices to keep the UI thread breathing
         javafx.application.Platform.runLater(() -> {
+            if (disposed) return;
             VBox container = new VBox();
             container.setAlignment(Pos.TOP_CENTER);
             container.setFillWidth(true);
@@ -141,17 +145,17 @@ public class ProfileView implements ViewInterface {
             content.setAlignment(Pos.TOP_CENTER);
             content.setPadding(new Insets(24, 0, 42, 0));
             content.setFillWidth(true);
+            contentHost = content;
 
             // Slice 1: Navigation
             content.getChildren().add(createMainNavigation());
             
             // Slice 2: Heavy Pages
             javafx.application.Platform.runLater(() -> {
+                if (disposed) return;
                 VBox page1 = createOverviewPage();
-                VBox page2 = createActivityPage();
                 mainPages.put("overview", page1);
-                mainPages.put("activity", page2);
-                content.getChildren().addAll(page1, page2);
+                content.getChildren().add(page1);
                 setMainPage("overview");
 
                 ScrollPane scroll = new ScrollPane(content);
@@ -162,6 +166,7 @@ public class ProfileView implements ViewInterface {
                 container.getChildren().add(scroll);
 
                 // Final Swap
+                stopOwnedAnimations();
                 this.root.getChildren().setAll(container);
             });
         });
@@ -191,6 +196,7 @@ public class ProfileView implements ViewInterface {
             ft.setCycleCount(javafx.animation.Animation.INDEFINITE);
             ft.setDelay(javafx.util.Duration.millis(i * 120));
             ft.play();
+            ownedAnimations.add(ft);
             skeleton.getChildren().add(bar);
         }
 
@@ -242,14 +248,7 @@ public class ProfileView implements ViewInterface {
                     sm.setCircleData(friendList, pendingList, friendCount, pendingCount);
                 }
 
-                // --- PHASE 2: Build ENTIRE UI off the FX thread ---
-                // Safe because nodes are not yet attached to a live scene.
-                VBox newContent = buildContent();
-
-                // --- PHASE 3: Single atomic swap on FX thread (< 1ms) ---
-                Platform.runLater(() -> {
-                    root.getChildren().setAll(newContent);
-                });
+                Platform.runLater(this::buildContentAsync);
             } catch (Exception ex) {
                 System.err.println("[ProfileView] loadDataAsync failed: " + ex.getMessage());
                 ex.printStackTrace();
@@ -272,6 +271,7 @@ public class ProfileView implements ViewInterface {
         content.setAlignment(Pos.TOP_CENTER);
         content.setPadding(new Insets(24, 0, 42, 0));
         content.setFillWidth(true);
+        contentHost = content;
 
         content.getChildren().add(createMainNavigation());
 
@@ -323,6 +323,11 @@ public class ProfileView implements ViewInterface {
     }
 
     private void setMainPage(String key) {
+        if ("activity".equals(key) && !mainPages.containsKey("activity") && contentHost != null) {
+            VBox page = createActivityPageShell();
+            mainPages.put("activity", page);
+            contentHost.getChildren().add(page);
+        }
         mainPages.forEach((name, pane) -> {
             boolean active = name.equals(key);
             pane.setVisible(active);
@@ -776,87 +781,102 @@ public class ProfileView implements ViewInterface {
         int[] previousPendingCount = new int[] { -1 };
 
         refreshCircle[0] = () -> {
-            int friendCount = relationshipController.countFriends(currentUser);
-            int pendingCount = relationshipController.countPendingRequests(currentUser);
-            friendsBadge.setText(friendCount + " FRIENDS");
-            pendingBadge.setText(pendingCount + " PENDING");
-            if (previousFriendCount[0] != -1 && previousFriendCount[0] != friendCount) {
-                animateBadgePulse(friendsBadge);
-            }
-            if (previousPendingCount[0] != -1 && previousPendingCount[0] != pendingCount) {
-                animateBadgePulse(pendingBadge);
-            }
-            previousFriendCount[0] = friendCount;
-            previousPendingCount[0] = pendingCount;
+            friendsGrid.getChildren().setAll(text("Syncing circle...", 12, false, textMuted()));
+            pendingList.getChildren().setAll(text("Syncing requests...", 12, false, textMuted()));
 
-            friendsGrid.getChildren().clear();
-            List<User> friends = relationshipController.findFriends(currentUser, 24);
-            int col = 0;
-            int row = 0;
-            for (User friend : friends) {
-                VBox friendItem = circleFriendCard(friend, () -> {
-                    relationshipController.removeConnection(currentUser.getIdUser(), friend.getIdUser());
-                    refreshCircle[0].run();
-                    refreshSearch[0].run();
-                });
-                friendsGrid.add(friendItem, col, row);
-                col++;
-                if (col >= 4) {
-                    col = 0;
-                    row++;
-                }
-            }
+            Thread.startVirtualThread(() -> {
+                try {
+                    int friendCount = relationshipController.countFriends(currentUser);
+                    int pendingCount = relationshipController.countPendingRequests(currentUser);
+                    List<User> friends = relationshipController.findFriends(currentUser, 24);
+                    List<UserRelationship> pending = relationshipController.findPendingRequestsFor(currentUser);
 
-            if (friends.isEmpty()) {
-                friendsGrid.add(text("No friends yet.", 12, false, textMuted()), 0, 0);
-            }
-
-            pendingList.getChildren().clear();
-            List<UserRelationship> pending = relationshipController.findPendingRequestsFor(currentUser);
-            
-            // Batch fetch users for pending requests
-            List<Integer> otherIds = new java.util.ArrayList<>();
-            for (UserRelationship rel : pending) {
-                Integer otherId = (rel.getUserSecondId() != null && rel.getUserSecondId().equals(currentUser.getIdUser())) 
-                                  ? rel.getUserFirstId() : rel.getUserSecondId();
-                if (otherId != null && otherId > 0) otherIds.add(otherId);
-            }
-            java.util.Map<Integer, User> userMap = userController.findAllByIds(otherIds).stream()
-                    .collect(java.util.stream.Collectors.toMap(User::getIdUser, u -> u));
-
-            for (UserRelationship relationship : pending) {
-                Integer firstId = relationship.getUserFirstId();
-                Integer secondId = relationship.getUserSecondId();
-                if (firstId == null || secondId == null) continue;
-
-                boolean incoming = secondId.equals(currentUser.getIdUser());
-                int otherId = incoming ? firstId : secondId;
-                User otherUser = userMap.get(otherId);
-                if (otherUser == null) continue;
-
-                pendingList.getChildren().add(circlePendingRow(
-                    otherUser,
-                    incoming,
-                    () -> {
-                        if (relationship.getId() != null) {
-                            relationshipController.acceptRequest(relationship.getId(), currentUser.getIdUser());
-                            com.syndicati.utils.session.SessionManager.getInstance().invalidateCircleCache();
-                            refreshCircle[0].run();
-                            refreshSearch[0].run();
-                        }
-                    },
-                    () -> {
-                        relationshipController.removeConnection(currentUser.getIdUser(), otherUser.getIdUser());
-                        com.syndicati.utils.session.SessionManager.getInstance().invalidateCircleCache();
-                        refreshCircle[0].run();
-                        refreshSearch[0].run();
+                    List<Integer> otherIds = new java.util.ArrayList<>();
+                    for (UserRelationship rel : pending) {
+                        Integer otherId = (rel.getUserSecondId() != null && rel.getUserSecondId().equals(currentUser.getIdUser()))
+                            ? rel.getUserFirstId() : rel.getUserSecondId();
+                        if (otherId != null && otherId > 0) otherIds.add(otherId);
                     }
-                ));
-            }
+                    java.util.Map<Integer, User> userMap = userController.findAllByIds(otherIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(User::getIdUser, u -> u, (a, b) -> a));
 
-            if (pendingList.getChildren().isEmpty()) {
-                pendingList.getChildren().add(text("No pending requests.", 12, false, textMuted()));
-            }
+                    SessionManager.getInstance().setCircleData(friends, pending, friendCount, pendingCount);
+
+                    Platform.runLater(() -> {
+                        if (disposed) return;
+                        friendsBadge.setText(friendCount + " FRIENDS");
+                        pendingBadge.setText(pendingCount + " PENDING");
+                        if (previousFriendCount[0] != -1 && previousFriendCount[0] != friendCount) {
+                            animateBadgePulse(friendsBadge);
+                        }
+                        if (previousPendingCount[0] != -1 && previousPendingCount[0] != pendingCount) {
+                            animateBadgePulse(pendingBadge);
+                        }
+                        previousFriendCount[0] = friendCount;
+                        previousPendingCount[0] = pendingCount;
+
+                        friendsGrid.getChildren().clear();
+                        int col = 0;
+                        int row = 0;
+                        for (User friend : friends) {
+                            VBox friendItem = circleFriendCard(friend, () -> {
+                                relationshipController.removeConnection(currentUser.getIdUser(), friend.getIdUser());
+                                SessionManager.getInstance().invalidateCircleCache();
+                                refreshCircle[0].run();
+                                refreshSearch[0].run();
+                            });
+                            friendsGrid.add(friendItem, col, row);
+                            col++;
+                            if (col >= 4) {
+                                col = 0;
+                                row++;
+                            }
+                        }
+                        if (friends.isEmpty()) {
+                            friendsGrid.add(text("No friends yet.", 12, false, textMuted()), 0, 0);
+                        }
+
+                        pendingList.getChildren().clear();
+                        for (UserRelationship relationship : pending) {
+                            Integer firstId = relationship.getUserFirstId();
+                            Integer secondId = relationship.getUserSecondId();
+                            if (firstId == null || secondId == null) continue;
+
+                            boolean incoming = secondId.equals(currentUser.getIdUser());
+                            int otherId = incoming ? firstId : secondId;
+                            User otherUser = userMap.get(otherId);
+                            if (otherUser == null) continue;
+
+                            pendingList.getChildren().add(circlePendingRow(
+                                otherUser,
+                                incoming,
+                                () -> {
+                                    if (relationship.getId() != null) {
+                                        relationshipController.acceptRequest(relationship.getId(), currentUser.getIdUser());
+                                        SessionManager.getInstance().invalidateCircleCache();
+                                        refreshCircle[0].run();
+                                        refreshSearch[0].run();
+                                    }
+                                },
+                                () -> {
+                                    relationshipController.removeConnection(currentUser.getIdUser(), otherUser.getIdUser());
+                                    SessionManager.getInstance().invalidateCircleCache();
+                                    refreshCircle[0].run();
+                                    refreshSearch[0].run();
+                                }
+                            ));
+                        }
+                        if (pendingList.getChildren().isEmpty()) {
+                            pendingList.getChildren().add(text("No pending requests.", 12, false, textMuted()));
+                        }
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        friendsGrid.getChildren().setAll(text("Circle could not sync right now.", 12, false, textMuted()));
+                        pendingList.getChildren().setAll(text("Requests could not sync right now.", 12, false, textMuted()));
+                    });
+                }
+            });
         };
 
         refreshSearch[0] = () -> {
@@ -933,8 +953,33 @@ public class ProfileView implements ViewInterface {
             animateCircleFace(friendsGrid, pendingList);
         });
 
-        // Initial refresh only if we already have some data, otherwise wait for async
-        if (SessionManager.getInstance().getCurrentStanding() != null) {
+        SessionManager sm = SessionManager.getInstance();
+        if (sm.isCircleCacheFresh() && sm.getCachedFriends() != null) {
+            friendsBadge.setText(Math.max(sm.getCachedFriendCount(), 0) + " FRIENDS");
+            pendingBadge.setText(Math.max(sm.getCachedPendingCount(), 0) + " PENDING");
+            friendsGrid.getChildren().clear();
+            int col = 0;
+            int row = 0;
+            for (User friend : sm.getCachedFriends()) {
+                friendsGrid.add(circleFriendCard(friend, () -> {
+                    relationshipController.removeConnection(currentUser.getIdUser(), friend.getIdUser());
+                    SessionManager.getInstance().invalidateCircleCache();
+                    refreshCircle[0].run();
+                    refreshSearch[0].run();
+                }), col, row);
+                col++;
+                if (col >= 4) {
+                    col = 0;
+                    row++;
+                }
+            }
+            if (sm.getCachedFriends().isEmpty()) {
+                friendsGrid.add(text("No friends yet.", 12, false, textMuted()), 0, 0);
+            }
+            pendingList.getChildren().setAll(text("Open Pending to sync requests.", 12, false, textMuted()));
+        } else {
+            friendsGrid.getChildren().setAll(text("Circle is loading quietly...", 12, false, textMuted()));
+            pendingList.getChildren().setAll(text("Requests are loading quietly...", 12, false, textMuted()));
             refreshCircle[0].run();
         }
         refreshSearch[0].run();
@@ -1102,6 +1147,72 @@ public class ProfileView implements ViewInterface {
         setDetailTab("account");
         page.getChildren().add(wrapper);
         return page;
+    }
+
+    private VBox createActivityPageShell() {
+        VBox page = new VBox(20);
+        page.setAlignment(Pos.TOP_CENTER);
+
+        HBox tabNav = new HBox(8);
+        tabNav.setAlignment(Pos.CENTER);
+        tabNav.setPadding(new Insets(8));
+        tabNav.setMaxWidth(1120);
+        tabNav.setStyle(shell(999, "rgba(10,10,15,0.75)", 0.1));
+
+        VBox wrapper = new VBox(0);
+        wrapper.setAlignment(Pos.TOP_CENTER);
+        wrapper.setMaxWidth(1600);
+        wrapper.getChildren().add(tabNav);
+        page.getChildren().add(wrapper);
+
+        detailTabs.clear();
+        detailTabButtons.clear();
+        addLazyDetailTab(tabNav, wrapper, "Account", "account", () -> new ProfileAccountSection().getRoot());
+        addLazyDetailTab(tabNav, wrapper, "Forum", "forum", () -> new ProfileForumSectionEnhanced().getRoot());
+        addLazyDetailTab(tabNav, wrapper, "Events", "events", () -> new ProfileEventsSectionEnhanced().getRoot());
+        addLazyDetailTab(tabNav, wrapper, "Reclamation", "reclamation", () -> new ProfileReclamationSectionEnhanced().getRoot());
+        addLazyDetailTab(tabNav, wrapper, "Residence", "residence", this::createResidenceTab);
+        setDetailTab("account");
+        return page;
+    }
+
+    private void addLazyDetailTab(HBox nav, VBox wrapper, String label, String key, java.util.function.Supplier<VBox> factory) {
+        VBox placeholder = new VBox(10, text("Loading " + label.toLowerCase() + "...", 12, false, textMuted()));
+        placeholder.setAlignment(Pos.TOP_CENTER);
+        placeholder.setPadding(new Insets(16, 0, 0, 0));
+        detailTabs.put(key, placeholder);
+        wrapper.getChildren().add(placeholder);
+
+        Button btn = new Button(label);
+        btn.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        btn.setOnAction(e -> {
+            VBox current = detailTabs.get(key);
+            if (current == placeholder) {
+                Thread.startVirtualThread(() -> {
+                    try {
+                        Platform.runLater(() -> {
+                            if (disposed || detailTabs.get(key) != placeholder) return;
+                            VBox built = factory.get();
+                            int index = wrapper.getChildren().indexOf(placeholder);
+                            if (index >= 0) {
+                                wrapper.getChildren().set(index, built);
+                            }
+                            detailTabs.put(key, built);
+                            setDetailTab(key);
+                        });
+                    } catch (Exception ignored) {
+                    }
+                });
+            }
+            setDetailTab(key);
+        });
+        styleDetailTabButton(btn, false);
+        detailTabButtons.put(key, btn);
+        nav.getChildren().add(btn);
+
+        if ("account".equals(key)) {
+            Platform.runLater(btn::fire);
+        }
     }
 
     private void addDetailTab(HBox nav, String label, String key, VBox page) {
@@ -2850,6 +2961,16 @@ public class ProfileView implements ViewInterface {
         return t;
     }
 
+    private void stopOwnedAnimations() {
+        for (javafx.animation.Animation animation : ownedAnimations) {
+            try {
+                animation.stop();
+            } catch (Exception ignored) {
+            }
+        }
+        ownedAnimations.clear();
+    }
+
     @Override
     public Pane getRoot() {
         return root;
@@ -2857,7 +2978,17 @@ public class ProfileView implements ViewInterface {
 
     @Override
     public void cleanup() {
-        // No resources to release in this static UI replica.
+        disposed = true;
+        try {
+            stopOwnedAnimations();
+            contentHost = null;
+            mainPages.clear();
+            mainNavButtons.clear();
+            detailTabs.clear();
+            detailTabButtons.clear();
+            root.getChildren().clear();
+        } catch (Exception ignored) {}
+        try { ImageLoaderUtil.trimCache(4); } catch (Exception ignored) {}
     }
 }
 

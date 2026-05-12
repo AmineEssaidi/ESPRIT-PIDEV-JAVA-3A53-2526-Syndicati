@@ -186,6 +186,47 @@ public final class SyndicatiEmailComposer {
         return wrap(body, footerExtra);
     }
 
+    public static String eventCreationNotification(String creatorFirstName, String eventTitle, String eventDate, String eventLocation) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Event Successfully Hosted</h2>" +
+            "<p>Hello " + esc(nameOrFallback(creatorFirstName)) + ",</p>" +
+            "<p>Your new event <strong>\"" + esc(eventTitle) + "\"</strong> has been successfully created and published to the community.</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<h3 style='margin-bottom:15px;color:#ffffff;font-size:22px;letter-spacing:-0.5px;'>" + esc(eventTitle) + "</h3>" +
+            "<div style='background:rgba(0,0,0,0.4);padding:25px;border-radius:16px;border:1px solid rgba(255,255,255,0.05);line-height:1.6;color:rgba(255,255,255,0.8);'>" +
+            "<strong>Date:</strong> " + esc(eventDate) + "<br>" +
+            "<strong>Location:</strong> " + esc(eventLocation) +
+            "</div>" +
+            "</div>" +
+            "<p style='font-size:15px;color:rgba(255,255,255,0.7);'>You can manage your event and track participants directly from your dashboard.</p>" +
+            "<div class='button-container'><a href='#' class='button'>Manage Event</a></div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Events Division - Community Engagement Office</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: EVT-NEW-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now()) + " - Broadcast Confirmed</p>";
+        return wrap(body, footerExtra);
+    }
+
+    public static String eventParticipationConfirmation(String participantFirstName, String eventTitle, String eventDate, String eventLocation) {
+        String body =
+            "<h2 style='color:#ff4b5c;'>Participation Confirmed</h2>" +
+            "<p>Hello " + esc(nameOrFallback(participantFirstName)) + ",</p>" +
+            "<p>We've successfully registered your participation for <strong>\"" + esc(eventTitle) + "\"</strong>. We look forward to seeing you there!</p>" +
+            "<div style='background:rgba(255,75,92,0.03);padding:35px;border-radius:24px;border:1px solid rgba(255,75,92,0.2);margin:35px 0;'>" +
+            "<h3 style='margin-bottom:15px;color:#ffffff;font-size:22px;letter-spacing:-0.5px;'>" + esc(eventTitle) + "</h3>" +
+            "<div style='background:rgba(0,0,0,0.4);padding:25px;border-radius:16px;border:1px solid rgba(255,255,255,0.05);line-height:1.6;color:rgba(255,255,255,0.8);'>" +
+            "<strong>Event Date:</strong> " + esc(eventDate) + "<br>" +
+            "<strong>Venue:</strong> " + esc(eventLocation) +
+            "</div>" +
+            "</div>" +
+            "<div style='padding:20px;background:rgba(255,75,92,0.1);border-radius:16px;border:1px solid rgba(255,75,92,0.2);'>" +
+            "<p style='margin:0;font-size:14px;color:#ff4b5c;line-height:1.6;text-align:center;'>Please present your digital identification or this email at the entrance if required.</p>" +
+            "</div>" +
+            "<p style='font-size:14px;color:rgba(255,255,255,0.4);text-align:center;margin-top:40px;'>Syndicati Events Division - Attendance Management System</p>";
+
+        String footerExtra = "<p style='margin-top:15px;font-style:italic;color:#ff4b5c;font-size:11px;'>Ref: PRT-CONF-" + DateTimeFormatter.ofPattern("HHmm").format(LocalDateTime.now()) + " - Ticket Issued</p>";
+        return wrap(body, footerExtra);
+    }
+
     public static String genericMessage(String recipientName, String message) {
         String body =
             "<h2 style='color:#ff4b5c;'>Notification Syndicati</h2>" +

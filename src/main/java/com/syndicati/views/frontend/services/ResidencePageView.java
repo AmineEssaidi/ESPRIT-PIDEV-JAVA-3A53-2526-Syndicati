@@ -1,5 +1,8 @@
 package com.syndicati.views.frontend.services;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 import com.syndicati.MainApplication;
 import com.syndicati.controllers.residence.MaintenanceController;
 import com.syndicati.controllers.residence.ResidenceController;
@@ -658,9 +661,47 @@ public class ResidencePageView implements ViewInterface {
             if (latestMaintenance.getLastMaintenanceDate() != null) {
                 info.getChildren().add(infoRow("Last Maintenance", latestMaintenance.getLastMaintenanceDate()));
             }
-            if (latestMaintenance.getAiRecommendation() != null && !latestMaintenance.getAiRecommendation().isBlank()) {
-                info.getChildren().add(infoRow("AI Recommendation", latestMaintenance.getAiRecommendation()));
-            }
+            
+            VBox aiSection = new VBox(8);
+            aiSection.setPadding(new Insets(10));
+            aiSection.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 12px;");
+            
+            Text aiTitle = text("AI Maintenance Insights", 14, true, tm.getAccentHex());
+            Text aiText = text(
+                (latestMaintenance.getAiRecommendation() != null && !latestMaintenance.getAiRecommendation().isBlank()) 
+                ? latestMaintenance.getAiRecommendation() 
+                : "No AI recommendation yet.", 
+                12, false, "#ffffff"
+            );
+            aiText.setWrappingWidth(340);
+            
+            Button genBtn = new Button("Generate with AI");
+            genBtn.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 6 12; -fx-background-radius: 8px; -fx-cursor: hand;");
+            
+            final Maintenance finalMaint = latestMaintenance;
+            genBtn.setOnAction(e -> {
+                genBtn.setDisable(true);
+                genBtn.setText("Generating...");
+                
+                new Thread(() -> {
+                    String rec = maintenanceController.generateMistralRecommendation(apt, finalMaint);
+                    javafx.application.Platform.runLater(() -> {
+                        if (maintenanceController.maintenanceUpdate(finalMaint.getIdMaintenance(), 
+                                finalMaint.getGeneralCondition(), finalMaint.getPlumbingCondition(),
+                                finalMaint.getElectricalCondition(), finalMaint.getHeatingCondition(),
+                                finalMaint.getDescription(), rec)) {
+                            rebuildDetailsFace();
+                        } else {
+                            genBtn.setDisable(false);
+                            genBtn.setText("Generate with AI (Failed)");
+                            aiText.setText(rec);
+                        }
+                    });
+                }).start();
+            });
+            
+            aiSection.getChildren().addAll(aiTitle, aiText, genBtn);
+            info.getChildren().add(aiSection);
         }
         info.getChildren().add(buildReviewEditor(apt));
 
@@ -1017,13 +1058,16 @@ public class ResidencePageView implements ViewInterface {
             "-fx-padding: 20;"
         );
 
-        // Generate QR Code for SMS
+        // Generate QR Code for WhatsApp
         ImageView qrView = new ImageView();
         if (selectedApartment != null && selectedApartment.getIdUser() != null) {
             userController.userById(selectedApartment.getIdUser()).ifPresent(owner -> {
                 String phone = owner.getPhone() != null ? owner.getPhone() : "+21600000000";
-                String smsUri = "sms:" + phone + "?body=Bonjour, je vous contacte à propos de votre appartement sur Syndicati.";
-                Image qrImg = QRCodeUtil.generateQRCode(smsUri, 180, 180);
+                String normalizedPhone = phone.replaceAll("[^0-9]", "");
+                String message = "Bonjour, je vous contacte à propos de votre appartement sur Syndicati.";
+                String whatsappUri = "https://wa.me/" + normalizedPhone + "?text=" + URLEncoder.encode(message, StandardCharsets.UTF_8);
+                
+                Image qrImg = QRCodeUtil.generateQRCode(whatsappUri, 180, 180);
                 if (qrImg != null) {
                     qrView.setImage(qrImg);
                 }
@@ -1031,12 +1075,12 @@ public class ResidencePageView implements ViewInterface {
         }
         qrFrame.getChildren().add(qrView);
 
-        Text qrHint = text("Scannez pour envoyer un SMS", 13, true, "#ffffff");
+        Text qrHint = text("Scannez pour contacter sur WhatsApp", 13, true, "#ffffff");
         Text qrSub = text("Contact rapide via mobile", 11, false, textMuted());
 
-        Button smsBtn = new Button("Envoyer via SMS");
-        smsBtn.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.08);" +
+        Button whatsappBtn = new Button("Contacter sur WhatsApp");
+        whatsappBtn.setStyle(
+            "-fx-background-color: #25D366;" +
             "-fx-text-fill: white;" +
             "-fx-background-radius: 14px;" +
             "-fx-border-color: rgba(255,255,255,0.15);" +
@@ -1045,32 +1089,25 @@ public class ResidencePageView implements ViewInterface {
             "-fx-font-weight: bold;" +
             "-fx-cursor: hand;"
         );
-        smsBtn.setMaxWidth(200);
+        whatsappBtn.setMaxWidth(200);
 
-        smsBtn.setOnAction(e -> {
+        whatsappBtn.setOnAction(e -> {
             if (selectedApartment != null && selectedApartment.getIdUser() != null) {
                 userController.userById(selectedApartment.getIdUser()).ifPresentOrElse(owner -> {
                     String phone = owner.getPhone() != null ? owner.getPhone() : "";
                     if (phone.isEmpty()) {
-                        GlobalNotificationPillManager.error("SMS", "Le propriétaire n'a pas de numéro de téléphone.");
+                        GlobalNotificationPillManager.error("WhatsApp", "Le propriétaire n'a pas de numéro de téléphone.");
                         return;
                     }
-                    
-                    String msg = "Bonjour " + owner.getFirstName() + ", je suis intéressé par votre appartement sur Syndicati.";
-                    smsService.sendSmsAsync(phone, msg).thenAccept(resp -> {
-                        javafx.application.Platform.runLater(() -> {
-                            if (resp.contains("Error")) {
-                                GlobalNotificationPillManager.error("SMS", "Échec de l'envoi du SMS.");
-                            } else {
-                                GlobalNotificationPillManager.show("SMS Envoyé", "Une notification SMS a été envoyée au propriétaire.", GlobalNotificationPillManager.Kind.SUCCESS);
-                            }
-                        });
-                    });
-                }, () -> GlobalNotificationPillManager.error("SMS", "Propriétaire introuvable."));
+                    String normalizedPhone = phone.replaceAll("[^0-9]", "");
+                    String message = "Bonjour " + owner.getFirstName() + ", je suis intéressé par votre appartement sur Syndicati.";
+                    String whatsappUrl = "https://wa.me/" + normalizedPhone + "?text=" + URLEncoder.encode(message, StandardCharsets.UTF_8);
+                    MainApplication.getInstance().getHostServices().showDocument(whatsappUrl);
+                }, () -> GlobalNotificationPillManager.error("WhatsApp", "Propriétaire introuvable."));
             }
         });
 
-        right.getChildren().addAll(qrFrame, new VBox(4, qrHint, qrSub) {{ setAlignment(Pos.CENTER); }}, smsBtn);
+        right.getChildren().addAll(qrFrame, new VBox(4, qrHint, qrSub) {{ setAlignment(Pos.CENTER); }}, whatsappBtn);
 
         row.getChildren().addAll(left, right);
         box.getChildren().add(row);

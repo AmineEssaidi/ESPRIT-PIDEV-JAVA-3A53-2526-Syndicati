@@ -1287,7 +1287,7 @@ public class DashboardAdminService {
     private boolean saveMaintenanceTicket(String mode, String[] originalRowData, VBox fields) {
         Map<String, String> values = readEditableFieldValues(fields);
 
-        Integer apartmentId = parseIntOrNull(values.get("Apartment ID"), null);
+        Integer apartmentId = extractId(values.get("Apartment ID"));
         String general = safe(values.get("General"));
         String plumbing = safe(values.get("Plumbing"));
         String electrical = safe(values.get("Electrical"));
