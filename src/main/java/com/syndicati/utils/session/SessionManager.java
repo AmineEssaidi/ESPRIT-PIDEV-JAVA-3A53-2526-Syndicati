@@ -15,7 +15,7 @@ import java.util.List;
 public class SessionManager {
     private static SessionManager instance;
 
-    // ── Core session ────────────────────────────────────────────────────────
+    // â”€â”€ Core session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private User currentUser;
     private Profile currentProfile;
     private UserStanding currentStanding;
@@ -26,7 +26,7 @@ public class SessionManager {
     /** Timestamp (ms) when standing was last fetched from DB. */
     private long standingFetchedAt = 0L;
 
-    // ── Circle / relationship cache ─────────────────────────────────────────
+    // â”€â”€ Circle / relationship cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     /** How long (ms) cached circle data stays valid before a refresh. */
     private static final long CIRCLE_TTL_MS = 60_000L; // 60 seconds
 
@@ -43,7 +43,7 @@ public class SessionManager {
         return instance;
     }
 
-    // ── User ────────────────────────────────────────────────────────────────
+    // â”€â”€ User â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void setCurrentUser(User user) {
         this.currentUser = user;
         if (user != null && user.getIdUser() != null) {
@@ -52,7 +52,7 @@ public class SessionManager {
     }
     public User getCurrentUser() { return currentUser; }
 
-    // ── Profile ─────────────────────────────────────────────────────────────
+    // â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void setCurrentProfile(Profile profile) {
         this.currentProfile = profile;
         this.profileFetchedAt = System.currentTimeMillis();
@@ -71,7 +71,7 @@ public class SessionManager {
             && (System.currentTimeMillis() - profileFetchedAt) < CIRCLE_TTL_MS;
     }
 
-    // ── Standing ────────────────────────────────────────────────────────────
+    // â”€â”€ Standing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void setCurrentStanding(UserStanding standing) {
         this.currentStanding = standing;
         this.standingFetchedAt = System.currentTimeMillis();
@@ -85,7 +85,7 @@ public class SessionManager {
             && (System.currentTimeMillis() - standingFetchedAt) < CIRCLE_TTL_MS;
     }
 
-    // ── Circle / relationship cache ─────────────────────────────────────────
+    // â”€â”€ Circle / relationship cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /** Returns true if the circle cache is still valid (within TTL). */
     public boolean isCircleCacheFresh() {
@@ -110,7 +110,7 @@ public class SessionManager {
     public int getCachedFriendCount() { return cachedFriendCount; }
     public int getCachedPendingCount() { return cachedPendingCount; }
 
-    /** Invalidates circle cache — call after accepting/rejecting a friend request. */
+    /** Invalidates circle cache â€” call after accepting/rejecting a friend request. */
     public void invalidateCircleCache() {
         circleFetchedAt = 0L;
         cachedFriends = null;
@@ -119,7 +119,7 @@ public class SessionManager {
         cachedPendingCount = -1;
     }
 
-    // ── XP ──────────────────────────────────────────────────────────────────
+    // â”€â”€ XP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public synchronized UserStanding awardXp(int xpDelta) {
         if (currentUser == null || currentUser.getIdUser() == null || currentUser.getIdUser() <= 0)
             return currentStanding;
@@ -128,13 +128,24 @@ public class SessionManager {
         long now = System.currentTimeMillis();
         if (now - lastXpAwardAt < 120) return currentStanding;
         lastXpAwardAt = now;
-        UserStandingController controller = new UserStandingController();
-        currentStanding = controller.addExperience(currentUser.getIdUser(), safeDelta);
-        standingFetchedAt = System.currentTimeMillis();
+        try {
+            UserStandingController controller = new UserStandingController();
+            currentStanding = controller.addExperience(currentUser.getIdUser(), safeDelta);
+            standingFetchedAt = System.currentTimeMillis();
+        } catch (Throwable ex) {
+            // XP is nice-to-have; never let a missing packaged standing class break UI clicks.
+            if (currentStanding == null) {
+                currentStanding = new UserStanding();
+                currentStanding.setUserId(currentUser.getIdUser());
+                currentStanding.setLevel(1);
+                currentStanding.setPoints(0);
+                currentStanding.setStandingLabel("NORMAL");
+            }
+        }
         return currentStanding;
     }
 
-    // ── Session lifecycle ────────────────────────────────────────────────────
+    // â”€â”€ Session lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     public void clear() {
         currentUser = null;
         currentProfile = null;

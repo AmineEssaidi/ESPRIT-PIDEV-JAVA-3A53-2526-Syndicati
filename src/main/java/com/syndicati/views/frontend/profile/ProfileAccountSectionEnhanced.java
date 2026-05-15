@@ -3,6 +3,7 @@ package com.syndicati.views.frontend.profile;
 import com.syndicati.controllers.user.user.UserController;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.geometry.Insets;
@@ -48,8 +49,9 @@ public class ProfileAccountSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
         
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle(HorizonDesignSystem.webObsidianPanel(24));
         card.setPrefHeight(600);
+        HorizonDesignSystem.popIn(card);
         
         // Switcher container
         switcherContainer.setPrefHeight(500);
@@ -81,7 +83,8 @@ public class ProfileAccountSectionEnhanced {
         HBox.setHgrow(title, Priority.ALWAYS);
         
         Button settingsBtn = new Button("⚙️ Settings");
-        settingsBtn.setStyle("-fx-padding: 8 16 8 16; -fx-background-color: rgba(99, 102, 241, 0.2); -fx-text-fill: white; -fx-border-color: rgba(99, 102, 241, 0.3); -fx-border-width: 1; -fx-background-radius: 8; -fx-border-radius: 8; -fx-font-weight: bold; -fx-font-size: 11;");
+        settingsBtn.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-padding: 10 18 10 18; -fx-background-radius: 999px; -fx-border-radius: 999px; -fx-font-size: 11;");
+        HorizonDesignSystem.installButtonMotion(settingsBtn);
         settingsBtn.setOnAction(e -> showEditMode());
         
         header.getChildren().addAll(title, settingsBtn);
@@ -89,8 +92,7 @@ public class ProfileAccountSectionEnhanced {
         
         // Scroll pane for content
         ScrollPane viewScroll = new ScrollPane();
-        viewScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        viewScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(viewScroll);
         
         VBox viewContent = new VBox(16);
         viewContent.setPadding(new Insets(12, 0, 0, 0));
@@ -110,7 +112,8 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createAccountInfoCard() {
         VBox card = new VBox(12);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.08); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        card.setStyle(profileInnerCardStyle(16));
+        HorizonDesignSystem.installWebLift(card);
         
         Label cardTitle = new Label("Account Information");
         cardTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
@@ -136,7 +139,8 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createOnboardingCard() {
         VBox card = new VBox(12);
-        card.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.08); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        card.setStyle(profileInnerCardStyle(16));
+        HorizonDesignSystem.installWebLift(card);
         
         Label cardTitle = new Label("✓ Onboarding Choices");
         cardTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
@@ -174,7 +178,8 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createPrefPill(String key, String value) {
         VBox pill = new VBox(2);
-        pill.setStyle("-fx-background-color: rgba(99, 102, 241, 0.1); -fx-border-color: rgba(99, 102, 241, 0.2); -fx-border-width: 1; -fx-padding: 8 12 8 12; -fx-background-radius: 8; -fx-border-radius: 8;");
+        pill.setStyle(HorizonDesignSystem.webAccentBadge() + "-fx-padding: 10 14 10 14; -fx-background-radius: 12px; -fx-border-radius: 12px;");
+        HorizonDesignSystem.installLift(pill, 1.02, -2);
         
         Label keyLabel = new Label(key);
         keyLabel.setFont(Font.font("Segoe UI", 9));
@@ -189,7 +194,7 @@ public class ProfileAccountSectionEnhanced {
     }
 
     private void buildEditMode() {
-        faceEditMode.setStyle("-fx-background-color: rgba(20, 20, 25, 0.98);");
+        faceEditMode.setStyle("-fx-background-color: rgba(5, 5, 10, 0.96); -fx-background-radius: 24px;");
         faceEditMode.setPadding(new Insets(20));
         
         // Back button and title
@@ -197,7 +202,8 @@ public class ProfileAccountSectionEnhanced {
         backHeader.setAlignment(Pos.CENTER_LEFT);
         
         Button backBtn = new Button("←");
-        backBtn.setStyle("-fx-padding: 8; -fx-font-size: 14; -fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-background-radius: 50%; -fx-border-radius: 50%;");
+        backBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-min-width: 34px; -fx-min-height: 34px; -fx-max-width: 34px; -fx-max-height: 34px; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(backBtn);
         backBtn.setOnAction(e -> showViewMode());
         
         Label editTitle = new Label("Account Settings");
@@ -209,8 +215,7 @@ public class ProfileAccountSectionEnhanced {
         
         // Settings form
         ScrollPane editScroll = new ScrollPane();
-        editScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        editScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(editScroll);
         
         VBox formContent = new VBox(16);
         formContent.setPadding(new Insets(16, 0, 0, 0));
@@ -229,8 +234,9 @@ public class ProfileAccountSectionEnhanced {
         
         // Save button
         Button saveBtn = new Button("💾 Save Changes");
-        saveBtn.setStyle("-fx-padding: 10 20 10 20; -fx-background-color: rgba(99, 102, 241, 0.8); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8; -fx-font-size: 12;");
+        saveBtn.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-padding: 12 24 12 24; -fx-background-radius: 999px; -fx-border-radius: 999px; -fx-font-size: 12;");
         saveBtn.setPrefWidth(150);
+        HorizonDesignSystem.installButtonMotion(saveBtn);
         saveBtn.setOnAction(e -> handleSaveSettings());
         formContent.getChildren().add(saveBtn);
         
@@ -241,7 +247,7 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createProfileSettingsSection() {
         VBox section = new VBox(12);
-        section.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        section.setStyle(profileInnerCardStyle(16));
         
         Label sectionTitle = new Label("Profile Settings");
         sectionTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
@@ -250,7 +256,8 @@ public class ProfileAccountSectionEnhanced {
         
         // Avatar upload button
         Button avatarBtn = new Button("🖼️ Upload Avatar");
-        avatarBtn.setStyle("-fx-padding: 8 16 8 16; -fx-background-color: rgba(99, 102, 241, 0.2); -fx-text-fill: white; -fx-background-radius: 8; -fx-border-color: rgba(99, 102, 241, 0.3); -fx-border-width: 1;");
+        avatarBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-padding: 10 16 10 16; -fx-background-radius: 14px; -fx-border-radius: 14px;");
+        HorizonDesignSystem.installButtonMotion(avatarBtn);
         avatarBtn.setOnAction(e -> handleAvatarUpload());
         section.getChildren().add(avatarBtn);
         
@@ -260,7 +267,7 @@ public class ProfileAccountSectionEnhanced {
         bioLabel.setTextFill(Color.color(1, 1, 1, 0.6));
         
         TextField bioField = new TextField();
-        bioField.setStyle("-fx-padding: 8; -fx-background-color: rgba(255, 255, 255, 0.05); -fx-text-fill: white; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 6; -fx-border-radius: 6;");
+        styleProfileField(bioField);
         bioField.setPromptText("Tell us about yourself...");
         bioField.setPrefHeight(80);
         
@@ -270,7 +277,7 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createPreferencesSettingsSection() {
         VBox section = new VBox(12);
-        section.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        section.setStyle(profileInnerCardStyle(16));
         
         Label sectionTitle = new Label("Preferences");
         sectionTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
@@ -283,7 +290,7 @@ public class ProfileAccountSectionEnhanced {
         langLabel.setTextFill(Color.color(1, 1, 1, 0.6));
         
         TextField langField = new TextField("English");
-        langField.setStyle("-fx-padding: 8; -fx-background-color: rgba(255, 255, 255, 0.05); -fx-text-fill: white; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 6; -fx-border-radius: 6;");
+        styleProfileField(langField);
         
         // Theme preference
         Label themeLabel = new Label("Theme");
@@ -291,7 +298,7 @@ public class ProfileAccountSectionEnhanced {
         themeLabel.setTextFill(Color.color(1, 1, 1, 0.6));
         
         TextField themeField = new TextField("Dark");
-        themeField.setStyle("-fx-padding: 8; -fx-background-color: rgba(255, 255, 255, 0.05); -fx-text-fill: white; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 6; -fx-border-radius: 6;");
+        styleProfileField(themeField);
         
         section.getChildren().addAll(langLabel, langField, themeLabel, themeField);
         return section;
@@ -299,7 +306,7 @@ public class ProfileAccountSectionEnhanced {
 
     private VBox createSecuritySettingsSection() {
         VBox section = new VBox(12);
-        section.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        section.setStyle(profileInnerCardStyle(16));
         
         Label sectionTitle = new Label("🔒 Security");
         sectionTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
@@ -308,13 +315,15 @@ public class ProfileAccountSectionEnhanced {
         
         // Change password button
         Button changePasswordBtn = new Button("🔑 Change Password");
-        changePasswordBtn.setStyle("-fx-padding: 8 16 8 16; -fx-background-color: rgba(255, 150, 100, 0.2); -fx-text-fill: white; -fx-background-radius: 8; -fx-border-color: rgba(255, 150, 100, 0.3); -fx-border-width: 1;");
+        changePasswordBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-padding: 10 16 10 16; -fx-background-radius: 14px; -fx-border-radius: 14px;");
+        HorizonDesignSystem.installButtonMotion(changePasswordBtn);
         changePasswordBtn.setOnAction(e -> handleChangePassword());
         section.getChildren().add(changePasswordBtn);
         
         // 2FA toggle
         Button twoFABtn = new Button("📱 Enable 2FA/Biometrics");
-        twoFABtn.setStyle("-fx-padding: 8 16 8 16; -fx-background-color: rgba(100, 255, 150, 0.2); -fx-text-fill: white; -fx-background-radius: 8; -fx-border-color: rgba(100, 255, 150, 0.3); -fx-border-width: 1;");
+        twoFABtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-padding: 10 16 10 16; -fx-background-radius: 14px; -fx-border-radius: 14px;");
+        HorizonDesignSystem.installButtonMotion(twoFABtn);
         twoFABtn.setOnAction(e -> handleTwoFA());
         section.getChildren().add(twoFABtn);
         
@@ -328,6 +337,17 @@ public class ProfileAccountSectionEnhanced {
             case "RESIDENT" -> "👤 Resident";
             default -> role;
         };
+    }
+
+    private String profileInnerCardStyle(int radius) {
+        return HorizonDesignSystem.webServiceCard(radius, false) + "-fx-padding: 18;";
+    }
+
+    private void styleProfileField(TextField field) {
+        field.setStyle(HorizonDesignSystem.webServiceInput(12, false));
+        field.focusedProperty().addListener((obs, oldValue, focused) ->
+            field.setStyle(HorizonDesignSystem.webServiceInput(12, focused))
+        );
     }
 
     private void handleAvatarUpload() {

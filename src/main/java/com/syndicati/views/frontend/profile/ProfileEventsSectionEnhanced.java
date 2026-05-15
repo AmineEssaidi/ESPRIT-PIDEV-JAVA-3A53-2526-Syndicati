@@ -6,6 +6,7 @@ import com.syndicati.models.evenement.Evenement;
 import com.syndicati.models.evenement.Participation;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.geometry.Insets;
@@ -73,8 +74,9 @@ public class ProfileEventsSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
         
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle(HorizonDesignSystem.webObsidianPanel(24));
         card.setPrefHeight(600);
+        HorizonDesignSystem.popIn(card);
         
         // Switcher container
         switcherContainer.setPrefHeight(500);
@@ -118,8 +120,7 @@ public class ProfileEventsSectionEnhanced {
         
         // Event list with scroll
         ScrollPane listScroll = new ScrollPane();
-        listScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        listScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(listScroll);
         listScroll.setPrefHeight(400);
         listScroll.setContent(eventList);
         VBox.setVgrow(listScroll, Priority.ALWAYS);
@@ -132,7 +133,7 @@ public class ProfileEventsSectionEnhanced {
     }
 
     private void buildDetailsView() {
-        faceDetailsView.setStyle("-fx-background-color: rgba(20, 20, 25, 0.98);");
+        faceDetailsView.setStyle("-fx-background-color: rgba(5, 5, 10, 0.96); -fx-background-radius: 24px;");
         faceDetailsView.setPadding(new Insets(20));
         
         // Back button and title
@@ -140,7 +141,8 @@ public class ProfileEventsSectionEnhanced {
         backHeader.setAlignment(Pos.CENTER_LEFT);
         
         Button backBtn = new Button("←");
-        backBtn.setStyle("-fx-padding: 8; -fx-font-size: 14; -fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-background-radius: 50%; -fx-border-radius: 50%;");
+        backBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-min-width: 34px; -fx-min-height: 34px; -fx-max-width: 34px; -fx-max-height: 34px; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(backBtn);
         backBtn.setOnAction(e -> showListView());
         
         Label detailTitle = new Label("Event Details");
@@ -152,8 +154,7 @@ public class ProfileEventsSectionEnhanced {
         
         // Detail content
         ScrollPane detailScroll = new ScrollPane();
-        detailScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        detailScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(detailScroll);
         
         VBox detailContent = new VBox(12);
         detailContent.setPadding(new Insets(16, 0, 0, 0));
@@ -168,7 +169,7 @@ public class ProfileEventsSectionEnhanced {
 
     private HBox createAdminFilter() {
         HBox filter = new HBox(8);
-        filter.setStyle("-fx-background-color: rgba(255, 255, 255, 0.05); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-padding: 4; -fx-background-radius: 999; -fx-border-radius: 999;");
+        filter.setStyle("-fx-background-color: rgba(255, 255, 255, 0.04); -fx-border-color: rgba(255, 255, 255, 0.10); -fx-border-width: 1; -fx-padding: 5; -fx-background-radius: 999; -fx-border-radius: 999;");
         
         User currentUser = SessionManager.getInstance().getCurrentUser();
         boolean isAdmin = currentUser != null && (currentUser.getRoleUser().equals("ADMIN") || currentUser.getRoleUser().equals("OWNER"));
@@ -186,36 +187,16 @@ public class ProfileEventsSectionEnhanced {
 
     private Button createFilterButton(String text, boolean active) {
         Button btn = new Button(text);
-        btn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.8);" : "transparent;") +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: bold; " +
-            "-fx-background-radius: 999; " +
-            "-fx-font-size: 11;"
-        );
+        btn.setStyle(ownerFilterStyle(active));
+        HorizonDesignSystem.installButtonMotion(btn);
         return btn;
     }
 
     private void switchAdminFilter(String filterType, Button myOwnBtn, Button everyoneBtn) {
         currentOwnerFilter = filterType;
         boolean isMyOwn = filterType.equals("my");
-        myOwnBtn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (isMyOwn ? "rgba(99, 102, 241, 0.8);" : "transparent;") +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: bold; " +
-            "-fx-background-radius: 999; " +
-            "-fx-font-size: 11;"
-        );
-        everyoneBtn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (!isMyOwn ? "rgba(99, 102, 241, 0.8);" : "transparent;") +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: bold; " +
-            "-fx-background-radius: 999; " +
-            "-fx-font-size: 11;"
-        );
+        myOwnBtn.setStyle(ownerFilterStyle(isMyOwn));
+        everyoneBtn.setStyle(ownerFilterStyle(!isMyOwn));
         currentPage = 0;
         loadEvents();
     }
@@ -242,17 +223,8 @@ public class ProfileEventsSectionEnhanced {
 
     private Button createStatusButton(String text, boolean active) {
         Button btn = new Button(text);
-        btn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.2);" : "rgba(255,255,255,0.05);") +
-            "-fx-text-fill: " + (active ? "white;" : "rgba(255,255,255,0.7);") +
-            "-fx-border-color: " + (active ? "rgba(99, 102, 241, 0.3);" : "rgba(255,255,255,0.1);") +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 999; " +
-            "-fx-border-radius: 999; " +
-            "-fx-font-size: 11; " +
-            "-fx-font-weight: " + (active ? "bold;" : "normal;")
-        );
+        btn.setStyle(statusPillStyle(active));
+        HorizonDesignSystem.installButtonMotion(btn);
         return btn;
     }
 
@@ -270,17 +242,7 @@ public class ProfileEventsSectionEnhanced {
         String[] statuses = {"all", "planifié", "en cours", "terminé", "annulé"};
         for (int i = 0; i < buttons.length; i++) {
             boolean isActive = activeStatus.equals(statuses[i]);
-            buttons[i].setStyle(
-                "-fx-padding: 6 12 6 12; " +
-                "-fx-background-color: " + (isActive ? "rgba(99, 102, 241, 0.2);" : "rgba(255,255,255,0.05);") +
-                "-fx-text-fill: " + (isActive ? "white;" : "rgba(255,255,255,0.7);") +
-                "-fx-border-color: " + (isActive ? "rgba(99, 102, 241, 0.3);" : "rgba(255,255,255,0.1);") +
-                "-fx-border-width: 1; " +
-                "-fx-background-radius: 999; " +
-                "-fx-border-radius: 999; " +
-                "-fx-font-size: 11; " +
-                "-fx-font-weight: " + (isActive ? "bold;" : "normal;")
-            );
+            buttons[i].setStyle(statusPillStyle(isActive));
         }
     }
 
@@ -354,13 +316,8 @@ public class ProfileEventsSectionEnhanced {
             Button pageBtn = new Button(String.valueOf(page + 1));
             final int pageNum = page;
             boolean isActive = page == currentPage;
-            pageBtn.setStyle(
-                "-fx-padding: 4 10 4 10; " +
-                "-fx-background-color: " + (isActive ? "rgba(99, 102, 241, 0.8);" : "rgba(255,255,255,0.05);") +
-                "-fx-text-fill: white; " +
-                "-fx-background-radius: 6; " +
-                "-fx-font-size: 10;"
-            );
+            pageBtn.setStyle(pageButtonStyle(isActive));
+            HorizonDesignSystem.installButtonMotion(pageBtn);
             pageBtn.setOnAction(e -> {
                 currentPage = pageNum;
                 renderEventList();
@@ -372,36 +329,12 @@ public class ProfileEventsSectionEnhanced {
     private VBox createEventItem(EventFeedEntry entry) {
         Evenement event = entry.event();
         VBox item = new VBox(8);
-        item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        );
+        item.setStyle(eventItemStyle(false));
         item.setOnMouseClicked(e -> showDetailsView(entry));
         
         // Hover effect
-        item.setOnMouseEntered(e -> item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.07); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.15); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        ));
-        item.setOnMouseExited(e -> item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        ));
+        item.setOnMouseEntered(e -> item.setStyle(eventItemStyle(true)));
+        item.setOnMouseExited(e -> item.setStyle(eventItemStyle(false)));
         
         HBox header = new HBox(12);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -442,7 +375,7 @@ public class ProfileEventsSectionEnhanced {
         if (entry.isParticipation()) {
             Label kind = new Label("👤 Participation");
             kind.setFont(Font.font("Segoe UI", 9));
-            kind.setStyle("-fx-text-fill: rgba(255,255,255,0.85); -fx-background-color: rgba(255,255,255,0.12); -fx-padding: 4 8 4 8; -fx-background-radius: 6;");
+            kind.setStyle("-fx-text-fill: rgba(255,255,255,0.88); -fx-background-color: rgba(255,255,255,0.10); -fx-padding: 5 9 5 9; -fx-background-radius: 999px; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-border-radius: 999px;");
             header.getChildren().addAll(icon, titleSection, kind, status, chevron);
         } else {
             header.getChildren().addAll(icon, titleSection, status, chevron);
@@ -461,6 +394,49 @@ public class ProfileEventsSectionEnhanced {
             case "annulé" -> "❌ Cancelled";
             default -> status;
         };
+    }
+
+    private String ownerFilterStyle(boolean active) {
+        return "-fx-padding: 7 14 7 14; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.buttonPrimaryBackground() : "transparent") + ";" +
+            "-fx-text-fill: " + (active ? "#ffffff" : "rgba(255,255,255,0.70)") + "; " +
+            "-fx-font-weight: 800; " +
+            "-fx-background-radius: 999px; " +
+            "-fx-border-radius: 999px; " +
+            "-fx-font-size: 11; " +
+            "-fx-cursor: hand;";
+    }
+
+    private String statusPillStyle(boolean active) {
+        return "-fx-padding: 7 13 7 13; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.20) : "rgba(255,255,255,0.045)") + "; " +
+            "-fx-text-fill: " + (active ? "#ffffff" : "rgba(255,255,255,0.68)") + "; " +
+            "-fx-border-color: " + (active ? HorizonDesignSystem.accentRgba(0.38) : "rgba(255,255,255,0.10)") + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-background-radius: 999px; " +
+            "-fx-border-radius: 999px; " +
+            "-fx-font-size: 11; " +
+            "-fx-font-weight: " + (active ? "800" : "700") + "; " +
+            "-fx-cursor: hand;";
+    }
+
+    private String pageButtonStyle(boolean active) {
+        return "-fx-padding: 6 11 6 11; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.78) : "rgba(255,255,255,0.05)") + "; " +
+            "-fx-text-fill: white; " +
+            "-fx-background-radius: 999px; " +
+            "-fx-border-color: " + (active ? "transparent" : "rgba(255,255,255,0.10)") + "; " +
+            "-fx-border-width: 1; " +
+            "-fx-border-radius: 999px; " +
+            "-fx-font-size: 10; " +
+            "-fx-font-weight: 800; " +
+            "-fx-cursor: hand;";
+    }
+
+    private String eventItemStyle(boolean hover) {
+        return HorizonDesignSystem.webServiceCard(16, hover) +
+            "-fx-padding: 14;" +
+            "-fx-cursor: hand;";
     }
 
     private String getStatusColor(String status) {
@@ -525,7 +501,8 @@ public class ProfileEventsSectionEnhanced {
         detailContent.getChildren().clear();
         
         VBox detailCard = new VBox(12);
-        detailCard.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        detailCard.setStyle(HorizonDesignSystem.webServiceCard(16, false) + "-fx-padding: 18;");
+        HorizonDesignSystem.installWebLift(detailCard);
         
         Label eventTitle = new Label(event.getTitreEvent() != null ? event.getTitreEvent() : "—");
         eventTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));

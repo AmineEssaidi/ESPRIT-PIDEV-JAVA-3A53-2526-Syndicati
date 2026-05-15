@@ -45,12 +45,23 @@ public class FloatingActionButtons {
     private static VBox container;
     private static VBox agentPopup;
     private static VBox msgPopup;
+    private static Integer msgPopupUserId;
 
     public static void attachTo(StackPane root) {
         if (root == null) return;
         
         if (container == null) {
             createUI();
+        }
+
+        Integer currentUserId = currentSessionUserId();
+        if ((msgPopupUserId == null && currentUserId != null) || (msgPopupUserId != null && !msgPopupUserId.equals(currentUserId))) {
+            if (msgPopup != null && msgPopup.getParent() != null) {
+                ((Pane) msgPopup.getParent()).getChildren().remove(msgPopup);
+            }
+            MessagingSocketClient.getInstance().disconnect();
+            msgPopup = createMessagePopupShell();
+            msgPopupUserId = currentUserId;
         }
 
         if (container.getParent() != null) ((Pane) container.getParent()).getChildren().remove(container);
@@ -71,6 +82,7 @@ public class FloatingActionButtons {
 
         agentPopup = createAgentPopupShell();
         msgPopup = createMessagePopupShell();
+        msgPopupUserId = currentSessionUserId();
 
         btnAgent.setOnAction(e -> {
             agentPopup.setVisible(!agentPopup.isVisible());
@@ -346,6 +358,11 @@ public class FloatingActionButtons {
         return new MessagingHub().getPanel();
     }
 
+    private static Integer currentSessionUserId() {
+        User user = SessionManager.getInstance().getCurrentUser();
+        return user != null ? user.getIdUser() : null;
+    }
+
     private static class MessagingHub {
         private final VBox panel;
         private final StackPane viewContainer;
@@ -396,6 +413,7 @@ public class FloatingActionButtons {
             Button close = new Button("×");
             close.getStyleClass().add("horizon-close");
             close.setOnAction(e -> {
+                stopPolling();
                 panel.setVisible(false);
             });
             
@@ -453,9 +471,11 @@ public class FloatingActionButtons {
             btnBack.setVisible(!"list".equals(viewName));
             if ("list".equals(viewName)) {
                 titleText.setText("💬 Messaging");
+                stopPolling();
                 loadConversations();
             } else if ("selection".equals(viewName)) {
                 titleText.setText("👤 Select Friend");
+                stopPolling();
                 loadFriends();
             }
         }
@@ -634,6 +654,7 @@ public class FloatingActionButtons {
             titleText.setText(name);
             switchView("chat");
             refreshMessages();
+            startPolling();
         }
 
         private void refreshMessages() {
@@ -723,11 +744,33 @@ public class FloatingActionButtons {
                     titleText.setText(f.getFirstName() + " " + f.getLastName());
                     switchView("chat");
                     ((VBox) ((ScrollPane) chatContainer.getChildren().get(0)).getContent()).getChildren().clear();
+                    startPolling();
                 });
                 scrollContent.getChildren().add(card);
             }
         }
 
-        // Polling removed in favor of sockets
+        private void startPolling() {
+            stopPolling();
+            pollTimeline = new Timeline(new KeyFrame(Duration.seconds(5), e -> {
+                if (!panel.isVisible() || !chatContainer.isVisible()) {
+                    return;
+                }
+                if (currentConversation != null) {
+                    refreshMessages();
+                } else {
+                    loadConversations();
+                }
+            }));
+            pollTimeline.setCycleCount(Timeline.INDEFINITE);
+            pollTimeline.play();
+        }
+
+        private void stopPolling() {
+            if (pollTimeline != null) {
+                pollTimeline.stop();
+                pollTimeline = null;
+            }
+        }
     }
 }

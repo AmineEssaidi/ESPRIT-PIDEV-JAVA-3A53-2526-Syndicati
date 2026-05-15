@@ -3,6 +3,7 @@ package com.syndicati.views.backend.dashboard;
 import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.forum.Reaction;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -95,7 +96,7 @@ final class DashboardForumSection {
 
         DashboardTableQueryEngine.QueryState queryState = new DashboardTableQueryEngine.QueryState(1_000_000);
         TextField searchField = dashboardSearchField(view, "Search publications by title, category, description or date...");
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         HBox headerControls = dashboardHeaderControls(searchField, sortPill, filterRow);
@@ -137,7 +138,7 @@ final class DashboardForumSection {
 
         renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Publications", "Publication", new String[]{"Title", "Category", "Description", "Image", "Date"}, "No publications found");
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -225,7 +226,7 @@ final class DashboardForumSection {
 
         DashboardTableQueryEngine.QueryState queryState = new DashboardTableQueryEngine.QueryState(1_000_000);
         TextField searchField = dashboardSearchField(view, "Search comments by publication, author, description or date...");
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         HBox headerControls = dashboardHeaderControls(searchField, sortPill, filterRow);
@@ -267,7 +268,7 @@ final class DashboardForumSection {
 
         renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Comments", "Comment", new String[]{"Publication", "Author", "Description", "Image", "Date"}, "No comments found");
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -333,7 +334,7 @@ final class DashboardForumSection {
 
         DashboardTableQueryEngine.QueryState queryState = new DashboardTableQueryEngine.QueryState(1_000_000);
         TextField searchField = dashboardSearchField(view, "Search reactions by user, target, type or date...");
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         HBox headerControls = dashboardHeaderControls(searchField, sortPill, filterRow);
@@ -376,7 +377,7 @@ final class DashboardForumSection {
 
         renderForumTable(view, baseRows, queryState, tableHost, sortPill, headerControls, filterRow, "Forum Reactions", "Reaction", new String[]{"User", "Target", "Type", "Count", "Updated"}, "No reactions found");
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -472,7 +473,7 @@ final class DashboardForumSection {
             ? new String[][]{{emptyMessage, "-", "-", "-", "-"}}
             : result.pageRows.toArray(new String[0][]);
 
-        sortPill.setText(queryState.ascending ? "Order: A-Z" : "Order: Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
         tableHost.getChildren().clear();
         tableHost.getChildren().add(view.dataTableWithCrud(tableTitle, entityLabel, columns, visibleRows, true, headerControls));
     }
@@ -482,33 +483,22 @@ final class DashboardForumSection {
         searchField.setPromptText(promptText);
         searchField.setPrefWidth(280);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
         return searchField;
     }
 
     private static void styleQueryPill(DashboardView view, Button btn, boolean active) {
+        btn.setStyle(queryPillStyle(view, active));
+        HorizonDesignSystem.installButtonMotion(btn);
+    }
+
+    private static String queryPillStyle(DashboardView view, boolean active) {
         if (active) {
-            btn.setStyle(
-                "-fx-background-color:" + view.accentRgba(1.0) + ";" +
-                "-fx-text-fill:white;" +
-                "-fx-border-width:0;" +
-                "-fx-font-weight:bold;"
-            );
-        } else {
-            btn.setStyle(
-                "-fx-background-color:transparent;" +
-                "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.6)" : "rgba(15,23,42,0.6)") + ";" +
-                "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.2)" : "rgba(15,23,42,0.2)") + ";" +
-                "-fx-border-width:1;"
-            );
+            return "-fx-background-color:" + view.accentGradient() + ";-fx-border-color:" + view.accentRgba(0.36) + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:white;-fx-font-weight:700;-fx-cursor:hand;";
         }
+        return "-fx-background-color:transparent;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.76)" : "rgba(15,23,42,0.82)") + ";-fx-font-weight:700;-fx-cursor:hand;";
     }
 }
+
+

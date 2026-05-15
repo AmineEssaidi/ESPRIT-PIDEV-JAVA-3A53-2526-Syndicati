@@ -2,6 +2,7 @@ package com.syndicati.components.security;
 
 import com.syndicati.services.observability.HCaptchaService;
 import com.syndicati.services.security.HCaptchaLocalServer;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -31,6 +32,7 @@ import java.nio.file.Path;
 public class HCaptchaComponent {
     private final HCaptchaService hcaptchaService;
     private VBox container;
+    private Button verifyButton;
     private volatile String captchaToken = "";
     private HCaptchaLocalServer localServer;
     private volatile boolean verified = false;
@@ -44,6 +46,7 @@ public class HCaptchaComponent {
     private WebView modalWebView;
     private WebEngine modalEngine;
     private boolean modalInitialized = false;
+    private boolean inlineExpanded = false;
 
     public HCaptchaComponent() {
         this.hcaptchaService = new HCaptchaService();
@@ -95,25 +98,18 @@ public class HCaptchaComponent {
         container = new VBox();
         container.setSpacing(0);
         container.setAlignment(Pos.CENTER);
-        container.setPrefHeight(60);
-        container.setMaxWidth(350);
+        container.setPrefHeight(58);
+        container.setMinWidth(300);
+        container.setMaxWidth(300);
 
-        Button verifyButton = new Button("Verify I am Human");
-        verifyButton.setPrefWidth(220);
-        verifyButton.setPrefHeight(45);
+        verifyButton = new Button("Verify I am Human");
+        verifyButton.setPrefWidth(264);
+        verifyButton.setPrefHeight(42);
         verifyButton.setCursor(javafx.scene.Cursor.HAND);
-        verifyButton.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.05);" +
-            "-fx-text-fill: white;" +
-            "-fx-font-size: 14px;" +
-            "-fx-font-weight: bold;" +
-            "-fx-border-color: rgba(255, 255, 255, 0.1);" +
-            "-fx-border-radius: 10;" +
-            "-fx-background-radius: 10;"
-        );
-
-        verifyButton.setOnMouseEntered(e -> verifyButton.setStyle(verifyButton.getStyle() + "-fx-background-color: rgba(255, 255, 255, 0.1);"));
-        verifyButton.setOnMouseExited(e -> verifyButton.setStyle(verifyButton.getStyle().replace("-fx-background-color: rgba(255, 255, 255, 0.1);", "-fx-background-color: rgba(255, 255, 255, 0.05);")));
+        verifyButton.setStyle(captchaButtonStyle(false));
+        verifyButton.setOnMouseEntered(e -> verifyButton.setStyle(captchaButtonStyle(true)));
+        verifyButton.setOnMouseExited(e -> verifyButton.setStyle(captchaButtonStyle(false)));
+        HorizonDesignSystem.installButtonMotion(verifyButton);
 
         verifyButton.setOnAction(e -> openCaptchaModal());
         
@@ -121,30 +117,63 @@ public class HCaptchaComponent {
     }
 
     private void openCaptchaModal() {
-        if (verified || modalWebView == null) return;
-        
+        if (verified || modalWebView == null || inlineExpanded) return;
+
         Platform.runLater(() -> {
-            // Swap the button for the actual hCaptcha WebView
-            container.getChildren().clear();
-            
-            // Remove constraints that were meant for the tiny "Verify" button
+            inlineExpanded = true;
+            modalWebView.setPrefSize(300, 430);
+            modalWebView.setMaxSize(300, 430);
+            container.setSpacing(10);
             container.setPrefHeight(Region.USE_COMPUTED_SIZE);
-            container.setMaxHeight(Double.MAX_VALUE);
-            container.setPrefWidth(Region.USE_COMPUTED_SIZE);
-            container.setMaxWidth(Double.MAX_VALUE);
-            
-            container.getChildren().add(modalWebView);
-            
-            // Ensure the panel is open in the main view
-            com.syndicati.views.frontend.login.LoginView.getInstance().openCaptchaPanel();
+            container.setMinHeight(Region.USE_PREF_SIZE);
+            container.setMaxHeight(Region.USE_COMPUTED_SIZE);
+            container.setMinWidth(300);
+            container.setMaxWidth(300);
+            if (!container.getChildren().contains(verifyButton)) {
+                container.getChildren().setAll(verifyButton);
+            }
+            if (!container.getChildren().contains(modalWebView)) {
+                container.getChildren().add(modalWebView);
+            }
         });
     }
 
     private void showVerifiedStatus() {
         container.getChildren().clear();
+        inlineExpanded = false;
         Label verifiedLabel = new Label("✓ Security Verified");
-        verifiedLabel.setStyle("-fx-text-fill: #10b981; -fx-font-weight: bold; -fx-font-size: 16px;");
+        verifiedLabel.setStyle(
+            HorizonDesignSystem.webAccentBadge() +
+            "-fx-text-fill: #10b981;" +
+            "-fx-font-weight: 800;" +
+            "-fx-font-size: 14px;" +
+            "-fx-padding: 10 16 10 16;"
+        );
         container.getChildren().add(verifiedLabel);
+    }
+
+    private String captchaButtonStyle(boolean hover) {
+        return (hover ? HorizonDesignSystem.buttonPrimary() : HorizonDesignSystem.buttonGhost()) +
+            "-fx-font-size: 13px;" +
+            "-fx-font-weight: 800;" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-radius: 999px;" +
+            "-fx-padding: 9 18 9 18;";
+    }
+
+    public void resetInlineState() {
+        inlineExpanded = false;
+        Platform.runLater(() -> {
+            container.setSpacing(0);
+            container.setPrefHeight(58);
+            container.setMinHeight(Region.USE_PREF_SIZE);
+            container.setMaxHeight(Region.USE_PREF_SIZE);
+            container.setMinWidth(300);
+            container.setMaxWidth(300);
+            verified = false;
+            captchaToken = "";
+            container.getChildren().setAll(verifyButton);
+        });
     }
 
     public boolean hasLoadFailed() {
@@ -199,10 +228,12 @@ public class HCaptchaComponent {
             justify-content: center;
             align-items: center;
             height: 100vh;
-            min-height: 600px;
+            min-height: 420px;
         }
         #captcha-target {
             background: transparent !important;
+            transform: scale(0.92);
+            transform-origin: top center;
         }
     </style>
 </head>

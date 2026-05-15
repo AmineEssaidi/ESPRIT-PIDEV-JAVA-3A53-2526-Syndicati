@@ -3,6 +3,7 @@ package com.syndicati.views.backend.dashboard;
 import com.syndicati.models.user.Onboarding;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -94,17 +95,10 @@ final class DashboardUsersSection {
         searchField.setPromptText("Search users by name, email, role or status...");
         searchField.setPrefWidth(280);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox primaryControls = new HBox(8, searchField, sortPill);
         primaryControls.setAlignment(Pos.CENTER_LEFT);
 
@@ -121,7 +115,7 @@ final class DashboardUsersSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        HBox headerControls = new HBox(8, searchField, filterRow, sortPill);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
@@ -151,7 +145,7 @@ final class DashboardUsersSection {
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
         renderUsersTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -222,31 +216,38 @@ final class DashboardUsersSection {
 
         styleQueryPill(view, sortPill, queryState.ascending);
         String filterLabel = scope.isEmpty() ? "Name" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
-        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
     }
 
     private static void styleQueryPill(DashboardView view, Button b, boolean active) {
         if (active) {
-            b.setStyle(
-                "-fx-background-color:" + view.accentRgba(0.24) + ";" +
-                "-fx-border-color:" + view.accentRgba(0.34) + ";" +
-                "-fx-border-width:1;" +
-                "-fx-background-radius:100px;" +
-                "-fx-border-radius:100px;" +
-                "-fx-text-fill:white;" +
-                "-fx-cursor:hand;"
-            );
+            b.setStyle(activeQueryPillStyle(view));
         } else {
-            b.setStyle(
-                "-fx-background-color:transparent;" +
-                "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)") + ";" +
-                "-fx-border-width:1;" +
-                "-fx-background-radius:100px;" +
-                "-fx-border-radius:100px;" +
-                "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)") + ";" +
-                "-fx-cursor:hand;"
-            );
+            b.setStyle(inactiveQueryPillStyle(view));
         }
+        HorizonDesignSystem.installButtonMotion(b);
+    }
+
+    private static String activeQueryPillStyle(DashboardView view) {
+        return "-fx-background-color:" + view.accentGradient() + ";" +
+            "-fx-border-color:" + view.accentRgba(0.36) + ";" +
+            "-fx-border-width:1;" +
+            "-fx-background-radius:999px;" +
+            "-fx-border-radius:999px;" +
+            "-fx-text-fill:white;" +
+            "-fx-font-weight:700;" +
+            "-fx-cursor:hand;";
+    }
+
+    private static String inactiveQueryPillStyle(DashboardView view) {
+        return "-fx-background-color:transparent;" +
+            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";" +
+            "-fx-border-width:1;" +
+            "-fx-background-radius:999px;" +
+            "-fx-border-radius:999px;" +
+            "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.76)" : "rgba(15,23,42,0.82)") + ";" +
+            "-fx-font-weight:700;" +
+            "-fx-cursor:hand;";
     }
 
     private static int getUsersFilterColumnIndex(String filterKey) {
@@ -314,17 +315,10 @@ final class DashboardUsersSection {
         searchField.setPromptText("Search profiles by id, user, locale, theme or timezone...");
         searchField.setPrefWidth(280);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
-        Button sortPill = view.pillAction("Order: ID Asc", false);
+        Button sortPill = view.pillAction("\u2191", false);
 
         String[][] filters = new String[][]{
             {"locale", "Locale"},
@@ -338,7 +332,7 @@ final class DashboardUsersSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        HBox headerControls = new HBox(8, searchField, filterRow, sortPill);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
@@ -369,7 +363,7 @@ final class DashboardUsersSection {
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
         renderProfilesTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -409,17 +403,10 @@ final class DashboardUsersSection {
         searchField.setPromptText("Search onboarding by user, locale, theme, step or status...");
         searchField.setPrefWidth(300);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
-        Button sortPill = view.pillAction("Order: ID Asc", false);
+        Button sortPill = view.pillAction("\u2191", false);
 
         String[][] filters = new String[][]{
             {"step", "Step"},
@@ -433,7 +420,7 @@ final class DashboardUsersSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        HBox headerControls = new HBox(8, searchField, filterRow, sortPill);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
@@ -464,7 +451,7 @@ final class DashboardUsersSection {
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
         renderOnboardingTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -534,7 +521,7 @@ final class DashboardUsersSection {
 
         styleQueryPill(view, sortPill, queryState.ascending);
         String filterLabel = scope.isEmpty() ? "Locale" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
-        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
     }
 
     private static void renderOnboardingTable(
@@ -603,7 +590,7 @@ final class DashboardUsersSection {
 
         styleQueryPill(view, sortPill, queryState.ascending);
         String filterLabel = scope.isEmpty() ? "Step" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
-        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
     }
 
     private static VBox usersBansPane(DashboardView view) {
@@ -635,23 +622,15 @@ final class DashboardUsersSection {
         searchField.setPromptText("Search users by name, email, or reason...");
         searchField.setPrefWidth(300);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
         HBox headerControls = new HBox(8, searchField);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         VBox listHost = new VBox(8);
         javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(listHost);
-        scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        HorizonDesignSystem.styleScrollPane(scroll);
         scroll.setPrefHeight(600);
 
         Runnable renderList = () -> {
@@ -668,11 +647,8 @@ final class DashboardUsersSection {
                 }
 
                 VBox cardWrap = new VBox(0);
-                cardWrap.setStyle(
-                    "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.03)" : "rgba(15,23,42,0.02)") + ";" +
-                    "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)") + ";" +
-                    "-fx-border-width:1; -fx-border-radius:10px; -fx-background-radius:10px;"
-                );
+                cardWrap.setStyle(HorizonDesignSystem.webServiceCard(16, false));
+                HorizonDesignSystem.installWebLift(cardWrap);
 
                 HBox mainRow = new HBox(16);
                 mainRow.setAlignment(Pos.CENTER_LEFT);
@@ -696,11 +672,8 @@ final class DashboardUsersSection {
                 statusPill.setFill(Color.web(u.isDisabled() ? "#ef4444" : "#10b981"));
                 
                 Button toggleBtn = new Button(u.isDisabled() ? "Unban User" : "Ban User");
-                toggleBtn.setStyle(
-                    "-fx-background-color:" + (u.isDisabled() ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)") + ";" +
-                    "-fx-text-fill:" + (u.isDisabled() ? "#10b981" : "#ef4444") + ";" +
-                    "-fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;"
-                );
+                toggleBtn.setStyle(banToggleStyle(u.isDisabled()));
+                HorizonDesignSystem.installButtonMotion(toggleBtn);
 
                 mainRow.getChildren().addAll(infoBox, spacer, statusPill, toggleBtn);
 
@@ -714,7 +687,8 @@ final class DashboardUsersSection {
                 reasonField.setStyle(searchField.getStyle());
 
                 Button saveBanBtn = new Button("Confirm Ban");
-                saveBanBtn.setStyle("-fx-background-color:#ef4444; -fx-text-fill:white; -fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;");
+                saveBanBtn.setStyle("-fx-background-color:#ef4444;-fx-border-color:rgba(239,68,68,0.42);-fx-border-width:1;-fx-text-fill:white;-fx-background-radius:999px;-fx-border-radius:999px;-fx-font-weight:bold;-fx-cursor:hand;-fx-padding:8 16 8 16;");
+                HorizonDesignSystem.installButtonMotion(saveBanBtn);
 
                 morphBox.getChildren().addAll(reasonField, saveBanBtn);
 
@@ -728,7 +702,7 @@ final class DashboardUsersSection {
                             statusPill.setText("ACTIVE");
                             statusPill.setFill(Color.web("#10b981"));
                             toggleBtn.setText("Ban User");
-                            toggleBtn.setStyle("-fx-background-color:rgba(239,68,68,0.1); -fx-text-fill:#ef4444; -fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;");
+                            toggleBtn.setStyle(banToggleStyle(false));
                             morphBox.setManaged(false);
                             morphBox.setVisible(false);
                         }
@@ -751,7 +725,7 @@ final class DashboardUsersSection {
                         statusPill.setText("BANNED");
                         statusPill.setFill(Color.web("#ef4444"));
                         toggleBtn.setText("Unban User");
-                        toggleBtn.setStyle("-fx-background-color:rgba(16,185,129,0.1); -fx-text-fill:#10b981; -fx-background-radius:6px; -fx-font-weight:bold; -fx-cursor:hand;");
+                        toggleBtn.setStyle(banToggleStyle(true));
                         morphBox.setManaged(false);
                         morphBox.setVisible(false);
                         reasonField.clear();
@@ -770,4 +744,21 @@ final class DashboardUsersSection {
         wrap.getChildren().addAll(stats, contentBox);
         return wrap;
     }
+
+    private static String banToggleStyle(boolean disabled) {
+        String color = disabled ? "#10b981" : "#ef4444";
+        String fill = disabled ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)";
+        String border = disabled ? "rgba(16,185,129,0.30)" : "rgba(239,68,68,0.30)";
+        return "-fx-background-color:" + fill + ";" +
+            "-fx-border-color:" + border + ";" +
+            "-fx-border-width:1;" +
+            "-fx-text-fill:" + color + ";" +
+            "-fx-background-radius:999px;" +
+            "-fx-border-radius:999px;" +
+            "-fx-font-weight:bold;" +
+            "-fx-padding:7 14 7 14;" +
+            "-fx-cursor:hand;";
+    }
 }
+
+

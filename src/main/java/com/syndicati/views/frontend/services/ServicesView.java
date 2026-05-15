@@ -12,6 +12,7 @@ import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.BlurType;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.utils.navigation.NavigationManager;
 
 /**
@@ -27,63 +28,113 @@ public class ServicesView implements ViewInterface {
     }
     
     private void setupLayout() {
-        root.setSpacing(40);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(80, 40, 80, 40));
+        root.setSpacing(34);
+        root.setAlignment(Pos.TOP_CENTER);
+        root.setPadding(new Insets(30, 34, 70, 34));
         
         // Apply theme styling
         applyThemeStyling();
-        
-        // Title
-        Text title = new Text("Our Services");
-        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 48));
-        title.setFill(Color.web(ThemeManager.getInstance().getTextColor()));
-        
-        // Subtitle
-        Text subtitle = new Text("Choose a service to learn more");
-        subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 18));
-        subtitle.setFill(Color.web(ThemeManager.getInstance().getSecondaryTextColor()));        // Services grid
-        HBox servicesGrid = new HBox();
-        servicesGrid.setSpacing(30);
+
+        StackPane hero = buildHero();
+        Text title = sectionTitle("Nos Services");
+        Text subtitle = new Text("Une suite complete de solutions pour votre copropriete.");
+        subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 16));
+        subtitle.setFill(Color.web(HorizonDesignSystem.mutedText()));
+
+        HBox servicesGrid = new HBox(22);
         servicesGrid.setAlignment(Pos.CENTER);
-        
-        // Service 1: Web Development
-        VBox service1 = createServiceCard("WEB", "Web Development", "Modern web applications and websites");
+        servicesGrid.setFillHeight(true);
+
+        VBox service1 = createServiceCard("BLDG", "Gestion Residentielle", "Gerez vos residences, appartements et residents en toute simplicite.");
         service1.setOnMouseClicked(e -> {
             NavigationManager.getInstance().awardInteractionXp(1);
-            NavigationManager.getInstance().navigateTo("service-detail");
+            NavigationManager.getInstance().navigateTo("residence");
         });
         
-        // Service 2: Mobile Apps
-        VBox service2 = createServiceCard("APP", "Mobile Apps", "iOS and Android applications");
+        VBox service2 = createServiceCard("SAV", "Maintenance & SAV", "Suivez les reclamations et planifiez les interventions techniques.");
         service2.setOnMouseClicked(e -> {
             NavigationManager.getInstance().awardInteractionXp(1);
-            NavigationManager.getInstance().navigateTo("service-detail");
+            NavigationManager.getInstance().navigateTo("syndicat");
         });
         
-        // Service 3: Desktop Apps
-        VBox service3 = createServiceCard("DESK", "Desktop Apps", "Cross-platform desktop applications");
+        VBox service3 = createServiceCard("CHAT", "Communication", "Restez connecte avec vos voisins via le forum et la messagerie.");
         service3.setOnMouseClicked(e -> {
             NavigationManager.getInstance().awardInteractionXp(1);
-            NavigationManager.getInstance().navigateTo("service-detail");
+            NavigationManager.getInstance().navigateTo("forum");
+        });
+
+        VBox service4 = createServiceCard("PAY", "Paiements Securises", "Reglez vos frais de syndic via une experience rapide et claire.");
+        service4.setOnMouseClicked(e -> {
+            NavigationManager.getInstance().awardInteractionXp(1);
+            NavigationManager.getInstance().navigateTo("profile");
         });
         
-        servicesGrid.getChildren().addAll(service1, service2, service3);
+        servicesGrid.getChildren().addAll(service1, service2, service3, service4);
         
-        root.getChildren().addAll(title, subtitle, servicesGrid);
+        root.getChildren().addAll(hero, title, subtitle, servicesGrid);
+    }
+
+    private StackPane buildHero() {
+        StackPane hero = new StackPane();
+        hero.setMaxWidth(1500);
+        hero.setMinHeight(360);
+        hero.setPadding(new Insets(56, 64, 56, 64));
+        hero.setStyle(HorizonDesignSystem.webHeroPanel());
+
+        Region glow = new Region();
+        glow.setPrefSize(560, 560);
+        glow.setStyle("-fx-background-color: radial-gradient(center 50% 50%, radius 55%, " +
+            ThemeManager.getInstance().toRgba(ThemeManager.getInstance().getAccentHex(), 0.28) + ", transparent);");
+        StackPane.setAlignment(glow, Pos.CENTER_RIGHT);
+        glow.setTranslateX(150);
+
+        VBox copy = new VBox(22);
+        copy.setAlignment(Pos.CENTER_LEFT);
+        copy.setMaxWidth(780);
+
+        HBox badge = new HBox(new Text("SERVICES HUB"));
+        badge.setAlignment(Pos.CENTER_LEFT);
+        badge.setPadding(new Insets(10, 20, 10, 20));
+        badge.setStyle(HorizonDesignSystem.webAccentBadge());
+        ((Text) badge.getChildren().get(0)).setFill(Color.WHITE);
+        ((Text) badge.getChildren().get(0)).setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+
+        Text heading = new Text("Syndicati Services");
+        heading.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.EXTRA_BOLD, 64));
+        heading.setFill(Color.WHITE);
+
+        Text body = new Text("The same premium web experience, rebuilt inside the Java app for residence, maintenance, forum, events and payments.");
+        body.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 18));
+        body.setFill(Color.web("rgba(255,255,255,0.56)"));
+        body.setWrappingWidth(660);
+        body.setLineSpacing(5);
+
+        copy.getChildren().addAll(badge, heading, body);
+        hero.getChildren().addAll(glow, copy);
+        StackPane.setAlignment(copy, Pos.CENTER_LEFT);
+        HorizonDesignSystem.fadeIn(hero);
+        return hero;
+    }
+
+    private Text sectionTitle(String value) {
+        Text title = new Text(value + " .");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.EXTRA_BOLD, 44));
+        title.setFill(Color.web(ThemeManager.getInstance().getTextColor()));
+        return title;
     }
     
     private VBox createServiceCard(String icon, String title, String description) {
         VBox card = new VBox();
         card.setSpacing(15);
-        card.setAlignment(Pos.CENTER);
-        card.setPadding(new Insets(30, 25, 30, 25));
-        card.setMinWidth(200);
-        card.setMaxWidth(250);
+        card.setAlignment(Pos.TOP_LEFT);
+        card.setPadding(new Insets(30, 26, 30, 26));
+        card.setMinWidth(235);
+        card.setPrefWidth(280);
+        card.setMaxWidth(320);
         
         // Apply card styling
         ThemeManager themeManager = ThemeManager.getInstance();
-        card.setStyle(cardStyle(themeManager, false));
+        card.setStyle(HorizonDesignSystem.webFeatureCard(28));
         
         // Add shadow effect
         DropShadow cardShadow = new DropShadow();
@@ -100,7 +151,8 @@ public class ServicesView implements ViewInterface {
         
         // Icon
         Text iconText = new Text(icon);
-        iconText.setFont(Font.font(48));
+        iconText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.EXTRA_BOLD, 28));
+        iconText.setFill(Color.web(themeManager.getAccentHex()));
         
         // Title
         Text titleText = new Text(title);
@@ -111,16 +163,14 @@ public class ServicesView implements ViewInterface {
         Text descText = new Text(description);
         descText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
         descText.setFill(Color.web(themeManager.getSecondaryTextColor()));
-        descText.setWrappingWidth(200);        card.getChildren().addAll(iconText, titleText, descText);
+        descText.setWrappingWidth(218);
+        Region line = new Region();
+        line.setPrefHeight(2);
+        line.setMaxWidth(Double.MAX_VALUE);
+        line.setStyle("-fx-background-color: linear-gradient(to right, " + themeManager.getAccentHex() + ", transparent); -fx-background-radius: 2px;");
+        card.getChildren().addAll(iconText, titleText, descText, line);
         
-        // Add hover effect
-        card.setOnMouseEntered(e -> {
-            card.setStyle(cardStyle(themeManager, true));
-        });
-        
-        card.setOnMouseExited(e -> {
-            card.setStyle(cardStyle(themeManager, false));
-        });
+        HorizonDesignSystem.installLift(card, 1.02, -10);
         
         return card;
     }

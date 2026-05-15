@@ -12,6 +12,7 @@ import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.application.Platform;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
@@ -114,13 +115,7 @@ public class SyndicatPageView implements ViewInterface {
         hero.prefWidthProperty().bind(Bindings.min(root.widthProperty().multiply(0.95), 1800));
         hero.setMinHeight(500);
         hero.setPadding(new Insets(92, 64, 92, 64));
-        hero.setStyle(
-            "-fx-background-color: rgba(10,10,15,0.85);" +
-            "-fx-background-radius: 48px;" +
-            "-fx-border-color: rgba(60,60,80,0.5);" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 48px;"
-        );
+        hero.setStyle(HorizonDesignSystem.webHeroPanel());
 
         VBox content = new VBox(12);
         content.setAlignment(Pos.CENTER_LEFT);
@@ -131,15 +126,9 @@ public class SyndicatPageView implements ViewInterface {
         StackPane badge = new StackPane(badgeText);
         badge.setPadding(new Insets(7, 14, 7, 14));
         badge.setMaxWidth(StackPane.USE_PREF_SIZE);
-        badge.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-background-radius: 999px;" +
-            "-fx-border-radius: 999px;"
-        );
+        badge.setStyle(HorizonDesignSystem.webAccentBadge());
 
-        Text title = line("Voice Your\nConcerns.", 72, true, tm.getAccentHex());
+        Text title = line("Voice Your\nConcerns.", 72, true, "#ffffff");
         Text subtitle = line("We are here to listen and resolve. Submit your reclamation directly to the syndicat and track its progress in real-time.", 21, false, "rgba(255,255,255,0.6)");
         subtitle.setWrappingWidth(660);
 
@@ -153,13 +142,14 @@ public class SyndicatPageView implements ViewInterface {
         VBox form = new VBox(16);
         form.setMaxWidth(1000);
         form.prefWidthProperty().bind(Bindings.min(root.widthProperty().multiply(0.90), 1000));
-        form.setPadding(new Insets(48, 48, 48, 48));
+        form.setPadding(new Insets(64, 64, 64, 64));
         form.setStyle(
-            "-fx-background-color: rgba(10,10,15,0.85);" +
-            "-fx-border-color: rgba(60,60,80,0.5);" +
+            "-fx-background-color: rgba(255,255,255,0.02);" +
+            "-fx-border-color: rgba(255,255,255,0.05);" +
             "-fx-border-width: 1px;" +
             "-fx-background-radius: 40px;" +
-            "-fx-border-radius: 40px;"
+            "-fx-border-radius: 40px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.50), 60, 0.20, 0, 30);"
         );
 
         Text title = line("Submit a Reclamation", 34, true, tm.getAccentHex());
@@ -191,17 +181,10 @@ public class SyndicatPageView implements ViewInterface {
         descriptionField.setPrefRowCount(6);
         descriptionField.setWrapText(true);
         descriptionField.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.06);" +
-            "-fx-control-inner-background: rgba(255,255,255,0.06);" +
-            "-fx-text-fill: white;" +
-            "-fx-prompt-text-fill: rgba(255,255,255,0.4);" +
-            "-fx-background-radius: 14px;" +
-            "-fx-border-color: rgba(255,255,255,0.1);" +
-            "-fx-border-radius: 14px;" +
-            "-fx-border-width: 1.5px;" +
+            HorizonDesignSystem.webServiceInput(16, false) +
+            "-fx-control-inner-background: rgba(0,0,0,0.20);" +
             "-fx-highlight-fill: " + tm.toRgba(tm.getAccentHex(), 0.45) + ";" +
             "-fx-highlight-text-fill: white;" +
-            "-fx-padding: 12;" +
             "-fx-font-size: 13px;"
         );
         descriptionField.setMinHeight(120);
@@ -211,10 +194,7 @@ public class SyndicatPageView implements ViewInterface {
                 Platform.runLater(() -> {
                     var content = descriptionField.lookup(".content");
                     if (content != null) {
-                        content.setStyle(
-                            "-fx-background-color: rgba(255,255,255,0.06);" +
-                            "-fx-background-radius: 12px;"
-                        );
+                        content.setStyle("-fx-background-color: rgba(0,0,0,0.20); -fx-background-radius: 14px;");
                     }
                 });
             }
@@ -230,7 +210,7 @@ public class SyndicatPageView implements ViewInterface {
         VBox attachmentZone = new VBox(8);
         attachmentZone.setAlignment(Pos.CENTER);
         attachmentZone.setPrefHeight(100);
-        attachmentZone.setStyle("-fx-background-color: rgba(255,255,255,0.02); -fx-border-color: " + tm.getAccentHex() + "66; -fx-border-width: 2; -fx-border-style: dashed; -fx-background-radius: 14; -fx-border-radius: 14; -fx-cursor: hand;");
+        attachmentZone.setStyle("-fx-background-color: rgba(255,255,255,0.02); -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.40) + "; -fx-border-width: 2; -fx-border-style: dashed; -fx-background-radius: 16; -fx-border-radius: 16; -fx-cursor: hand;");
         
         Text uploadIcon = line("📎", 32, false, tm.getAccentHex());
         Text uploadText = line("Click to upload images", 12, false, "rgba(255,255,255,0.6)");
@@ -247,14 +227,8 @@ public class SyndicatPageView implements ViewInterface {
         // Submit button
         submitButton = new Button("Submit Reclamation");
         submitButton.setCursor(Cursor.HAND);
-        submitButton.setStyle(
-            "-fx-background-color: " + tm.getAccentHex() + ";"
-            + "-fx-text-fill: white;"
-            + "-fx-font-size: 14px;"
-            + "-fx-font-weight: 800;"
-            + "-fx-background-radius: 12px;"
-            + "-fx-padding: 14 24 14 24;"
-        );
+        submitButton.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-font-size: 15px;-fx-font-weight: 900;-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding: 18 34 18 34;");
+        HorizonDesignSystem.installWebLift(submitButton);
         submitButton.setMaxWidth(Double.MAX_VALUE);
         submitButton.setOnAction(e -> handleSubmit());
 
@@ -437,8 +411,9 @@ public class SyndicatPageView implements ViewInterface {
     private TextField input(String prompt) {
         TextField field = new TextField();
         field.setPromptText(prompt);
-        field.setPrefHeight(44);
-        field.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.4); -fx-background-radius: 14; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 14; -fx-padding: 12;");
+        field.setPrefHeight(52);
+        field.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        field.focusedProperty().addListener((obs, oldVal, focused) -> field.setStyle(HorizonDesignSystem.webServiceInput(16, focused)));
         return field;
     }
 
@@ -503,7 +478,9 @@ public class SyndicatPageView implements ViewInterface {
     private Button buildReportTrigger() {
         Button btn = new Button();
         btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setStyle("-fx-background-color: " + surfaceCard() + "; -fx-background-radius: 24; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1; -fx-border-radius: 24; -fx-padding: 20; -fx-cursor: hand;");
+        btn.setStyle(HorizonDesignSystem.webServiceCard(24, false) + "-fx-padding: 20; -fx-cursor: hand;");
+        btn.setOnMouseEntered(e -> btn.setStyle(HorizonDesignSystem.webServiceCard(24, true) + "-fx-padding: 20; -fx-cursor: hand;"));
+        btn.setOnMouseExited(e -> btn.setStyle(HorizonDesignSystem.webServiceCard(24, false) + "-fx-padding: 20; -fx-cursor: hand;"));
         
         HBox content = new HBox(18);
         content.setAlignment(Pos.CENTER_LEFT);
@@ -663,21 +640,22 @@ public class SyndicatPageView implements ViewInterface {
     }
 
     private String surfaceCard() {
-        return "rgba(255,255,255,0.05)";
+        return HorizonDesignSystem.surface();
     }
 
     private String surfaceSoft() {
-        return "rgba(255,255,255,0.08)";
+        return HorizonDesignSystem.surfaceSoft();
     }
 
     private String borderSoft() {
-        return "rgba(255,255,255,0.12)";
+        return HorizonDesignSystem.borderStrong();
     }
 
     private Button iconButton(String icon) {
         Button btn = new Button(icon);
         btn.setCursor(Cursor.HAND);
-        btn.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-text-fill: white; -fx-background-radius: 8; -fx-font-weight: bold; -fx-padding: 5 10;");
+        btn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-padding: 5 10;");
+        HorizonDesignSystem.installButtonMotion(btn);
         return btn;
     }
 
@@ -691,7 +669,7 @@ public class SyndicatPageView implements ViewInterface {
         Text t = line(label, 10, true, "white");
         StackPane p = new StackPane(t);
         p.setPadding(new Insets(5, 10, 5, 10));
-        p.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 8; -fx-border-color: " + borderSoft() + "; -fx-border-width: 1; -fx-border-radius: 8;");
+        p.setStyle(HorizonDesignSystem.webAccentBadge() + "-fx-background-radius: 8px; -fx-border-radius: 8px;");
         return p;
     }
 

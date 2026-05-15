@@ -13,6 +13,7 @@ import com.syndicati.components.home.HomeContent;
  
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.views.backend.dashboard.DashboardView;
 import com.syndicati.views.frontend.profile.ProfileView;
@@ -30,6 +31,7 @@ public class LandingPageView implements ViewInterface {
     private VBox darkPanel; 
     private HomeContent homeContent;
     private VBox contentRow; 
+    private VBox footerContainer;
     private String currentPageName = "home";
     private final java.util.Map<String, javafx.scene.Node> pageCache = new java.util.HashMap<>();
     private String lastPageName = "home";
@@ -114,13 +116,11 @@ public class LandingPageView implements ViewInterface {
             themeManager.getScrollbarVariableStyle()
         );
         
-        String backgroundColor = themeManager.isDarkMode()
-            ? "rgba(15,15,20,0.75)"
-            : "rgba(245,248,255,0.75)";
+        String backgroundColor = HorizonDesignSystem.pageOverlay();
             
         darkPanel.setStyle(
             "-fx-background-color: " + backgroundColor + ";" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? themeManager.toRgba(themeManager.getAccentHex(), 0.26) : "rgba(15,23,42,0.14)") + ";" +
+            "-fx-border-color: " + HorizonDesignSystem.borderStrong() + ";" +
             "-fx-border-width: 1px;" +
             "-fx-background-radius: 0;"
         );
@@ -143,17 +143,14 @@ public class LandingPageView implements ViewInterface {
         // It is now handled in loadProgressively()
 
         ScrollPane scrollPane = new ScrollPane();
-        scrollPane.setFitToWidth(true);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;" + themeManager.getScrollbarVariableStyle());
+        HorizonDesignSystem.styleScrollPane(scrollPane);
 
         VBox pageWrapper = new VBox();
         pageWrapper.setFillWidth(true);
         pageWrapper.maxWidthProperty().bind(scrollPane.widthProperty());
         pageWrapper.getChildren().add(mainContent);
 
-        VBox footerContainer = new VBox();
+        footerContainer = new VBox();
         footerContainer.setAlignment(Pos.CENTER);
         footerContainer.setPadding(new Insets(20, 0, 24, 0));
         footerContainer.getChildren().add(footer.getRoot());
@@ -162,6 +159,8 @@ public class LandingPageView implements ViewInterface {
         scrollPane.setContent(pageWrapper);
 
         HBox windowBar = createWindowBar();
+        windowBar.prefWidthProperty().bind(root.widthProperty());
+        windowBar.maxWidthProperty().bind(root.widthProperty());
         windowBar.setPickOnBounds(true);
         windowBar.setMouseTransparent(false);
         
@@ -201,6 +200,7 @@ public class LandingPageView implements ViewInterface {
         showLoadingTransition("home", () -> {
             if (navToken != navigationVersion.get()) return;
             currentPageName = "home";
+            applyPageChrome("home");
             if (!darkPanel.getChildren().contains(contentRow)) {
                 darkPanel.getChildren().clear();
                 darkPanel.getChildren().add(contentRow);
@@ -233,6 +233,7 @@ public class LandingPageView implements ViewInterface {
             
             homeContent.getRoot().setVisible(true);
             homeContent.getRoot().setManaged(true);
+            HorizonDesignSystem.fadeIn(homeContent.getRoot());
 
             lastPageName = "home";
         });
@@ -269,6 +270,7 @@ public class LandingPageView implements ViewInterface {
             VBox.setVgrow(adminRoot, Priority.ALWAYS);
             darkPanel.getChildren().clear();
             darkPanel.getChildren().add(adminRoot);
+            HorizonDesignSystem.fadeIn(adminRoot);
 
             lastPageName = "dashboard";
         });
@@ -342,9 +344,11 @@ public class LandingPageView implements ViewInterface {
             }
 
             if (targetPage != null) {
+                applyPageChrome(normalizedPage);
                 targetPage.setVisible(true);
                 targetPage.setManaged(true);
-                mainContent.getChildren().add(targetPage);
+                attachPageNode(targetPage);
+                HorizonDesignSystem.fadeIn(targetPage);
 
                 // Trigger async data load for everything except Profile (which is built in bg)
                 if (!(view instanceof ProfileView)) {
@@ -388,12 +392,45 @@ public class LandingPageView implements ViewInterface {
         shortDelay.play();
     }
 
+    private void attachPageNode(javafx.scene.Node targetPage) {
+        if (mainContent == null || targetPage == null) return;
+
+        javafx.scene.Parent parent = targetPage.getParent();
+        if (parent == mainContent) {
+            mainContent.getChildren().remove(targetPage);
+        } else if (parent instanceof javafx.scene.layout.Pane pane) {
+            pane.getChildren().remove(targetPage);
+        }
+
+        if (!mainContent.getChildren().contains(targetPage)) {
+            mainContent.getChildren().add(targetPage);
+        }
+    }
+
     private void removeNonHomePageNodes() {
         if (mainContent == null) return;
         for (javafx.scene.Node node : new java.util.ArrayList<>(mainContent.getChildren())) {
             if (homeContent != null && node == homeContent.getRoot()) continue;
             mainContent.getChildren().remove(node);
             try { com.syndicati.utils.perf.NodeTreeDisposer.dispose(node); } catch (Exception ignored) {}
+        }
+    }
+
+    private void applyPageChrome(String normalizedPage) {
+        boolean forumFlush = "services/forum".equalsIgnoreCase(normalizedPage) || "forum".equalsIgnoreCase(normalizedPage);
+        if (mainContent != null) {
+            mainContent.setSpacing(forumFlush ? 0 : 16);
+            mainContent.setPadding(forumFlush ? new Insets(124, 0, 10, 0) : new Insets(102, 10, 10, 10));
+        }
+        if (contentRow != null) {
+            contentRow.setPadding(forumFlush ? new Insets(0) : new Insets(48, 12, 12, 12));
+        }
+        if (header != null && header.getRoot() != null) {
+            StackPane.setMargin(header.getRoot(), forumFlush ? new Insets(0, 12, 0, 12) : new Insets(0));
+        }
+        if (footerContainer != null) {
+            footerContainer.setVisible(true);
+            footerContainer.setManaged(true);
         }
     }
 

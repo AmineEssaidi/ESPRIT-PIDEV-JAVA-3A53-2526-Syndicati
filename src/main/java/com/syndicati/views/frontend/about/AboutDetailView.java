@@ -10,6 +10,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.navigation.NavigationManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 
 /**
  * About Detail View - Detailed about information page
@@ -33,22 +35,16 @@ public class AboutDetailView implements ViewInterface {
         
         // Back button
         Button backButton = new Button("< Back to About");
-        backButton.setStyle(
-            "-fx-background-color: " + ThemeManager.getInstance().getModernAccentColor() + ";" +
-            "-fx-text-fill: white;" +
-            "-fx-background-radius: 12px;" +
-            "-fx-padding: 8 16 8 16;" +
-            "-fx-font-size: 14px;"
-        );
+        backButton.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-padding: 10 18 10 18;-fx-font-size: 14px;");
+        HorizonDesignSystem.installButtonMotion(backButton);
         backButton.setOnAction(e -> {
-            // This will be handled by the navigation manager
-            System.out.println("Back to About clicked");
+            NavigationManager.getInstance().navigateTo("about");
         });
         
         // Title
         Text title = new Text("About Details");
         title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 36));
-        title.setFill(Color.web(ThemeManager.getInstance().getTextColor()));
+        title.setFill(ThemeManager.getInstance().getAccentGradientPaint());
         
         // Content
         VBox content = new VBox();
@@ -56,18 +52,8 @@ public class AboutDetailView implements ViewInterface {
         content.setAlignment(Pos.TOP_LEFT);
         content.setMaxWidth(600);
         ThemeManager tm = ThemeManager.getInstance();
-        String cardBg = tm.isDarkMode()
-            ? "radial-gradient(focus-angle 28deg, focus-distance 22%, center 14% 12%, radius 130%, " + tm.toRgba(tm.getAccentHex(), 0.18) + " 0%, rgba(0,0,0,0.88) 64%, rgba(0,0,0,0.97) 100%), linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.015) 48%, " + tm.toRgba(tm.getAccentHex(), 0.08) + " 100%)"
-            : "linear-gradient(to bottom right, rgba(255,255,255,0.96), rgba(255,255,255,0.88) 54%, rgba(243,247,255,0.94) 100%)";
-        content.setStyle(
-            "-fx-background-color: " + cardBg + ";" +
-            "-fx-background-radius: 24px;" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.34 : 0.22) + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 24px;" +
-            "-fx-padding: 26px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.30), 30, 0.16, 0, 10);"
-        );
+        content.setStyle(HorizonDesignSystem.webSectionCard(24, false) + "-fx-padding: 26px;");
+        HorizonDesignSystem.installWebLift(content);
         
         Text description = new Text("This is a detailed view about our company. Here you would find comprehensive information about our story, team, values, and contact information.");
         description.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 16));

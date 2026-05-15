@@ -39,6 +39,7 @@ import com.syndicati.utils.image.imagekit.ImageKitConfig;
 import com.syndicati.utils.image.imagekit.ImageKitStorageService;
 import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 
 /**
  * Enhanced Reclamation section with status filters, detail modal, color-coded statuses.
@@ -77,8 +78,9 @@ public class ProfileReclamationSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
         
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle(HorizonDesignSystem.webObsidianPanel(24));
         card.setPrefHeight(600);
+        HorizonDesignSystem.popIn(card);
         
         // Switcher container
         switcherContainer.setPrefHeight(500);
@@ -114,8 +116,7 @@ public class ProfileReclamationSectionEnhanced {
         
         // Reclamation list with scroll
         ScrollPane listScroll = new ScrollPane();
-        listScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        listScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(listScroll);
         listScroll.setPrefHeight(400);
         listScroll.setContent(reclamationList);
         VBox.setVgrow(listScroll, Priority.ALWAYS);
@@ -128,7 +129,7 @@ public class ProfileReclamationSectionEnhanced {
     }
 
     private void buildDetailsView() {
-        faceDetailsView.setStyle("-fx-background-color: rgba(20, 20, 25, 0.98);");
+        faceDetailsView.setStyle("-fx-background-color: rgba(5, 5, 10, 0.96); -fx-background-radius: 24px;");
         faceDetailsView.setPadding(new Insets(20));
         
         // Back button and title
@@ -136,7 +137,8 @@ public class ProfileReclamationSectionEnhanced {
         backHeader.setAlignment(Pos.CENTER_LEFT);
         
         Button backBtn = new Button("←");
-        backBtn.setStyle("-fx-padding: 8; -fx-font-size: 14; -fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-background-radius: 50%; -fx-border-radius: 50%;");
+        backBtn.setStyle(circleBackStyle());
+        HorizonDesignSystem.installButtonMotion(backBtn);
         backBtn.setOnAction(e -> showListView());
         
         Label detailTitle = new Label("Complaint Details");
@@ -148,8 +150,7 @@ public class ProfileReclamationSectionEnhanced {
         
         // Detail content
         ScrollPane detailScroll = new ScrollPane();
-        detailScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        detailScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(detailScroll);
         
         VBox detailContent = new VBox(12);
         detailContent.setPadding(new Insets(16, 0, 0, 0));
@@ -185,7 +186,8 @@ public class ProfileReclamationSectionEnhanced {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
         Button sortBtn = new Button("↓ Newest First");
-        sortBtn.setStyle("-fx-background-color: rgba(255,255,255,0.06); -fx-text-fill: white; -fx-background-radius: 8; -fx-padding: 6 10; -fx-font-size: 11; -fx-cursor: hand; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 8;");
+        sortBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-background-radius: 999px; -fx-border-radius: 999px; -fx-padding: 7 12; -fx-font-size: 11;");
+        HorizonDesignSystem.installButtonMotion(sortBtn);
         sortBtn.setOnAction(e -> {
             sortAscending = !sortAscending;
             sortBtn.setText(sortAscending ? "↑ Oldest First" : "↓ Newest First");
@@ -200,17 +202,8 @@ public class ProfileReclamationSectionEnhanced {
 
     private Button createStatusButton(String text, boolean active) {
         Button btn = new Button(text);
-        btn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.2);" : "rgba(255,255,255,0.05);") +
-            "-fx-text-fill: " + (active ? "white;" : "rgba(255,255,255,0.7);") +
-            "-fx-border-color: " + (active ? "rgba(99, 102, 241, 0.3);" : "rgba(255,255,255,0.1);") +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 999; " +
-            "-fx-border-radius: 999; " +
-            "-fx-font-size: 11; " +
-            "-fx-font-weight: " + (active ? "bold;" : "normal;")
-        );
+        btn.setStyle(statusPillStyle(active));
+        HorizonDesignSystem.installButtonMotion(btn);
         return btn;
     }
 
@@ -228,18 +221,36 @@ public class ProfileReclamationSectionEnhanced {
         String[] statuses = {"all", "Pending", "active", "Confirmed", "Refused"};
         for (int i = 0; i < buttons.length; i++) {
             boolean isActive = activeStatus.equals(statuses[i]);
-            buttons[i].setStyle(
-                "-fx-padding: 6 12 6 12; " +
-                "-fx-background-color: " + (isActive ? "rgba(99, 102, 241, 0.2);" : "rgba(255,255,255,0.05);") +
-                "-fx-text-fill: " + (isActive ? "white;" : "rgba(255,255,255,0.7);") +
-                "-fx-border-color: " + (isActive ? "rgba(99, 102, 241, 0.3);" : "rgba(255,255,255,0.1);") +
-                "-fx-border-width: 1; " +
-                "-fx-background-radius: 999; " +
-                "-fx-border-radius: 999; " +
-                "-fx-font-size: 11; " +
-                "-fx-font-weight: " + (isActive ? "bold;" : "normal;")
-            );
+            buttons[i].setStyle(statusPillStyle(isActive));
         }
+    }
+
+    private String statusPillStyle(boolean active) {
+        return "-fx-padding: 7 13 7 13; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.20) : "rgba(255,255,255,0.045)") + "; " +
+            "-fx-text-fill: " + (active ? "#ffffff" : "rgba(255,255,255,0.68)") + "; " +
+            "-fx-border-color: " + (active ? HorizonDesignSystem.accentRgba(0.38) : "rgba(255,255,255,0.10)") + "; " +
+            "-fx-border-width: 1; -fx-background-radius: 999px; -fx-border-radius: 999px; " +
+            "-fx-font-size: 11; -fx-font-weight: " + (active ? "800" : "700") + "; -fx-cursor: hand;";
+    }
+
+    private String pageButtonStyle(boolean active) {
+        return "-fx-padding: 6 11 6 11; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.78) : "rgba(255,255,255,0.05)") + "; " +
+            "-fx-text-fill: white; -fx-background-radius: 999px; -fx-border-color: " + (active ? "transparent" : "rgba(255,255,255,0.10)") + "; " +
+            "-fx-border-width: 1; -fx-border-radius: 999px; -fx-font-size: 10; -fx-font-weight: 800; -fx-cursor: hand;";
+    }
+
+    private String reclamationRowStyle(boolean hover) {
+        return HorizonDesignSystem.webServiceCard(16, hover) +
+            "-fx-padding: 14;" +
+            "-fx-cursor: hand;";
+    }
+
+    private String circleBackStyle() {
+        return HorizonDesignSystem.buttonGhost() +
+            "-fx-min-width: 34px; -fx-min-height: 34px; -fx-max-width: 34px; -fx-max-height: 34px;" +
+            "-fx-background-radius: 999px; -fx-border-radius: 999px;";
     }
 
     private void loadReclamations() {
@@ -306,13 +317,8 @@ public class ProfileReclamationSectionEnhanced {
             Button pageBtn = new Button(String.valueOf(page + 1));
             final int pageNum = page;
             boolean isActive = page == currentPage;
-            pageBtn.setStyle(
-                "-fx-padding: 4 10 4 10; " +
-                "-fx-background-color: " + (isActive ? "rgba(99, 102, 241, 0.8);" : "rgba(255,255,255,0.05);") +
-                "-fx-text-fill: white; " +
-                "-fx-background-radius: 6; " +
-                "-fx-font-size: 10;"
-            );
+            pageBtn.setStyle(pageButtonStyle(isActive));
+            HorizonDesignSystem.installButtonMotion(pageBtn);
             pageBtn.setOnAction(e -> {
                 currentPage = pageNum;
                 renderReclamationList();
@@ -323,36 +329,12 @@ public class ProfileReclamationSectionEnhanced {
 
     private VBox createReclamationItem(Reclamation reclamation) {
         VBox item = new VBox(8);
-        item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        );
+        item.setStyle(reclamationRowStyle(false));
         item.setOnMouseClicked(e -> showDetailsView(reclamation));
         
         // Hover effect
-        item.setOnMouseEntered(e -> item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.07); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.15); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        ));
-        item.setOnMouseExited(e -> item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        ));
+        item.setOnMouseEntered(e -> item.setStyle(reclamationRowStyle(true)));
+        item.setOnMouseExited(e -> item.setStyle(reclamationRowStyle(false)));
         
         HBox header = new HBox(12);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -410,7 +392,8 @@ public class ProfileReclamationSectionEnhanced {
         HBox backHeader = new HBox(12);
         backHeader.setAlignment(Pos.CENTER_LEFT);
         Button backBtn = new Button("←");
-        backBtn.setStyle("-fx-padding: 8; -fx-font-size: 14; -fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-background-radius: 50%; -fx-border-radius: 50%;");
+        backBtn.setStyle(circleBackStyle());
+        HorizonDesignSystem.installButtonMotion(backBtn);
         backBtn.setOnAction(e -> showListView());
         Label detailTitle = new Label("Complaint Details");
         detailTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
@@ -423,7 +406,8 @@ public class ProfileReclamationSectionEnhanced {
 
         // Info Card
         VBox infoCard = new VBox(15);
-        infoCard.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-padding: 20; -fx-background-radius: 15; -fx-border-color: rgba(255, 255, 255, 0.08);");
+        infoCard.setStyle(HorizonDesignSystem.webServiceCard(18, false) + "-fx-padding: 20;");
+        HorizonDesignSystem.installWebLift(infoCard);
         
         HBox titleBar = new HBox(15);
         titleBar.setAlignment(Pos.CENTER_LEFT);
@@ -454,7 +438,8 @@ public class ProfileReclamationSectionEnhanced {
         HBox actions = new HBox(10);
         actions.setAlignment(Pos.CENTER_LEFT);
         Button pdfBtn = new Button("📄 Export to PDF");
-        pdfBtn.setStyle("-fx-background-color: rgba(99, 102, 241, 0.2); -fx-text-fill: #818cf8; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 8; -fx-cursor: hand;");
+        pdfBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-weight: bold; -fx-padding: 9 15; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(pdfBtn);
         pdfBtn.setOnAction(e -> exportReclamationPdf(reclamation));
         actions.getChildren().add(pdfBtn);
 
@@ -470,29 +455,36 @@ public class ProfileReclamationSectionEnhanced {
         ScrollPane respScroll = new ScrollPane(responsesBox);
         respScroll.setFitToWidth(true);
         respScroll.setPrefHeight(250);
-        respScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-padding: 0;");
+        HorizonDesignSystem.styleScrollPane(respScroll);
         
         reloadResponses(responsesBox, reclamation);
         
         // Reply Box
         VBox replyBox = new VBox(10);
-        replyBox.setStyle("-fx-background-color: rgba(255,255,255,0.02); -fx-padding: 15; -fx-background-radius: 12; -fx-border-color: rgba(255,255,255,0.05);");
+        replyBox.setStyle(HorizonDesignSystem.webServiceCard(16, false) + "-fx-padding: 16;");
         
         TextField titleIn = new TextField();
         titleIn.setPromptText("Response Title...");
-        titleIn.setStyle("-fx-background-color: rgba(0,0,0,0.2); -fx-text-fill: white; -fx-padding: 10; -fx-background-radius: 8;");
+        titleIn.setStyle(HorizonDesignSystem.webServiceInput(12, false));
+        titleIn.focusedProperty().addListener((obs, oldValue, focused) ->
+            titleIn.setStyle(HorizonDesignSystem.webServiceInput(12, focused))
+        );
         
         TextArea msgIn = new TextArea();
         msgIn.setPromptText("Write your reply...");
         msgIn.setPrefRowCount(3);
         msgIn.setWrapText(true);
-        msgIn.setStyle("-fx-control-inner-background: rgba(0,0,0,0.2); -fx-text-fill: white; -fx-padding: 5; -fx-background-radius: 8;");
+        msgIn.setStyle(HorizonDesignSystem.webServiceInput(12, false));
+        msgIn.focusedProperty().addListener((obs, oldValue, focused) ->
+            msgIn.setStyle(HorizonDesignSystem.webServiceInput(12, focused))
+        );
         
         HBox replyActions = new HBox(10);
         replyActions.setAlignment(Pos.CENTER_LEFT);
         
         Button attachBtn = new Button("📷 Attach Image");
-        attachBtn.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 6 12; -fx-background-radius: 6; -fx-cursor: hand;");
+        attachBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-size: 11; -fx-padding: 7 12; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(attachBtn);
         responseFileStatus = new Text("No file selected");
         responseFileStatus.setFill(Color.color(1,1,1,0.4));
         responseFileStatus.setFont(Font.font(10));
@@ -511,7 +503,8 @@ public class ProfileReclamationSectionEnhanced {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
         Button sendBtn = new Button("Send Response");
-        sendBtn.setStyle("-fx-background-color: #6366f1; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 20; -fx-background-radius: 8; -fx-cursor: hand;");
+        sendBtn.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-font-weight: bold; -fx-padding: 9 20; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(sendBtn);
         
         Label feedback = new Label();
         feedback.setFont(Font.font(11));

@@ -236,7 +236,7 @@ public class LoadingCinematicView {
             case "syndicat": 
             case "services/syndicat": return "Syndic Matrix";
             case "evenement": 
-            case "services/evenement": return "Event Horizon";
+            case "services/evenement": return "Syndicati Events";
             case "about": return "The Architecture";
             default: return pageName;
         }

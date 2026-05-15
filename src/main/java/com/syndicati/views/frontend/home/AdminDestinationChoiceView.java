@@ -7,6 +7,7 @@ import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.layout.Background;
@@ -88,16 +89,8 @@ public class AdminDestinationChoiceView implements ViewInterface {
         heroCard.setAlignment(Pos.CENTER);
         heroCard.setPadding(new Insets(28, 30, 28, 30));
         heroCard.setMaxWidth(700);
-        heroCard.setStyle(
-            "-fx-background-color: " + (tm.isDarkMode()
-                ? "linear-gradient(to bottom right, rgba(22,22,22,0.96), rgba(10,10,10,0.98))"
-                : "linear-gradient(to bottom right, rgba(255,255,255,0.98), rgba(247,248,250,0.96))") + ";" +
-            "-fx-background-radius: 26;" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
-            "-fx-border-width: 1.2;" +
-            "-fx-border-radius: 26;" +
-            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.38), 36, 0.2, 0, 16);"
-        );
+        heroCard.setStyle(HorizonDesignSystem.webSectionCard(30, false));
+        HorizonDesignSystem.popIn(heroCard);
 
         String name = currentDisplayName();
 
@@ -117,15 +110,8 @@ public class AdminDestinationChoiceView implements ViewInterface {
         actions.setAlignment(Pos.CENTER);
 
         javafx.scene.control.Button homeBtn = new javafx.scene.control.Button("Go Home");
-        homeBtn.setStyle(
-            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)") + ";" +
-            "-fx-text-fill: " + (tm.isDarkMode() ? "#f8fafc" : "#111827") + ";" +
-            "-fx-font-weight: 800;" +
-            "-fx-font-size: 14;" +
-            "-fx-background-radius: 14;" +
-            "-fx-padding: 12 22 12 22;" +
-            "-fx-cursor: hand;"
-        );
+        homeBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-size: 14;-fx-padding: 12 22 12 22;");
+        HorizonDesignSystem.installButtonMotion(homeBtn);
         homeBtn.setOnAction(e -> {
             if (onChooseHome != null) {
                 onChooseHome.run();
@@ -133,15 +119,8 @@ public class AdminDestinationChoiceView implements ViewInterface {
         });
 
         javafx.scene.control.Button dashboardBtn = new javafx.scene.control.Button("Go Dashboard");
-        dashboardBtn.setStyle(
-            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-            "-fx-text-fill: #ffffff;" +
-            "-fx-font-weight: 900;" +
-            "-fx-font-size: 14;" +
-            "-fx-background-radius: 14;" +
-            "-fx-padding: 12 24 12 24;" +
-            "-fx-cursor: hand;"
-        );
+        dashboardBtn.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-font-size: 14;-fx-padding: 12 24 12 24;");
+        HorizonDesignSystem.installButtonMotion(dashboardBtn);
         dashboardBtn.setOnAction(e -> {
             if (onChooseDashboard != null) {
                 onChooseDashboard.run();

@@ -30,13 +30,16 @@ public class NativeCaptchaService implements AutoCloseable {
     private final Random random = new Random();
     private final ConcurrentMap<String, SessionState> sessions = new ConcurrentHashMap<>();
     private Typeface typeface;
+    private boolean skijaAvailable = true;
 
     public NativeCaptchaService() {
         try {
             // Load a system font; fallback to default if unavailable
             typeface = Typeface.makeFromName("Arial", FontStyle.BOLD);
-        } catch (Exception e) {
-            typeface = Typeface.makeDefault();
+        } catch (Throwable e) {
+            skijaAvailable = false;
+            typeface = null;
+            System.err.println("[NativeCaptchaService] Skija unavailable, using JavaFX fallback: " + e.getMessage());
         }
     }
 
@@ -99,14 +102,18 @@ public class NativeCaptchaService implements AutoCloseable {
         return Objects.equals(normalized, s.expectedAnswer);
     }
 
-    public String getModelStatus() { return "skija-powered image captcha"; }
+    public String getModelStatus() { return skijaAvailable ? "skija-powered image captcha" : "javafx fallback image captcha"; }
 
     public void reset(String id) { if (id != null) sessions.remove(id); }
 
     @Override
     public void close() {
         sessions.clear();
-        if (typeface != null) typeface.close();
+        try {
+            if (typeface != null) typeface.close();
+        } catch (Throwable ignored) {
+            // Skija may be unavailable on newer runtimes; fallback mode has nothing native to release.
+        }
     }
 
     private String buildCode() {
@@ -137,6 +144,9 @@ public class NativeCaptchaService implements AutoCloseable {
 
     private Image renderChallengeImageSkija(String code) {
         int width = 360, height = 140;
+        if (!skijaAvailable) {
+            return renderChallengeImageFallback(code);
+        }
         
         try (Surface surface = Surface.makeRaster(ImageInfo.makeS32(width, height, ColorAlphaType.OPAQUE))) {
             Canvas canvas = surface.getCanvas();
@@ -178,9 +188,10 @@ public class NativeCaptchaService implements AutoCloseable {
                 buffer.get(pixelData);
                 return pixelsToFXImage(pixelData, width, height);
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // Fallback to simple rendering if Skija fails
             System.err.println("[NativeCaptchaService] Skija rendering failed, using fallback: " + e.getMessage());
+            skijaAvailable = false;
             return renderChallengeImageFallback(code);
         }
     }
@@ -246,18 +257,38 @@ public class NativeCaptchaService implements AutoCloseable {
     }
 
     private Image renderChallengeImageFallback(String code) {
-        // Very basic fallback if Skija is totally broken
         int width = 360, height = 140;
-        WritableImage img = new WritableImage(width, height);
-        PixelWriter pw = img.getPixelWriter();
-        
-        // Fill dark background
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                pw.setArgb(x, y, 0xFF0C1220);
-            }
+        javafx.scene.canvas.Canvas canvas = new javafx.scene.canvas.Canvas(width, height);
+        javafx.scene.canvas.GraphicsContext gc = canvas.getGraphicsContext2D();
+
+        gc.setFill(javafx.scene.paint.Color.rgb(12, 18, 32));
+        gc.fillRect(0, 0, width, height);
+        gc.setFill(javafx.scene.paint.Color.rgb(22, 28, 45, 0.95));
+        gc.fillRoundRect(16, 16, width - 32, height - 32, 24, 24);
+
+        for (int i = 0; i < 12; i++) {
+            gc.setStroke(javafx.scene.paint.Color.rgb(255, 255, 255, 0.07 + random.nextDouble() * 0.1));
+            gc.setLineWidth(1.0 + random.nextDouble() * 2.0);
+            gc.strokeLine(random.nextInt(width), random.nextInt(height), random.nextInt(width), random.nextInt(height));
         }
-        return img;
+
+        gc.setFont(javafx.scene.text.Font.font("Arial", javafx.scene.text.FontWeight.BOLD, 42));
+        int x = 42;
+        for (int i = 0; i < code.length(); i++) {
+            String ch = String.valueOf(code.charAt(i));
+            gc.save();
+            gc.translate(x, 88 + random.nextInt(12) - 6);
+            gc.rotate(-14 + random.nextInt(29));
+            gc.setFill(javafx.scene.paint.Color.rgb(232, 240, 255, 0.92));
+            gc.fillText(ch, 0, 0);
+            gc.restore();
+            x += ch.equals("-") ? 30 : 40;
+        }
+
+        gc.setStroke(javafx.scene.paint.Color.rgb(255, 255, 255, 0.12));
+        gc.setLineWidth(1);
+        gc.strokeRoundRect(16, 16, width - 32, height - 32, 24, 24);
+        return canvas.snapshot(null, null);
     }
 
     public record NativeChallenge(String challengeId, String prompt, String mode, String difficultyLabel, Image captchaImage) {}

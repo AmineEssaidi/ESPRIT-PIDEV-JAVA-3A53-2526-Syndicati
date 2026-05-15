@@ -5,6 +5,7 @@ import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.*;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -302,30 +303,14 @@ public class SessionRecoveryView {
     private Button createStyledButton(String text, boolean primary) {
         Button btn = new Button(text);
         if (primary) {
-            btn.setStyle(
-                "-fx-background-color: " + accentHex + ";" +
-                "-fx-text-fill: white;" +
-                "-fx-font-family: 'Clash Grotesk Bold';" +
-                "-fx-font-size: 13px;" +
-                "-fx-background-radius: 10;" +
-                "-fx-padding: 12 25 12 25;" +
-                "-fx-cursor: hand;"
-            );
+            btn.setStyle(HorizonDesignSystem.buttonPrimary() +
+                "-fx-font-family: 'Clash Grotesk Bold';-fx-font-size: 13px;-fx-padding: 12 25 12 25;");
             btn.setEffect(new DropShadow(15, Color.web(accentHex, 0.4)));
         } else {
-            btn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.08);" +
-                "-fx-text-fill: white;" +
-                "-fx-font-family: 'Clash Grotesk Bold';" +
-                "-fx-font-size: 13px;" +
-                "-fx-background-radius: 10;" +
-                "-fx-padding: 12 25 12 25;" +
-                "-fx-cursor: hand;"
-            );
+            btn.setStyle(HorizonDesignSystem.buttonGhost() +
+                "-fx-font-family: 'Clash Grotesk Bold';-fx-font-size: 13px;-fx-padding: 12 25 12 25;");
         }
-        
-        btn.setOnMouseEntered(e -> btn.setOpacity(0.8));
-        btn.setOnMouseExited(e -> btn.setOpacity(1.0));
+        HorizonDesignSystem.installButtonMotion(btn);
         
         return btn;
     }

@@ -12,6 +12,7 @@ import javafx.geometry.Pos;
 import javafx.animation.*;
 import javafx.util.Duration;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 
 /**
  * Dynamic Footer Component - Dynamic island design footer
@@ -20,10 +21,12 @@ public class DynamicFooter {
     
     private final HBox root;
     private final StackPane wrapper;
+    private final Region glowLayer;
     private ChangeListener<Number> gradientPhaseListener;
     
     public DynamicFooter() {
         this.wrapper = new StackPane();
+        this.glowLayer = new Region();
         this.root = new HBox();
         setupLayout();
         startAnimations();
@@ -40,87 +43,78 @@ public class DynamicFooter {
 
         // Main footer container with dynamic island styling
         root.setSpacing(0);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(6, 16, 6, 16));
+        root.setAlignment(Pos.CENTER_LEFT);
+        root.setPadding(new Insets(18, 28, 18, 28));
+        root.setMinHeight(72);
+        root.setPrefHeight(72);
+        root.setMaxWidth(Double.MAX_VALUE);
         
         // Apply dynamic island background with theme-aware colors
         applyThemeStyling();
         
         // Add root to wrapper (guard against duplicate on refreshTheme calls)
+        glowLayer.setMouseTransparent(true);
+        glowLayer.setOpacity(0);
+        glowLayer.prefWidthProperty().bind(root.widthProperty());
+        glowLayer.prefHeightProperty().bind(root.heightProperty());
+        glowLayer.setStyle(glowStyle());
+        if (!wrapper.getChildren().contains(glowLayer)) {
+            wrapper.getChildren().add(glowLayer);
+        }
         if (!wrapper.getChildren().contains(root)) {
             wrapper.getChildren().add(root);
         }
+        wrapper.setPadding(new Insets(22, 30, 10, 30));
         
         // Footer content container
         HBox footerContent = new HBox();
-        footerContent.setSpacing(0);
+        footerContent.setSpacing(20);
         footerContent.setAlignment(Pos.CENTER);
         footerContent.setMaxWidth(Double.MAX_VALUE);
         
-        // Left side - App branding
-        VBox leftSection = new VBox();
+        // Left side - web footer copy
+        HBox leftSection = new HBox(8);
         leftSection.setAlignment(Pos.CENTER_LEFT);
-        leftSection.setSpacing(2);
-        leftSection.setPadding(new Insets(0, 0, 0, 0)); // No left padding to push to edge
         
-    Text appName = new Text("Syndicati");
-    appName.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 11));
-        appName.setFill(Color.web(ThemeManager.getInstance().getIslandTextColor()));
-        
-    Text copyrightText = new Text("(c) 2025 All rights reserved");
-    copyrightText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 8));
+        Text copyrightText = new Text("Copyright " + java.time.Year.now().getValue());
+        copyrightText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 13));
         copyrightText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
-        
-        leftSection.getChildren().addAll(appName, copyrightText);
-        
-        // Center - Quick links with better styling
-        HBox centerSection = new HBox();
-        centerSection.setSpacing(12);
-        centerSection.setAlignment(Pos.CENTER);
-        
-        // Create footer links with improved design
-        centerSection.getChildren().addAll(
-            createFooterLink("\ud83d\udcd8", "Documentation"),
-            createFooterLink("\ud83c\udfa7", "Support"),
-            createFooterLink("\ud83d\udc19", "GitHub"),
-            createFooterLink("\ud83d\udcc4", "License")
-        );
-        
-        // Right side - Made with love (enhanced)
-        VBox rightSection = new VBox();
-        rightSection.setAlignment(Pos.CENTER_RIGHT);
-        rightSection.setSpacing(2);
-        rightSection.setPadding(new Insets(0, 0, 0, 0)); // No right padding to push to edge
-        
-        HBox loveText = new HBox();
-        loveText.setSpacing(6);
-        loveText.setAlignment(Pos.CENTER_RIGHT);
-        
-    Text loveText1 = new Text("Made with");
-    loveText1.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 9));
+
+        Text loveText1 = new Text("Made with");
+        loveText1.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 13));
         loveText1.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
         
-        Text heart = new Text("care");
-        heart.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.BOLD, 9));
+        Text heart = new Text("+");
+        heart.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 16));
+        heart.setFill(Color.web("#ff3b30"));
         
-    Text loveText2 = new Text("by Amine");
-    loveText2.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 9));
+        Text byText = new Text("by");
+        byText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 13));
+        byText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
+
+        Text loveText2 = new Text("Mohamed Amine Essaidi");
+        loveText2.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.SEMI_BOLD, 13));
         loveText2.setFill(Color.web(ThemeManager.getInstance().getModernAccentColor()));
         
-        loveText.getChildren().addAll(loveText1, heart, loveText2);
+        leftSection.getChildren().addAll(copyrightText, loveText1, heart, byText, loveText2);
         
-    Text versionText = new Text("v1.0.0");
-    versionText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 7));
-        versionText.setFill(Color.web(ThemeManager.getInstance().getIslandSecondaryTextColor()));
-        
-        rightSection.getChildren().addAll(loveText, versionText);
+        // Right side - Quick links
+        HBox rightSection = new HBox(16);
+        rightSection.setAlignment(Pos.CENTER_RIGHT);
+        rightSection.getChildren().addAll(
+            createFooterLink("Docs", "Documentation"),
+            createFooterLink("Help", "Support"),
+            createFooterLink("Code", "GitHub"),
+            createFooterLink("Legal", "License")
+        );
         
         // Add sections to footer content
-        footerContent.getChildren().addAll(leftSection, centerSection, rightSection);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        footerContent.getChildren().addAll(leftSection, spacer, rightSection);
         
         // Set grow priorities to push content to edges
         HBox.setHgrow(leftSection, Priority.ALWAYS);
-        HBox.setHgrow(centerSection, Priority.NEVER);
         HBox.setHgrow(rightSection, Priority.ALWAYS);
         
         // Force alignment to edges
@@ -128,29 +122,28 @@ public class DynamicFooter {
         rightSection.setAlignment(Pos.CENTER_RIGHT);
         
         root.getChildren().add(footerContent);
+        installIslandHover();
     }
     
-    private VBox createFooterLink(String icon, String text) {
-        VBox link = new VBox();
-        link.setSpacing(3);
+    private HBox createFooterLink(String icon, String text) {
+        HBox link = new HBox(8);
         link.setAlignment(Pos.CENTER);
-        link.setPadding(new Insets(4, 10, 4, 10));
+        link.setPadding(new Insets(7, 12, 7, 12));
         link.setCursor(javafx.scene.Cursor.HAND);
         ThemeManager themeManager = ThemeManager.getInstance();
         boolean dark = themeManager.isDarkMode();
         String baseText = dark ? themeManager.getIslandSecondaryTextColor() : "#334155";
-        String baseIcon = dark ? themeManager.getIslandTextColor() : "#0f172a";
-        String hoverText = dark ? themeManager.getModernAccentColor() : "#0b1220";
-        String hoverBg = dark ? themeManager.getLiquidGlassHover() : "rgba(15,23,42,0.08)";
+        String hoverText = "#ffffff";
+        String hoverBg = themeManager.getEffectiveAccentGradient();
         
         // Link icon with theme-aware styling
         Text linkIcon = new Text(icon);
-        linkIcon.setFont(javafx.scene.text.Font.font(18));
-        linkIcon.setFill(Color.web(baseIcon));
+        linkIcon.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), javafx.scene.text.FontWeight.BOLD, 10));
+        linkIcon.setFill(Color.web(baseText));
         
         // Link text with improved typography
         Text linkText = new Text(text);
-        linkText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.NORMAL, 9));
+        linkText.setFont(javafx.scene.text.Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), javafx.scene.text.FontWeight.MEDIUM, 12));
         linkText.setFill(Color.web(baseText));
         link.getChildren().addAll(linkIcon, linkText);
         
@@ -158,15 +151,21 @@ public class DynamicFooter {
         link.setOnMouseEntered(e -> {
             link.setStyle(
                 "-fx-background-color: " + hoverBg + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-scale-x: 1.05;" +
-                "-fx-scale-y: 1.05;"
+                "-fx-background-radius: 999px;" +
+                "-fx-effect: dropshadow(gaussian, " + themeManager.toRgba(themeManager.getAccentHex(), 0.26) + ", 14, 0.24, 0, 4);"
             );
+
+            ScaleTransition linkScale = new ScaleTransition(Duration.millis(180), link);
+            linkScale.setToX(1.05);
+            linkScale.setToY(1.05);
+            linkScale.setInterpolator(HorizonDesignSystem.WEB_POP);
+            linkScale.play();
             
             // Animate icon
             ScaleTransition iconScale = new ScaleTransition(Duration.millis(150), linkIcon);
             iconScale.setToX(1.2);
             iconScale.setToY(1.2);
+            iconScale.setInterpolator(HorizonDesignSystem.WEB_POP);
             iconScale.play();
             
             // Change text and icon color on hover
@@ -175,40 +174,46 @@ public class DynamicFooter {
         });
         
         link.setOnMouseExited(e -> {
-            link.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-scale-x: 1.0;" +
-                "-fx-scale-y: 1.0;"
-            );
+            link.setStyle("-fx-background-color: transparent; -fx-background-radius: 999px;");
+
+            ScaleTransition linkScale = new ScaleTransition(Duration.millis(170), link);
+            linkScale.setToX(1.0);
+            linkScale.setToY(1.0);
+            linkScale.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            linkScale.play();
             
             // Reset icon
             ScaleTransition iconScale = new ScaleTransition(Duration.millis(150), linkIcon);
             iconScale.setToX(1.0);
             iconScale.setToY(1.0);
+            iconScale.setInterpolator(HorizonDesignSystem.WEB_EASE);
             iconScale.play();
             
             // Reset text and icon color
             linkText.setFill(Color.web(baseText));
-            linkIcon.setFill(Color.web(baseIcon));
+            linkIcon.setFill(Color.web(baseText));
         });
         
         // Add click effect
         link.setOnMousePressed(e -> {
             link.setStyle(
                 "-fx-background-color: " + hoverBg + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-scale-x: 0.95;" +
-                "-fx-scale-y: 0.95;"
+                "-fx-background-radius: 999px;"
             );
+            link.setScaleX(0.96);
+            link.setScaleY(0.96);
         });
         
         link.setOnMouseReleased(e -> {
             link.setStyle(
                 "-fx-background-color: " + hoverBg + ";" +
-                "-fx-background-radius: 12px;" +
-                "-fx-scale-x: 1.05;" +
-                "-fx-scale-y: 1.05;"
+                "-fx-background-radius: 999px;"
             );
+            ScaleTransition linkScale = new ScaleTransition(Duration.millis(160), link);
+            linkScale.setToX(1.05);
+            linkScale.setToY(1.05);
+            linkScale.setInterpolator(HorizonDesignSystem.WEB_POP);
+            linkScale.play();
         });
         
         return link;
@@ -216,18 +221,12 @@ public class DynamicFooter {
     
     private void applyThemeStyling() {
         ThemeManager tm = ThemeManager.getInstance();
+        glowLayer.setStyle(glowStyle());
         if (tm.isDarkMode()) {
             double pulse = 0.32 + (0.12 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
             double radius = 22 + (6 * Math.sin(tm.gradientPhaseProperty().get() * Math.PI));
 
-            root.setStyle(
-                "-fx-background-color: " + tm.getEffectiveAccentGradient() + ", " + tm.getDynamicIslandBackground() + ";" +
-                "-fx-background-insets: 0, 1.5;" +
-                "-fx-background-radius: 50px, 48.5px;" +
-                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.0) + ";" +
-                "-fx-border-width: 0;" +
-                "-fx-border-radius: 50px;"
-            );
+            root.setStyle(HorizonDesignSystem.webFloatingIsland(999, false));
 
             DropShadow footerShadow = new DropShadow();
             footerShadow.setBlurType(BlurType.GAUSSIAN);
@@ -239,13 +238,7 @@ public class DynamicFooter {
             return;
         }
 
-        root.setStyle(
-            "-fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.98), rgba(247,250,255,0.97));" +
-            "-fx-background-radius: 50px;" +
-            "-fx-border-color: rgba(15,23,42,0.14);" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 50px;"
-        );
+        root.setStyle(HorizonDesignSystem.webFloatingIsland(999, false));
 
         DropShadow footerShadow = new DropShadow();
         footerShadow.setBlurType(BlurType.GAUSSIAN);
@@ -263,8 +256,37 @@ public class DynamicFooter {
         floatAnimation.setToY(2);
         floatAnimation.setAutoReverse(true);
         floatAnimation.setCycleCount(Animation.INDEFINITE);
-        floatAnimation.setInterpolator(Interpolator.EASE_BOTH);
+        floatAnimation.setInterpolator(HorizonDesignSystem.WEB_EASE);
         floatAnimation.play();
+    }
+
+    private String glowStyle() {
+        ThemeManager tm = ThemeManager.getInstance();
+        return "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
+            "-fx-background-radius: 52px;" +
+            "-fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.34) + ", 38, 0.28, 0, 0);";
+    }
+
+    private void installIslandHover() {
+        root.setOnMouseEntered(e -> {
+            TranslateTransition lift = new TranslateTransition(Duration.millis(260), root);
+            lift.setToY(-2);
+            lift.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            FadeTransition glow = new FadeTransition(Duration.millis(300), glowLayer);
+            glow.setToValue(0.86);
+            glow.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            new ParallelTransition(lift, glow).play();
+        });
+
+        root.setOnMouseExited(e -> {
+            TranslateTransition lift = new TranslateTransition(Duration.millis(260), root);
+            lift.setToY(0);
+            lift.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            FadeTransition glow = new FadeTransition(Duration.millis(300), glowLayer);
+            glow.setToValue(0);
+            glow.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            new ParallelTransition(lift, glow).play();
+        });
     }
     
     public StackPane getRoot() {

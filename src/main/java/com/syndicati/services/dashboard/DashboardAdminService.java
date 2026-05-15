@@ -26,6 +26,7 @@ import com.syndicati.models.evenement.Participation;
 import com.syndicati.models.residence.Apartment;
 import com.syndicati.models.residence.Maintenance;
 import com.syndicati.models.residence.Residence;
+import com.syndicati.models.residence.Review;
 import com.syndicati.services.DatabaseService;
 import com.syndicati.utils.session.SessionManager;
 import javafx.scene.Node;
@@ -48,6 +49,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 public class DashboardAdminService {
 
@@ -64,6 +67,8 @@ public class DashboardAdminService {
     private final MaintenanceController maintenanceController;
     private final AppEventLogRepository appEventLogRepository;
     private final DatabaseService databaseService;
+    private final Map<String, CacheEntry<?>> cache = new ConcurrentHashMap<>();
+    private static final long DATA_TTL_MS = 20_000;
 
     public DashboardAdminService() {
         this.userController = new UserController();
@@ -82,51 +87,77 @@ public class DashboardAdminService {
     }
 
     public List<User> users() {
-        return userController.users();
+        return cachedList("users", userController::users);
     }
 
     public List<Profile> profiles() {
-        return profileController.profiles();
+        return cachedList("profiles", profileController::profiles);
     }
 
     public List<Onboarding> onboardings() {
-        return onboardingController.onboardings();
+        return cachedList("onboardings", onboardingController::onboardings);
     }
 
     public List<Reclamation> reclamations() {
-        return reclamationController.reclamations();
+        return cachedList("reclamations", reclamationController::reclamations);
     }
 
     public List<Residence> residences() {
-        return residenceController.residences();
+        return cachedList("residences", residenceController::residences);
     }
 
     public List<Apartment> apartments() {
-        return residenceController.apartments();
+        return cachedList("apartments", residenceController::apartments);
     }
 
     public List<Reponse> reponses() {
-        return reclamationController.reponses();
+        return cachedList("reponses", reclamationController::reponses);
     }
 
     public List<Publication> publications() {
-        return publicationController.publications();
+        return cachedList("publications", publicationController::publications);
     }
 
     public List<Commentaire> commentaires() {
-        return commentaireController.commentaires();
+        return cachedList("commentaires", commentaireController::commentaires);
     }
 
     public List<com.syndicati.models.forum.Reaction> reactions() {
-        return reactionController.reactions();
+        return cachedList("reactions", reactionController::reactions);
     }
 
     public List<Evenement> evenements() {
-        return evenementController.evenements();
+        return cachedList("evenements", evenementController::evenements);
     }
 
     public List<Participation> participations() {
-        return participationController.participations();
+        return cachedList("participations", participationController::participations);
+    }
+
+    public List<Maintenance> maintenanceRecords() {
+        return cachedList("maintenanceRecords", maintenanceController::maintenanceRecords);
+    }
+
+    public List<Review> reviews() {
+        return cachedList("reviews", maintenanceController::reviews);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> List<T> cachedList(String key, Supplier<List<T>> loader) {
+        long now = System.currentTimeMillis();
+        CacheEntry<?> existing = cache.get(key);
+        if (existing != null && now - existing.loadedAt <= DATA_TTL_MS && existing.value instanceof List<?>) {
+            return new ArrayList<>((List<T>) existing.value);
+        }
+
+        List<T> loaded = loader.get();
+        List<T> snapshot = loaded == null ? List.of() : new ArrayList<>(loaded);
+        cache.put(key, new CacheEntry<>(snapshot, now));
+        return new ArrayList<>(snapshot);
+    }
+
+    private void invalidateDataCache() {
+        cache.clear();
     }
 
     public List<AppEventLog> recentActivityLogs(int limit) {
@@ -138,7 +169,7 @@ public class DashboardAdminService {
         java.time.LocalDateTime sevenDaysAgo = java.time.LocalDateTime.now().minusDays(7);
 
         Map<String, Integer> stats = new LinkedHashMap<>();
-        stats.put("total_users", userController.users().size());
+        stats.put("total_users", users().size());
         stats.put("active_today", appEventLogRepository.countDistinctActiveSince(today));
         stats.put("interactions_today", appEventLogRepository.countSince(today));
         stats.put("active_week", appEventLogRepository.countDistinctActiveSince(sevenDaysAgo));
@@ -183,13 +214,13 @@ public class DashboardAdminService {
         int newPosts = 0;
         int newEvents = 0;
 
-        for (Publication publication : publicationController.publications()) {
+        for (Publication publication : publications()) {
             if (publication.getDateCreationPub() != null && !publication.getDateCreationPub().isBefore(since)) {
                 newPosts++;
             }
         }
 
-        for (Evenement evenement : evenementController.evenements()) {
+        for (Evenement evenement : evenements()) {
             LocalDateTime createdAt = evenement.getCreatedAt();
             if (createdAt != null && !createdAt.isBefore(since)) {
                 newEvents++;
@@ -203,7 +234,7 @@ public class DashboardAdminService {
     }
 
     public List<User> recentSignups(int limit) {
-        List<User> users = new java.util.ArrayList<>(userController.users());
+        List<User> users = new java.util.ArrayList<>(users());
         users.sort((a, b) -> {
             LocalDateTime ad = a.getCreatedAt();
             LocalDateTime bd = b.getCreatedAt();
@@ -368,80 +399,67 @@ public class DashboardAdminService {
     }
 
     public boolean saveEntity(String entityLabel, String mode, String[] originalRowData, VBox fields) {
+        boolean saved = false;
         if ("User".equalsIgnoreCase(entityLabel)) {
-            return saveUser(mode, originalRowData, fields);
+            saved = saveUser(mode, originalRowData, fields);
+        } else if ("User Ban".equalsIgnoreCase(entityLabel)) {
+            saved = saveUserBan(mode, originalRowData, fields);
+        } else if ("Profile".equalsIgnoreCase(entityLabel)) {
+            saved = saveProfile(mode, originalRowData, fields);
+        } else if ("Onboarding".equalsIgnoreCase(entityLabel)) {
+            saved = saveOnboarding(mode, originalRowData, fields);
+        } else if ("Reclamation".equalsIgnoreCase(entityLabel)) {
+            saved = saveReclamation(mode, originalRowData, fields);
+        } else if ("Reponse".equalsIgnoreCase(entityLabel)) {
+            saved = saveReponse(mode, originalRowData, fields);
+        } else if ("Publication".equalsIgnoreCase(entityLabel)) {
+            saved = savePublication(mode, originalRowData, fields);
+        } else if ("Comment".equalsIgnoreCase(entityLabel)) {
+            saved = saveCommentaire(mode, originalRowData, fields);
+        } else if ("Event".equalsIgnoreCase(entityLabel)) {
+            saved = saveEvenement(mode, originalRowData, fields);
+        } else if ("Residence".equalsIgnoreCase(entityLabel)) {
+            saved = saveResidence(mode, originalRowData, fields);
+        } else if ("Appartement".equalsIgnoreCase(entityLabel)) {
+            saved = saveAppartement(mode, originalRowData, fields);
+        } else if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
+            saved = saveMaintenanceTicket(mode, originalRowData, fields);
         }
-        if ("User Ban".equalsIgnoreCase(entityLabel)) {
-            return saveUserBan(mode, originalRowData, fields);
+        if (saved) {
+            invalidateDataCache();
         }
-        if ("Profile".equalsIgnoreCase(entityLabel)) {
-            return saveProfile(mode, originalRowData, fields);
-        }
-        if ("Onboarding".equalsIgnoreCase(entityLabel)) {
-            return saveOnboarding(mode, originalRowData, fields);
-        }
-        if ("Reclamation".equalsIgnoreCase(entityLabel)) {
-            return saveReclamation(mode, originalRowData, fields);
-        }
-        if ("Reponse".equalsIgnoreCase(entityLabel)) {
-            return saveReponse(mode, originalRowData, fields);
-        }
-        if ("Publication".equalsIgnoreCase(entityLabel)) {
-            return savePublication(mode, originalRowData, fields);
-        }
-        if ("Comment".equalsIgnoreCase(entityLabel)) {
-            return saveCommentaire(mode, originalRowData, fields);
-        }
-        if ("Event".equalsIgnoreCase(entityLabel)) {
-            return saveEvenement(mode, originalRowData, fields);
-        }
-        if ("Residence".equalsIgnoreCase(entityLabel)) {
-            return saveResidence(mode, originalRowData, fields);
-        }
-        if ("Appartement".equalsIgnoreCase(entityLabel)) {
-            return saveAppartement(mode, originalRowData, fields);
-        }
-        if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
-            return saveMaintenanceTicket(mode, originalRowData, fields);
-        }
-        return false;
+        return saved;
     }
 
     public boolean deleteEntity(String entityLabel, String[] rowData) {
+        boolean deleted = false;
         if ("User".equalsIgnoreCase(entityLabel)) {
-            return deleteUser(rowData);
+            deleted = deleteUser(rowData);
+        } else if ("User Ban".equalsIgnoreCase(entityLabel)) {
+            deleted = unbanUser(rowData);
+        } else if ("Profile".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteProfile(rowData);
+        } else if ("Reclamation".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteReclamation(rowData);
+        } else if ("Reponse".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteReponse(rowData);
+        } else if ("Publication".equalsIgnoreCase(entityLabel)) {
+            deleted = deletePublication(rowData);
+        } else if ("Comment".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteCommentaire(rowData);
+        } else if ("Event".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteEvenement(rowData);
+        } else if ("Residence".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteResidence(rowData);
+        } else if ("Appartement".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteAppartement(rowData);
+        } else if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
+            deleted = deleteMaintenanceTicket(rowData);
         }
-        if ("User Ban".equalsIgnoreCase(entityLabel)) {
-            return unbanUser(rowData);
+        if (deleted) {
+            invalidateDataCache();
         }
-        if ("Profile".equalsIgnoreCase(entityLabel)) {
-            return deleteProfile(rowData);
-        }
-        if ("Reclamation".equalsIgnoreCase(entityLabel)) {
-            return deleteReclamation(rowData);
-        }
-        if ("Reponse".equalsIgnoreCase(entityLabel)) {
-            return deleteReponse(rowData);
-        }
-        if ("Publication".equalsIgnoreCase(entityLabel)) {
-            return deletePublication(rowData);
-        }
-        if ("Comment".equalsIgnoreCase(entityLabel)) {
-            return deleteCommentaire(rowData);
-        }
-        if ("Event".equalsIgnoreCase(entityLabel)) {
-            return deleteEvenement(rowData);
-        }
-        if ("Residence".equalsIgnoreCase(entityLabel)) {
-            return deleteResidence(rowData);
-        }
-        if ("Appartement".equalsIgnoreCase(entityLabel)) {
-            return deleteAppartement(rowData);
-        }
-        if ("Maintenance Ticket".equalsIgnoreCase(entityLabel)) {
-            return deleteMaintenanceTicket(rowData);
-        }
-        return false;
+        return deleted;
     }
 
     private boolean saveUser(String mode, String[] originalRowData, VBox fields) {
@@ -582,7 +600,11 @@ public class DashboardAdminService {
             if (user.getDisabledAt() == null) {
                 user.setDisabledAt(LocalDateTime.now());
             }
-            return userController.userEdit(user);
+            boolean saved = userController.userEdit(user);
+            if (saved) {
+                invalidateDataCache();
+            }
+            return saved;
         }
         return false;
     }
@@ -594,7 +616,11 @@ public class DashboardAdminService {
             user.setDisabled(false);
             user.setDisabledReason(null);
             user.setDisabledAt(null);
-            return userController.userEdit(user);
+            boolean saved = userController.userEdit(user);
+            if (saved) {
+                invalidateDataCache();
+            }
+            return saved;
         }
         return false;
     }
@@ -1738,5 +1764,8 @@ public class DashboardAdminService {
     private String normalizeOptional(String value) {
         String normalized = safe(value);
         return "-".equals(normalized) ? null : normalized;
+    }
+
+    private record CacheEntry<T>(T value, long loadedAt) {
     }
 }

@@ -24,9 +24,17 @@ public class UserStandingRepository {
     }
 
     public Optional<UserStanding> findByUserId(int userId) {
+        return findByUserId(userId, true);
+    }
+
+    public Optional<UserStanding> findByUserId(int userId, boolean useCache) {
         String cacheKey = "standing_user_" + userId;
-        UserStanding cached = databaseService.getCache(cacheKey);
-        if (cached != null) return Optional.of(cached);
+        if (useCache) {
+            UserStanding cached = databaseService.getCache(cacheKey);
+            if (cached != null) return Optional.of(cached);
+        } else {
+            databaseService.clearCache(cacheKey);
+        }
 
         String sql = "SELECT * FROM user_standing WHERE user_id = ? LIMIT 1";
 
@@ -68,7 +76,12 @@ public class UserStandingRepository {
                 ps.setInt(3, Math.max(0, standing.getPoints()));
                 ps.setString(4, normalizeLabel(standing.getStandingLabel()));
                 ps.setTimestamp(5, toTimestamp(standing.getUpdatedAt() == null ? LocalDateTime.now() : standing.getUpdatedAt()));
-                return ps.executeUpdate() > 0;
+                boolean saved = ps.executeUpdate() > 0;
+                if (saved) {
+                    databaseService.clearCache("standing_user_" + standing.getUserId());
+                    databaseService.putCache("standing_user_" + standing.getUserId(), standing);
+                }
+                return saved;
             }
         } catch (SQLException e) {
             System.out.println("UserStandingRepository.save error: " + e.getMessage());

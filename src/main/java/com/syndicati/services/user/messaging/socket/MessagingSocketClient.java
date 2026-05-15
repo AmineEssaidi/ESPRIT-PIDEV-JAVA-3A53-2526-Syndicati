@@ -24,6 +24,7 @@ public class MessagingSocketClient {
             .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
             .create();
     private boolean connected = false;
+    private Integer authenticatedUserId;
     private final List<Consumer<SocketPayload>> messageListeners = new ArrayList<>();
 
     private MessagingSocketClient() {}
@@ -36,7 +37,10 @@ public class MessagingSocketClient {
     }
 
     public void connect(int userId) {
-        if (connected) return;
+        if (connected && authenticatedUserId != null && authenticatedUserId == userId) return;
+        if (connected) {
+            disconnect();
+        }
 
         Thread clientThread = new Thread(() -> {
             try {
@@ -49,6 +53,7 @@ public class MessagingSocketClient {
                 SocketPayload auth = new SocketPayload(SocketPayload.Type.AUTH);
                 auth.setSenderId(userId);
                 send(auth);
+                authenticatedUserId = userId;
 
                 System.out.println("[MessagingClient] Connected and authenticated as " + userId);
 
@@ -71,6 +76,7 @@ public class MessagingSocketClient {
 
     public void disconnect() {
         connected = false;
+        authenticatedUserId = null;
         try {
             if (in != null) in.close();
             if (out != null) out.close();
@@ -78,6 +84,7 @@ public class MessagingSocketClient {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        messageListeners.clear();
     }
 
     public void send(SocketPayload payload) {

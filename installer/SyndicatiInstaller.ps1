@@ -204,6 +204,28 @@ function UpdateProgress($percent, $step, $detail) {
     [System.Windows.Forms.Application]::DoEvents()
 }
 
+function Expand-PackageWithOverwrite($zipFile, $destination) {
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($zipFile)
+    try {
+        foreach ($entry in $archive.Entries) {
+            $targetPath = Join-Path $destination $entry.FullName
+            if ([string]::IsNullOrWhiteSpace($entry.Name)) {
+                New-Item -ItemType Directory -Path $targetPath -Force | Out-Null
+                continue
+            }
+
+            $parent = Split-Path -Parent $targetPath
+            if ($parent -and !(Test-Path $parent)) {
+                New-Item -ItemType Directory -Path $parent -Force | Out-Null
+            }
+
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $targetPath, $true)
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
 $BtnStart.Add_Click({
     $WelcomeView.Visibility = "Collapsed"
     $ProgressView.Visibility = "Visible"
@@ -221,7 +243,8 @@ $BtnStart.Add_Click({
         New-Item -ItemType Directory -Path $target -Force | Out-Null 
     } else {
         Log "Cleaning old core files (preserving user data)..."
-        Get-ChildItem -Path $target -Exclude "*.db", "*.json", "config", "logs" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $target -Exclude "*.db", "*.json", ".env", ".env.local", "config", "logs", "certs", "uploads" |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
     
     # 2. Actual Extraction (Unzipping)
@@ -229,7 +252,7 @@ $BtnStart.Add_Click({
     if ($ZipPath -and (Test-Path $ZipPath)) {
         try {
             Log "Unzipping app package to $target..."
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $target)
+            Expand-PackageWithOverwrite $ZipPath $target
             Log "Extraction complete."
         } catch {
             Log "CRITICAL ERROR: $($_.Exception.Message)"

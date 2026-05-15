@@ -267,7 +267,7 @@ public class MailerService {
             String fromName = firstNonBlank(
                 EnvConfig.get("MAILER_FROM_NAME"),
                 EnvConfig.get("MAIL_FROM_NAME"),
-                "Horizon"
+                "Syndicati"
             );
 
             if (dsn != null && !dsn.isBlank() && !dsn.startsWith("null://")) {
@@ -449,7 +449,7 @@ public class MailerService {
                     return c;
                 }
             }
-            String fallback = "Horizon";
+            String fallback = "Syndicati";
             for (String c : candidates) {
                 if (c != null) {
                     return c;

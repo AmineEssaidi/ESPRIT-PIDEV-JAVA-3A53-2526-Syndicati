@@ -11,6 +11,7 @@ import com.syndicati.services.events.DataUpdateBus;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.utils.image.imagekit.ImageKitConfig;
 import com.syndicati.utils.image.imagekit.ImageKitStorageService;
@@ -249,6 +250,7 @@ public class EvenementPageView implements ViewInterface {
 
     private StackPane buildHeroSection() {
         StackPane hero = sectionShell(48, new Insets(128, 64, 128, 64), surfaceStrong(), borderSoft());
+        hero.setStyle(HorizonDesignSystem.webHeroPanel());
         hero.paddingProperty().bind(Bindings.createObjectBinding(
             () -> root.getWidth() < 1050 ? new Insets(58, 30, 58, 30) : new Insets(128, 64, 128, 64),
             root.widthProperty()
@@ -259,7 +261,7 @@ public class EvenementPageView implements ViewInterface {
 
         left.getChildren().add(sectionPill(com.syndicati.utils.localization.LocalizationManager.getInstance().get("community_experiences")));
 
-        Text title = text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("discover_connect_experience"), 80, true, tm.getAccentHex());
+        Text title = text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("discover_connect_experience"), 80, true, "#ffffff");
         title.wrappingWidthProperty().bind(Bindings.max(300, hero.widthProperty().subtract(120)));
         Text subtitle = text(
             com.syndicati.utils.localization.LocalizationManager.getInstance().get("events_hero_desc"),
@@ -288,14 +290,7 @@ public class EvenementPageView implements ViewInterface {
             () -> root.getWidth() < 1100 ? new Insets(38, 24, 38, 24) : new Insets(96, 80, 96, 80),
             root.widthProperty()
         ));
-        dashboard.setStyle(
-            "-fx-background-color: " + surfaceStrong() + ";" +
-            "-fx-background-radius: 48px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 48px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.38), 32, 0.16, 0, 8);"
-        );
+        dashboard.setStyle(HorizonDesignSystem.webObsidianPanel(48));
 
         GridPane content = new GridPane();
         content.setHgap(48);
@@ -362,14 +357,7 @@ public class EvenementPageView implements ViewInterface {
         StackPane switcher = new StackPane();
         switcher.setMinWidth(0);
         switcher.setMaxWidth(Double.MAX_VALUE);
-        switcher.setStyle(
-            "-fx-background-color: " + surfaceCard() + ";" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-background-radius: 32px;" +
-            "-fx-border-radius: 32px;" +
-            "-fx-padding: 26px;"
-        );
+        switcher.setStyle(HorizonDesignSystem.webServiceCard(32, false) + "-fx-padding: 26px;");
 
         VBox mainFace = new VBox(18);
         mainFace.setAlignment(Pos.TOP_LEFT);
@@ -1177,14 +1165,8 @@ public class EvenementPageView implements ViewInterface {
         VBox card = new VBox();
         card.setMinWidth(280);
         card.setMaxWidth(Double.MAX_VALUE);
-        card.setStyle(
-            "-fx-background-color: " + tm.toRgba("#0a0a0c", 0.94) + ";" +
-            "-fx-background-radius: 32px;" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 32px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 20, 0.15, 0, 8);"
-        );
+        card.setStyle(HorizonDesignSystem.webServiceCard(32, false));
+        HorizonDesignSystem.installWebLift(card);
         
         // Dynamic clip for card to prevent overflow
         javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
@@ -1309,13 +1291,7 @@ public class EvenementPageView implements ViewInterface {
         HBox footer = new HBox();
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(10, 14, 10, 14));
-        footer.setStyle(
-            "-fx-background-color: " + surfaceSoft() + ";" +
-            "-fx-background-radius: 20px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 20px;"
-        );
+        footer.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 20px; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1px; -fx-border-radius: 20px;");
         VBox avail = new VBox(2,
             text(String.valueOf(event.getNbRestants() != null ? event.getNbRestants() : 0), 18, true, tm.getTextColor()),
             text("Places Left", 11, false, textMuted())
@@ -1917,17 +1893,11 @@ public class EvenementPageView implements ViewInterface {
     }
 
     private StackPane tag(String value) {
-        StackPane pill = new StackPane(text(value, 8, true, textSoft()));
-        pill.setPadding(new Insets(2, 7, 2, 7));
+        StackPane pill = new StackPane(text(value, 9, true, "#ffffff"));
+        pill.setPadding(new Insets(7, 12, 7, 12));
         pill.setMaxWidth(StackPane.USE_PREF_SIZE);
         pill.setMaxHeight(StackPane.USE_PREF_SIZE);
-        pill.setStyle(
-            "-fx-background-color: " + surfaceSoft() + ";" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-background-radius: 14px;" +
-            "-fx-border-radius: 14px;"
-        );
+        pill.setStyle("-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.20) + "; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.30) + "; -fx-border-width: 1px; -fx-background-radius: 14px; -fx-border-radius: 14px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.20), 16, 0.16, 0, 8);");
         return pill;
     }
 
@@ -1962,8 +1932,8 @@ public class EvenementPageView implements ViewInterface {
         btn.setMaxWidth(Double.MAX_VALUE);
         btn.setCursor(javafx.scene.Cursor.HAND);
         btn.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.28) + ";" +
+            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.32) + ";" +
             "-fx-border-width: 1px;" +
             "-fx-background-radius: 20px;" +
             "-fx-border-radius: 20px;" +
@@ -1976,13 +1946,13 @@ public class EvenementPageView implements ViewInterface {
         Button b = new Button(label);
         b.setCursor(javafx.scene.Cursor.HAND);
         b.setStyle(
-            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-            "-fx-text-fill: white;" +
-            "-fx-font-weight: 700;" +
+            HorizonDesignSystem.buttonPrimary() +
+            "-fx-font-weight: 800;" +
             "-fx-font-size: " + fontSize + "px;" +
             "-fx-background-radius: 14px;"
         );
         b.setPadding(padding);
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
     }
 
@@ -1990,14 +1960,10 @@ public class EvenementPageView implements ViewInterface {
         Button b = new Button(label);
         b.setCursor(javafx.scene.Cursor.HAND);
         b.setStyle(
-            "-fx-background-color: " + surfaceSoft() + ";" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-background-radius: 10px;" +
-            "-fx-border-radius: 10px;" +
-            "-fx-text-fill: " + textSoft() + ";" +
-            "-fx-font-weight: 700;"
+            HorizonDesignSystem.buttonGhost() +
+            "-fx-background-radius: 10px;-fx-border-radius: 10px;-fx-font-weight: 700;"
         );
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
     }
 
@@ -2366,23 +2332,19 @@ public class EvenementPageView implements ViewInterface {
     }
 
     private String surfaceStrong() {
-        return tm.isDarkMode()
-            ? "linear-gradient(from 0% 0% to 100% 100%, #020202 0%, #070707 58%, #0b0b0b 100%)"
-            : "linear-gradient(from 0% 0% to 100% 100%, #ffffff 0%, #f8fafc 100%)";
+        return tm.isDarkMode() ? "#0a0a0f" : "#f8fafc";
     }
 
     private String surfaceCard() {
-        return tm.isDarkMode()
-            ? "linear-gradient(from 0% 0% to 100% 100%, rgba(10,10,10,0.93) 0%, rgba(14,14,14,0.93) 62%, " + tm.toRgba(tm.getAccentHex(), 0.10) + " 100%)"
-            : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)";
+        return HorizonDesignSystem.surface();
     }
 
     private String surfaceSoft() {
-        return tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+        return HorizonDesignSystem.surfaceSoft();
     }
 
     private String borderSoft() {
-        return tm.isDarkMode() ? tm.toRgba(tm.getAccentHex(), 0.34) : "rgba(15,23,42,0.16)";
+        return HorizonDesignSystem.borderStrong();
     }
 
     private String textSoft() {
@@ -2390,7 +2352,7 @@ public class EvenementPageView implements ViewInterface {
     }
 
     private String textMuted() {
-        return tm.isDarkMode() ? "rgba(255,255,255,0.78)" : "rgba(30,41,59,0.82)";
+        return HorizonDesignSystem.mutedText();
     }
 
     private HBox twoColRow(VBox left, VBox right) {
@@ -2422,13 +2384,7 @@ public class EvenementPageView implements ViewInterface {
         pane.prefWidthProperty().bind(Bindings.min(root.widthProperty().multiply(0.95), 1800));
         pane.setMinWidth(0);
         pane.setPadding(padding);
-        pane.setStyle(
-            "-fx-background-color: " + bg + ";" +
-            "-fx-background-radius: " + radius + "px;" +
-            "-fx-border-color: " + border + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: " + radius + "px;"
-        );
+        pane.setStyle(HorizonDesignSystem.webSectionCard((int) Math.round(radius), false));
         return pane;
     }
 

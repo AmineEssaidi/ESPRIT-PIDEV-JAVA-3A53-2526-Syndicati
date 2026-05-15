@@ -1,8 +1,8 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.syndicat.ReclamationController;
 import com.syndicati.models.syndicat.Reclamation;
 import com.syndicati.models.syndicat.Reponse;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,7 +26,7 @@ final class DashboardSyndicatSection {
     static VBox build(DashboardView view) {
         return view.moduleModeView(
             "Syndicat",
-            "📋",
+            "ðŸ“‹",
             new String[]{"Reclamations", "Reponses"},
             key -> "Reponses".equals(key) ? reponseTablePane(view) :
                    reclamationsTablePane(view)
@@ -35,8 +35,7 @@ final class DashboardSyndicatSection {
 
     private static VBox reclamationsTablePane(DashboardView view) {
         VBox wrap = new VBox(16);
-        ReclamationController controller = new ReclamationController();
-        List<Reclamation> reclamations = controller.reclamations();
+        List<Reclamation> reclamations = view.dashboardAdminService().reclamations();
 
         int total = reclamations.size();
         int active = 0;
@@ -66,7 +65,7 @@ final class DashboardSyndicatSection {
             new String[]{"#60a5fa", "#10b981", "#f59e0b", "#3b82f6", "#ef4444"}
         );
 
-        List<Reponse> allReponses = controller.reponses();
+        List<Reponse> allReponses = view.dashboardAdminService().reponses();
         Map<Integer, Integer> replyCounts = new HashMap<>();
         for (Reponse r : allReponses) {
             if (r.getReclamation() != null) {
@@ -99,17 +98,10 @@ final class DashboardSyndicatSection {
         searchField.setPromptText("Search reclamations by title, user, or status...");
         searchField.setPrefWidth(280);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox primaryControls = new HBox(8, searchField, sortPill);
         primaryControls.setAlignment(Pos.CENTER_LEFT);
 
@@ -125,7 +117,7 @@ final class DashboardSyndicatSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        HBox headerControls = new HBox(8, searchField, filterRow, sortPill);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
@@ -155,7 +147,7 @@ final class DashboardSyndicatSection {
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
         renderReclamationsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -224,13 +216,12 @@ final class DashboardSyndicatSection {
 
         styleQueryPill(view, sortPill, queryState.ascending);
         String filterLabel = scope.isEmpty() ? "Title" : scope.substring(0, 1).toUpperCase() + scope.substring(1);
-        sortPill.setText(queryState.ascending ? "Order: " + filterLabel + " A-Z" : "Order: " + filterLabel + " Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
     }
 
     private static VBox reponseTablePane(DashboardView view) {
         VBox wrap = new VBox(16);
-        ReclamationController controller = new ReclamationController();
-        List<Reponse> reponses = controller.reponses();
+        List<Reponse> reponses = view.dashboardAdminService().reponses();
 
         int total = reponses.size();
 
@@ -266,7 +257,7 @@ final class DashboardSyndicatSection {
             ? new String[][]{{"No reponses", "-", "-", "-", "-"}}
             : baseRows.toArray(new String[0][]);
 
-        wrap.getChildren().addAll(stats, view.dataTableWithCrud(
+        wrap.getChildren().add(view.dataTableWithCrud(
             "Reponses",
             "Reponse",
             new String[]{"Message", "User", "Reclamation", "Date"},
@@ -279,27 +270,15 @@ final class DashboardSyndicatSection {
     }
 
     private static void styleQueryPill(DashboardView view, Button b, boolean active) {
+        b.setStyle(queryPillStyle(view, active));
+        HorizonDesignSystem.installButtonMotion(b);
+    }
+
+    private static String queryPillStyle(DashboardView view, boolean active) {
         if (active) {
-            b.setStyle(
-                "-fx-background-color:" + view.accentRgba(0.24) + ";" +
-                "-fx-border-color:" + view.accentRgba(0.34) + ";" +
-                "-fx-border-width:1;" +
-                "-fx-background-radius:100px;" +
-                "-fx-border-radius:100px;" +
-                "-fx-text-fill:white;" +
-                "-fx-cursor:hand;"
-            );
-        } else {
-            b.setStyle(
-                "-fx-background-color:transparent;" +
-                "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)") + ";" +
-                "-fx-border-width:1;" +
-                "-fx-background-radius:100px;" +
-                "-fx-border-radius:100px;" +
-                "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)") + ";" +
-                "-fx-cursor:hand;"
-            );
+            return "-fx-background-color:" + view.accentGradient() + ";-fx-border-color:" + view.accentRgba(0.36) + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:white;-fx-font-weight:700;-fx-cursor:hand;";
         }
+        return "-fx-background-color:transparent;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.76)" : "rgba(15,23,42,0.82)") + ";-fx-font-weight:700;-fx-cursor:hand;";
     }
 
     private static int getReclamationsFilterColumnIndex(String filterKey) {
@@ -312,3 +291,5 @@ final class DashboardSyndicatSection {
         };
     }
 }
+
+

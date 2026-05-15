@@ -15,6 +15,7 @@ import javafx.scene.text.FontWeight;
 import javafx.util.Duration;
 import com.syndicati.utils.database.ConnectionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 
 /**
  * Connection Status Pill - Shows database connection status
@@ -98,12 +99,13 @@ public class ConnectionStatusPill {
             "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)";
         
         pillContainer.setStyle(
-            "-fx-background-color: " + backgroundColor + ";" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.72)" : "rgba(255,255,255,0.92)") + ";" +
             "-fx-background-radius: 20px;" +
             "-fx-border-color: " + borderColor + ";" +
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 20px;"
         );
+        HorizonDesignSystem.installIslandMotion(pillContainer);
         
         // Add glassmorphism shadow
         DropShadow pillShadow = new DropShadow();

@@ -1,6 +1,7 @@
 package com.syndicati.views.backend.dashboard;
 
 import com.syndicati.models.log.AppEventLog;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -98,7 +99,7 @@ final class DashboardActivitySection {
 
         DashboardTableQueryEngine.QueryState state = new DashboardTableQueryEngine.QueryState(12);
         TextField searchField = dashboardSearchField(view, "Search logs by event, entity, user or metadata...");
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         HBox headerControls = dashboardHeaderControls(searchField, sortPill, filterRow);
@@ -288,8 +289,8 @@ final class DashboardActivitySection {
             line.setPadding(new Insets(10, 12, 10, 12));
             line.setStyle("-fx-background-color:rgba(255,255,255,0.02);-fx-background-radius:12px;");
             VBox details = new VBox(2,
-                textCell(view, row[3] + " • " + row[4]),
-                metaCell(view, "trace=" + compactId(row[5]) + " • sess=" + compactId(row[6]) + " • risk=" + row[7] + " • " + row[8])
+                textCell(view, row[3] + " â€¢ " + row[4]),
+                metaCell(view, "trace=" + compactId(row[5]) + " â€¢ sess=" + compactId(row[6]) + " â€¢ risk=" + row[7] + " â€¢ " + row[8])
             );
             HBox.setHgrow(details, Priority.ALWAYS);
             line.getChildren().addAll(
@@ -355,7 +356,8 @@ final class DashboardActivitySection {
         TextField searchField = new TextField();
         searchField.setPromptText(prompt);
         searchField.setPrefWidth(320);
-        searchField.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";-fx-background-radius:10px;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.14)") + ";-fx-border-radius:10px;-fx-text-fill:" + (view.isDark() ? "#ffffff" : "#111827") + ";");
+        searchField.setStyle(HorizonDesignSystem.input() + "-fx-background-radius:12px;-fx-border-radius:12px;");
+        HorizonDesignSystem.installFocusGlow(searchField);
         return searchField;
     }
 
@@ -382,7 +384,7 @@ final class DashboardActivitySection {
     private static void fillClickRows(DashboardView view, VBox card, List<String[]> rows) {
         for (String[] row : rows) {
             VBox box = new VBox(2);
-            box.getChildren().addAll(textCell(view, row[0] + " • " + row[1]), metaCell(view, row[2] + " clicks"));
+            box.getChildren().addAll(textCell(view, row[0] + " â€¢ " + row[1]), metaCell(view, row[2] + " clicks"));
             card.getChildren().add(box);
         }
     }
@@ -399,7 +401,7 @@ final class DashboardActivitySection {
 
     private static void fillRiskRows(DashboardView view, VBox card, List<String[]> rows) {
         for (String[] row : rows) {
-            String title = row[0] + " • " + row[1] + " • " + row[5];
+            String title = row[0] + " â€¢ " + row[1] + " â€¢ " + row[5];
             String detail = "risk " + row[2] + " | anomaly " + row[3] + " | " + row[4] + " ms | " + row[6] + "/" + row[7];
             card.getChildren().add(new VBox(2, textCell(view, title), metaCell(view, detail)));
         }
@@ -570,3 +572,5 @@ final class DashboardActivitySection {
         return new HashMap<>(view.dashboardAdminService().activityHeartbeat());
     }
 }
+
+

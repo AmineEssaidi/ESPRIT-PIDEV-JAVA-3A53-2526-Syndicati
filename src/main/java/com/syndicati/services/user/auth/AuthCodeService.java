@@ -195,7 +195,7 @@ public class AuthCodeService {
         String email = user.getEmailUser();
 
         // Send asynchronously to prevent UI blocking. Email will retry automatically if it fails.
-        asyncMailerService.sendHtmlAsync(email, "Horizon Protocol: Your New Credentials", html,
+        asyncMailerService.sendHtmlAsync(email, "Syndicati Protocol: Your New Credentials", html,
             result -> {
                 if (!result.isSuccess()) {
                     System.err.println("[AuthCode] Failed to send password reset email to " + email + ": " + result.getError());

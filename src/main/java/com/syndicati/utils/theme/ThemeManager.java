@@ -345,15 +345,15 @@ public class ThemeManager {
     // Dark liquid glass colors - blackish with transparency
     public String getLiquidGlassBackground() {
         // Keep the liquid-glass identity while avoiding see-through text issues.
-        return isDarkMode ? "rgba(10, 10, 14, 0.84)" : "rgba(255, 255, 255, 0.90)";
+        return isDarkMode ? "rgba(0, 0, 0, 0.88)" : "rgba(255, 255, 255, 0.96)";
     }
     
     public String getLiquidGlassBorder() {
-        return isDarkMode ? toRgba(accentColor, 0.62) : "rgba(15, 23, 42, 0.20)";
+        return isDarkMode ? toRgba(accentColor, 0.40) : "rgba(15, 23, 42, 0.16)";
     }
     
     public String getLiquidGlassHover() {
-        return isDarkMode ? toRgba(accentColor, 0.28) : "rgba(255, 255, 255, 0.95)";
+        return isDarkMode ? toRgba(accentColor, 0.16) : "rgba(15, 23, 42, 0.06)";
     }
     
     public String getLiquidGlassFocus() {

@@ -18,6 +18,7 @@ import javafx.util.Duration;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.shared.AppPreferences;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.MainApplication;
 
 /**
@@ -71,21 +72,21 @@ public class SettingsView implements ViewInterface {
     private void buildAll() {
         root.getChildren().clear();
 
-        sectionsContainer = new VBox(28);
+        sectionsContainer = new VBox(48);
         sectionsContainer.setAlignment(Pos.TOP_CENTER);
-        sectionsContainer.setPadding(new Insets(0, 0, 48, 0));
-        sectionsContainer.setMaxWidth(Double.MAX_VALUE);
+        sectionsContainer.setPadding(new Insets(0, 0, 64, 0));
+        sectionsContainer.setMaxWidth(1500);
         buildSections();
 
         ScrollPane scroll = new ScrollPane(sectionsContainer);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        HorizonDesignSystem.styleScrollPane(scroll);
 
-        VBox wrapper = new VBox(24, buildPageHeader(), scroll);
+        VBox wrapper = new VBox(28, buildPageHeader(), scroll);
         wrapper.setAlignment(Pos.TOP_CENTER);
-        wrapper.setPadding(new Insets(32, 40, 32, 40));
+        wrapper.setPadding(new Insets(34, 44, 34, 44));
         wrapper.setMaxWidth(Double.MAX_VALUE);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
@@ -144,80 +145,85 @@ public class SettingsView implements ViewInterface {
     }
 
     private HBox buildSection(String emoji, String title, String desc, javafx.scene.Node content) {
-        HBox card = new HBox(28);
+        HBox card = new HBox(48);
         card.setAlignment(Pos.TOP_LEFT);
-        card.setPadding(new Insets(28, 36, 28, 28));
-        card.setMaxWidth(Double.MAX_VALUE);
+        card.setPadding(new Insets(46, 72, 46, 48));
+        card.setMaxWidth(1500);
         card.setStyle(sectionStyle(false));
-        shadow(card, 12, 0.25);
 
         StackPane iconBox = new StackPane();
-        iconBox.setPrefSize(64, 64);
-        iconBox.setMinSize(64, 64);
-        iconBox.setMaxSize(64, 64);
-        iconBox.setStyle(
-            "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
-            "-fx-background-radius: 18px;" +
-            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.40) + ";" +
-            "-fx-border-width: 1.5px;" +
-            "-fx-border-radius: 18px;"
-        );
+        iconBox.setPrefSize(70, 70);
+        iconBox.setMinSize(70, 70);
+        iconBox.setMaxSize(70, 70);
+        iconBox.setStyle(settingsIconStyle());
         Text iconTxt = new Text(emoji);
-        iconTxt.setFont(Font.font(28));
+        iconTxt.setFont(Font.font(31));
         iconBox.getChildren().add(iconTxt);
 
-        VBox col = new VBox(12);
+        VBox col = new VBox(15);
         col.setAlignment(Pos.TOP_LEFT);
         HBox.setHgrow(col, Priority.ALWAYS);
 
         Text t = new Text(title);
-        t.setFont(Font.font(bold(), FontWeight.BOLD, 20));
+        t.setFont(Font.font(bold(), FontWeight.BOLD, 26));
         t.setFill(tm.getAccentGradientPaint());
-        glow(t, tm.getAccentHex(), 10);
+        glow(t, tm.getAccentHex(), 14);
 
         Text d = new Text(desc);
-        d.setFont(Font.font(light(), FontWeight.NORMAL, 13));
+        d.setFont(Font.font(light(), FontWeight.NORMAL, 16));
         d.setFill(Color.web(tm.getSecondaryTextColor()));
 
+        VBox.setMargin(content, new Insets(18, 0, 0, 0));
         col.getChildren().addAll(t, d, content);
         card.getChildren().addAll(iconBox, col);
 
         card.setOnMouseEntered(e -> {
             card.setStyle(sectionStyle(true));
-            TranslateTransition tt = new TranslateTransition(Duration.millis(200), card);
-            tt.setToY(-6); tt.play();
+            TranslateTransition tt = new TranslateTransition(Duration.millis(260), card);
+            tt.setToY(-10);
+            tt.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            tt.play();
         });
         card.setOnMouseExited(e -> {
             card.setStyle(sectionStyle(false));
-            TranslateTransition tt = new TranslateTransition(Duration.millis(200), card);
-            tt.setToY(0); tt.play();
+            TranslateTransition tt = new TranslateTransition(Duration.millis(260), card);
+            tt.setToY(0);
+            tt.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            tt.play();
         });
         return card;
     }
 
     private String sectionStyle(boolean hover) {
-        String bg;
-        if (tm.isDarkMode()) {
-              String accentSoft = tm.toRgba(tm.getAccentHex(), hover ? 0.18 : 0.12);
-              bg = "radial-gradient(focus-angle 24deg, focus-distance 24%, center 14% 10%, radius 132%, " + accentSoft + " 0%, rgba(12,12,18,0.88) 64%, rgba(8,8,12,0.93) 100%), " +
-                  "linear-gradient(to bottom right, rgba(30,30,42,0.42), rgba(18,18,24,0.52) 52%, rgba(10,10,14,0.66) 100%)";
-        } else {
-            bg = hover
-                ? "linear-gradient(to bottom right, rgba(255,255,255,0.96), rgba(255,255,255,0.90) 56%, rgba(242,248,255,0.96) 100%)"
-                : "linear-gradient(to bottom right, rgba(255,255,255,0.92), rgba(255,255,255,0.84) 56%, rgba(242,248,255,0.92) 100%)";
-        }
+        String bg = tm.isDarkMode()
+            ? (hover
+                ? "linear-gradient(to bottom right, rgba(255,255,255,0.065), rgba(255,255,255,0.025) 48%, " + tm.toRgba(tm.getAccentHex(), 0.14) + " 100%)"
+                : "linear-gradient(to bottom right, rgba(255,255,255,0.038), rgba(255,255,255,0.012) 52%, " + tm.toRgba(tm.getAccentHex(), 0.08) + " 100%)")
+            : (hover ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.70)");
         String border = hover
-            ? tm.toRgba(tm.getAccentHex(), 0.70)
-            : tm.toRgba(tm.getAccentHex(), 0.42);
+            ? tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.50 : 0.30)
+            : (tm.isDarkMode() ? "rgba(255,255,255,0.10)" : tm.toRgba(tm.getAccentHex(), 0.15));
+        String shadow = tm.isDarkMode()
+            ? (hover ? "rgba(0,0,0,0.70)" : "rgba(0,0,0,0.52)")
+            : "rgba(15,23,42,0.14)";
         return "-fx-background-color:" + bg + ";" +
-               "-fx-background-radius:28px;" +
-               "-fx-border-color:" + border + ";" +
-               "-fx-border-width:1px;-fx-border-radius:28px;" +
-               "-fx-effect:dropshadow(gaussian, rgba(0,0,0,0.30), 30, 0.16, 0, 10);";
+            "-fx-background-radius:40px;" +
+            "-fx-border-color:" + border + ";" +
+            "-fx-border-width:1px;" +
+            "-fx-border-radius:40px;" +
+            "-fx-effect:dropshadow(gaussian, " + shadow + ", " + (hover ? 78 : 44) + ", 0.22, 0, " + (hover ? 28 : 16) + ");";
+    }
+
+    private String settingsIconStyle() {
+        return "-fx-background-color:" + tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.23 : 0.12) + ";" +
+            "-fx-background-radius:20px;" +
+            "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
+            "-fx-border-width:1px;" +
+            "-fx-border-radius:20px;";
     }
 
     private HBox buildThemeModeContent() {
-        HBox row = new HBox(16);
+        HBox row = new HBox(24);
         row.setAlignment(Pos.CENTER_LEFT);
 
         boolean isDark = tm.isDarkMode();
@@ -243,7 +249,7 @@ public class SettingsView implements ViewInterface {
 
     private StackPane buildThemeCard(String icon, String label, String value, boolean selected) {
         StackPane card = new StackPane();
-        card.setPrefSize(190, 72); card.setMinSize(160, 64);
+        card.setPrefSize(214, 76); card.setMinSize(180, 72);
         card.setCursor(Cursor.HAND);
         applyThemeCardStyle(card, selected);
         card.getChildren().add(themeCardInner(icon, label, value, selected));
@@ -252,7 +258,7 @@ public class SettingsView implements ViewInterface {
 
     private void applyThemeCardStyle(StackPane card, boolean selected) {
         String bg = selected
-            ? tm.toRgba(tm.getAccentHex(), 0.22)
+            ? tm.toRgba(tm.getAccentHex(), 0.18)
             : (tm.isDarkMode() ? "rgba(0,0,0,0.40)" : "rgba(0,0,0,0.05)");
         String border = selected
             ? tm.getEffectiveAccentGradient() + ", transparent"
@@ -277,16 +283,16 @@ public class SettingsView implements ViewInterface {
     private HBox themeCardInner(String icon, String label, String value, boolean selected) {
         HBox inner = new HBox(14);
         inner.setAlignment(Pos.CENTER_LEFT);
-        inner.setPadding(new Insets(0, 16, 0, 16));
+        inner.setPadding(new Insets(0, 20, 0, 20));
 
-        Text iconT = new Text(icon); iconT.setFont(Font.font(26));
+        Text iconT = new Text(icon); iconT.setFont(Font.font(30));
 
         VBox info = new VBox(3);
         Text nm = new Text(label);
-        nm.setFont(Font.font(bold(), FontWeight.BOLD, 14));
+        nm.setFont(Font.font(bold(), FontWeight.BOLD, 15));
         nm.setFill(Color.web(tm.isDarkMode() ? "#ffffff" : "#1a1a2e"));
         Text tag = new Text(value.toUpperCase());
-        tag.setFont(Font.font(light(), FontWeight.NORMAL, 10));
+        tag.setFont(Font.font(light(), FontWeight.NORMAL, 11));
         tag.setFill(Color.web(tm.isDarkMode() ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.45)"));
         info.getChildren().addAll(nm, tag);
 
@@ -315,7 +321,7 @@ public class SettingsView implements ViewInterface {
     }
 
     private VBox buildAccentContent() {
-        VBox col = new VBox(16);
+        VBox col = new VBox(18);
         col.setAlignment(Pos.TOP_LEFT);
         String cur = tm.getAccentHex();
 
@@ -337,27 +343,27 @@ public class SettingsView implements ViewInterface {
         // Custom row
         HBox custom = new HBox(12);
         custom.setAlignment(Pos.CENTER_LEFT);
-        custom.setPadding(new Insets(12));
+        custom.setPadding(new Insets(16));
         custom.setStyle(
             "-fx-background-color:" + (tm.isDarkMode() ? "rgba(0,0,0,0.30)" : "rgba(0,0,0,0.04)") + ";" +
             "-fx-background-radius:12px;" +
             "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.20) + ";" +
-            "-fx-border-width:1px;-fx-border-radius:12px;"
+            "-fx-border-width:2px;-fx-border-radius:12px;"
         );
 
         ColorPicker picker = new ColorPicker(safeColor(cur));
-        picker.setPrefSize(52, 52);
+        picker.setPrefSize(54, 54);
         picker.setStyle("-fx-background-radius:12px;-fx-color-label-visible:false;-fx-cursor:hand;");
 
         hexField = new TextField(cur);
         hexField.setPromptText("#rrggbb");
-        hexField.setPrefWidth(150);
+        hexField.setPrefWidth(300);
         hexField.setFont(Font.font("monospace", 14));
         hexField.setStyle(
             "-fx-background-color:" + (tm.isDarkMode() ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)") + ";" +
             "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
-            "-fx-border-width:1.5px;-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;-fx-padding:10 14 10 14;"
+            "-fx-border-width:2px;-fx-border-radius:10px;" +
+            "-fx-background-radius:10px;-fx-padding:14 16 14 16;"
         );
 
         picker.setOnAction(e -> {
@@ -392,7 +398,7 @@ public class SettingsView implements ViewInterface {
 
     private StackPane makeSwatch(String gradient, String name, boolean selected) {
         StackPane sp = new StackPane();
-        sp.setPrefSize(46, 46); sp.setMinSize(46, 46); sp.setMaxSize(46, 46);
+        sp.setPrefSize(56, 56); sp.setMinSize(56, 56); sp.setMaxSize(56, 56);
         sp.setCursor(Cursor.HAND);
         sp.setStyle(
             "-fx-background-color:" + gradient + ";" +
@@ -409,8 +415,8 @@ public class SettingsView implements ViewInterface {
             sp.setEffect(new DropShadow(BlurType.ONE_PASS_BOX,
                 Color.web(tm.getAccentHex()).deriveColor(0, 1, 1.3, 0.9), 14, 0.25, 0, 0));
         }
-        sp.setOnMouseEntered(e -> { ScaleTransition st = new ScaleTransition(Duration.millis(140), sp); st.setToX(1.18); st.setToY(1.18); st.play(); });
-        sp.setOnMouseExited(e ->  { ScaleTransition st = new ScaleTransition(Duration.millis(140), sp); st.setToX(1.0); st.setToY(1.0); st.play(); });
+        sp.setOnMouseEntered(e -> { ScaleTransition st = new ScaleTransition(Duration.millis(140), sp); st.setToX(1.18); st.setToY(1.18); st.setInterpolator(HorizonDesignSystem.WEB_POP); st.play(); });
+        sp.setOnMouseExited(e ->  { ScaleTransition st = new ScaleTransition(Duration.millis(140), sp); st.setToX(1.0); st.setToY(1.0); st.setInterpolator(HorizonDesignSystem.WEB_EASE); st.play(); });
         Tooltip.install(sp, new Tooltip(name));
         return sp;
     }
@@ -425,7 +431,7 @@ public class SettingsView implements ViewInterface {
             if (LANGUAGES[i][0].equals(saved)) selIdx = i;
         }
         combo.getSelectionModel().select(selIdx);
-        combo.setPrefWidth(260);
+        combo.setPrefWidth(300);
         combo.setStyle(comboStyle());
         combo.setOnAction(e -> {
             int idx = combo.getSelectionModel().getSelectedIndex();
@@ -437,14 +443,14 @@ public class SettingsView implements ViewInterface {
     }
 
     private VBox buildAnimationsContent() {
-        VBox col = new VBox(12);
+        VBox col = new VBox(15);
         col.getChildren().add(toggle("Animated Borders", "Enable glowing animated accent borders",
             tm.isAnimatedAccents(), v -> tm.setAnimatedAccents(v)));
         return col;
     }
 
     private VBox buildNotificationsContent() {
-        VBox col = new VBox(12);
+        VBox col = new VBox(15);
         col.getChildren().addAll(
             toggle("Push Notifications", "Receive in-app alerts in real time",
                 AppPreferences.getBoolean("notif-push", true),   v -> AppPreferences.setBoolean("notif-push", v)),
@@ -472,7 +478,7 @@ public class SettingsView implements ViewInterface {
     }
 
     private VBox buildGeneralContent() {
-        VBox col = new VBox(12);
+        VBox col = new VBox(15);
         col.getChildren().addAll(
             toggle("Auto-Update", "Automatically download and install updates",
                 AppPreferences.getBoolean("general-auto-update", true),  v -> AppPreferences.setBoolean("general-auto-update", v)),
@@ -485,15 +491,15 @@ public class SettingsView implements ViewInterface {
     @FunctionalInterface interface BoolConsumer { void accept(boolean v); }
 
     private HBox toggle(String title, String desc, boolean init, BoolConsumer onChange) {
-        HBox row = new HBox(16); row.setAlignment(Pos.CENTER_LEFT);
+        HBox row = new HBox(24); row.setAlignment(Pos.CENTER_LEFT);
         VBox textCol = new VBox(3); HBox.setHgrow(textCol, Priority.ALWAYS);
-        Text t = new Text(title); t.setFont(Font.font(bold(), FontWeight.BOLD, 14)); t.setFill(Color.web(tm.getTextColor()));
-        Text d = new Text(desc);  d.setFont(Font.font(light(), FontWeight.NORMAL, 12)); d.setFill(Color.web(tm.getSecondaryTextColor()));
+        Text t = new Text(title); t.setFont(Font.font(bold(), FontWeight.BOLD, 16)); t.setFill(Color.web(tm.getTextColor()));
+        Text d = new Text(desc);  d.setFont(Font.font(light(), FontWeight.NORMAL, 13)); d.setFill(Color.web(tm.getSecondaryTextColor()));
         textCol.getChildren().addAll(t, d);
 
         final boolean[] st = {init};
         StackPane track = new StackPane();
-        track.setPrefSize(50, 26); track.setMinSize(50, 26); track.setMaxSize(50, 26);
+        track.setPrefSize(52, 28); track.setMinSize(52, 28); track.setMaxSize(52, 28);
         track.setCursor(Cursor.HAND);
 
         StackPane thumb = new StackPane();
@@ -502,14 +508,14 @@ public class SettingsView implements ViewInterface {
         thumb.setEffect(new DropShadow(BlurType.ONE_PASS_BOX, Color.color(0,0,0,0.3), 4, 0, 0, 1));
 
         StackPane.setAlignment(thumb, Pos.CENTER_LEFT);
-        StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 26 : 3));
+        StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 28 : 4));
         track.setStyle(trackStyle(st[0]));
         track.getChildren().add(thumb);
 
         track.setOnMouseClicked(e -> {
             st[0] = !st[0];
             track.setStyle(trackStyle(st[0]));
-            StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 26 : 3));
+            StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 28 : 4));
             onChange.accept(st[0]);
         });
 
@@ -520,24 +526,24 @@ public class SettingsView implements ViewInterface {
     private String trackStyle(boolean on) {
         if (on) {
             // Use the effective (potentially animated) gradient when ON
-            return "-fx-background-color:" + tm.getEffectiveAccentGradient() + ";-fx-background-radius:13px;" +
+            return "-fx-background-color:" + tm.getEffectiveAccentGradient() + ";-fx-background-radius:34px;" +
                    "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.0) + ";" +
-                   "-fx-border-width:0;-fx-border-radius:13px;";
+                   "-fx-border-width:0;-fx-border-radius:34px;";
         } else {
-            return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)") + ";-fx-background-radius:13px;" +
+            return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)") + ";-fx-background-radius:34px;" +
                    "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
-                   "-fx-border-width:1px;-fx-border-radius:13px;";
+                   "-fx-border-width:1px;-fx-border-radius:34px;";
         }
     }
 
     private VBox labeledCombo(String title, String desc, String[] opts, String cur,
                                java.util.function.Consumer<String> onChange) {
         VBox col = new VBox(8);
-        Text t = new Text(title); t.setFont(Font.font(bold(), FontWeight.BOLD, 14)); t.setFill(Color.web(tm.getTextColor()));
-        Text d = new Text(desc);  d.setFont(Font.font(light(), FontWeight.NORMAL, 12)); d.setFill(Color.web(tm.getSecondaryTextColor()));
+        Text t = new Text(title); t.setFont(Font.font(bold(), FontWeight.BOLD, 16)); t.setFill(Color.web(tm.getTextColor()));
+        Text d = new Text(desc);  d.setFont(Font.font(light(), FontWeight.NORMAL, 13)); d.setFill(Color.web(tm.getSecondaryTextColor()));
         ComboBox<String> combo = new ComboBox<>();
         combo.getItems().addAll(opts); combo.setValue(cur);
-        combo.setPrefWidth(220); combo.setStyle(comboStyle());
+        combo.setPrefWidth(300); combo.setStyle(comboStyle());
         combo.setOnAction(e -> { if (combo.getValue() != null) onChange.accept(combo.getValue()); });
         col.getChildren().addAll(t, d, combo);
         return col;
@@ -547,8 +553,8 @@ public class SettingsView implements ViewInterface {
         return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.05)") + ";" +
                "-fx-text-fill:" + (tm.isDarkMode() ? "#ffffff" : "#1a1a2e") + ";" +
                "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.25) + ";" +
-               "-fx-border-width:1.5px;-fx-border-radius:12px;" +
-               "-fx-background-radius:12px;-fx-padding:6 14 6 14;" +
+               "-fx-border-width:2px;-fx-border-radius:12px;" +
+               "-fx-background-radius:12px;-fx-padding:14 18 14 18;" +
                "-fx-font-size:14px;-fx-cursor:hand;";
     }
 
@@ -576,6 +582,9 @@ public class SettingsView implements ViewInterface {
     @Override public void cleanup() { tm.removeAccentChangeListener(accentListener); }
 }
     
+
+
+
 
 
 

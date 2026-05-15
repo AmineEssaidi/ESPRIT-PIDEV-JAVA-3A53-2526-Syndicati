@@ -1,12 +1,11 @@
 package com.syndicati.views.backend.dashboard;
 
-import com.syndicati.controllers.residence.ResidenceController;
-import com.syndicati.controllers.residence.MaintenanceController;
 import com.syndicati.models.residence.Residence;
 import com.syndicati.models.residence.Apartment;
 import com.syndicati.models.residence.Maintenance;
 import com.syndicati.models.residence.Review;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -54,21 +53,14 @@ final class DashboardResidenceSection {
         search.setPromptText("Search " + title.toLowerCase() + "...");
         search.setPrefWidth(220);
         search.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        search.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        search.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(search);
+        Button sortPill = view.pillAction("\u2191", false);
         HBox filterRow = new HBox(6);
         filterRow.setAlignment(Pos.CENTER_LEFT);
         Map<String, Button> filterBtns = new LinkedHashMap<>();
 
-        HBox header = new HBox(8, filterRow, sortPill, search);
+        HBox header = new HBox(8, search, filterRow, sortPill);
         header.setAlignment(Pos.CENTER_LEFT);
 
         Runnable refresh = () -> {
@@ -88,7 +80,7 @@ final class DashboardResidenceSection {
             host.getChildren().setAll(view.dataTableWithCrud(title, entityLabel, cols, visible, allowAdd, header));
             
             styleQueryPill(view, sortPill, state.ascending);
-            sortPill.setText(state.ascending ? "Order: A-Z" : "Order: Z-A");
+            sortPill.setText(state.ascending ? "\u2191" : "\u2193");
         };
 
         search.textProperty().addListener((obs, old, nv) -> {
@@ -120,34 +112,21 @@ final class DashboardResidenceSection {
     }
 
     private static void styleQueryPill(DashboardView view, Button b, boolean active) {
+        b.setStyle(queryPillStyle(view, active));
+        HorizonDesignSystem.installButtonMotion(b);
+    }
+
+    private static String queryPillStyle(DashboardView view, boolean active) {
         if (active) {
-            b.setStyle(
-                "-fx-background-color:" + view.accentRgba(0.24) + ";" +
-                "-fx-border-color:" + view.accentRgba(0.34) + ";" +
-                "-fx-border-width:1;" +
-                "-fx-background-radius:100px;" +
-                "-fx-border-radius:100px;" +
-                "-fx-text-fill:white;" +
-                "-fx-cursor:hand;"
-            );
-        } else {
-            b.setStyle(
-                "-fx-background-color:transparent;" +
-                "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.20)") + ";" +
-                "-fx-border-width:1;" +
-                "-fx-background-radius:100px;" +
-                "-fx-border-radius:100px;" +
-                "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.80)" : "rgba(15,23,42,0.86)") + ";" +
-                "-fx-cursor:hand;"
-            );
+            return "-fx-background-color:" + view.accentGradient() + ";-fx-border-color:" + view.accentRgba(0.36) + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:white;-fx-font-weight:700;-fx-cursor:hand;";
         }
+        return "-fx-background-color:transparent;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.76)" : "rgba(15,23,42,0.82)") + ";-fx-font-weight:700;-fx-cursor:hand;";
     }
 
     private static VBox residencesPane(DashboardView view) {
         VBox wrap = new VBox(14);
 
-        ResidenceController residenceCtrl = new ResidenceController();
-        List<Residence> residences = residenceCtrl.residences();
+        List<Residence> residences = view.dashboardAdminService().residences();
 
         List<String[]> baseRows = new ArrayList<>();
         for (Residence r : residences) {
@@ -181,12 +160,10 @@ final class DashboardResidenceSection {
 
     private static VBox apartmentsPane(DashboardView view) {
         VBox wrap = new VBox(14);
-        ResidenceController residenceCtrl = new ResidenceController();
-        MaintenanceController mCtrl = new MaintenanceController();
-        List<Apartment> apartments = residenceCtrl.apartments();
+        List<Apartment> apartments = view.dashboardAdminService().apartments();
         Map<Integer, String> latestRecs = new HashMap<>();
         try {
-            for (Maintenance m : mCtrl.maintenanceRecords()) {
+            for (Maintenance m : view.dashboardAdminService().maintenanceRecords()) {
                 if (m.getIdApartment() != null) {
                     latestRecs.put(m.getIdApartment(), m.getAiRecommendation());
                 }
@@ -232,8 +209,7 @@ final class DashboardResidenceSection {
 
     private static VBox maintenancePane(DashboardView view) {
         VBox wrap = new VBox(14);
-        MaintenanceController maintenanceCtrl = new MaintenanceController();
-        List<Maintenance> records = maintenanceCtrl.maintenanceRecords();
+        List<Maintenance> records = view.dashboardAdminService().maintenanceRecords();
 
         List<String[]> baseRows = new ArrayList<>();
         for (Maintenance m : records) {
@@ -268,12 +244,9 @@ final class DashboardResidenceSection {
 
     private static VBox reviewsPane(DashboardView view) {
         VBox wrap = new VBox(14);
-        ResidenceController residenceCtrl = new ResidenceController();
-        MaintenanceController maintenanceCtrl = new MaintenanceController();
-
-        List<Residence> residences = residenceCtrl.residences();
-        List<Apartment> apartments = residenceCtrl.apartments();
-        List<Review> reviews = maintenanceCtrl.reviews();
+        List<Residence> residences = view.dashboardAdminService().residences();
+        List<Apartment> apartments = view.dashboardAdminService().apartments();
+        List<Review> reviews = view.dashboardAdminService().reviews();
 
         Map<Integer, String> residenceNames = new HashMap<>();
         for (Residence r : residences) {
@@ -305,7 +278,7 @@ final class DashboardResidenceSection {
             }
 
             int score = r.getScore() != null ? Math.max(0, Math.min(10, r.getScore())) : 0;
-            String stars = "★".repeat(score) + "☆".repeat(10 - score) + " (" + score + "/10)";
+            String stars = "â˜…".repeat(score) + "â˜†".repeat(10 - score) + " (" + score + "/10)";
 
             baseRows.add(new String[]{"0", residenceName, apartmentName, stars});
         }
@@ -322,3 +295,5 @@ final class DashboardResidenceSection {
         return wrap;
     }
 }
+
+

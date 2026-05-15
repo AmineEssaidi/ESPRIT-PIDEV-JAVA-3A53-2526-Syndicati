@@ -7,6 +7,7 @@ import com.syndicati.controllers.user.onboarding.OnboardingController;
 import com.syndicati.controllers.user.profile.ProfileController;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -178,6 +179,7 @@ public class OnboardingOverlayView {
         card.setMaxHeight(520);
         card.setSpacing(16);
         updateCardStyle();
+        HorizonDesignSystem.popIn(card);
 
         card.getChildren().addAll(progressBar, titleLabel, subtitleLabel, stepBody, actions);
 
@@ -192,25 +194,10 @@ public class OnboardingOverlayView {
     }
 
     private void updateCardStyle() {
-        ThemeManager tm = ThemeManager.getInstance();
-        if (tm.isDarkMode()) {
-            card.setStyle(
-                "-fx-background-color: #050505;"
-                + "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";"
-                + "-fx-border-width: 1px;"
-                + "-fx-background-radius: 28px;"
-                + "-fx-border-radius: 28px;"
-                + "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.38), 24, 0.0, 0, 8);"
-            );
+        if (ThemeManager.getInstance().isDarkMode()) {
+            card.setStyle(HorizonDesignSystem.webSectionCard(28, false));
         } else {
-            card.setStyle(
-                "-fx-background-color: #050505;"
-                + "-fx-border-color: rgba(255,255,255,0.08);"
-                + "-fx-border-width: 1px;"
-                + "-fx-background-radius: 28px;"
-                + "-fx-border-radius: 28px;"
-                + "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.28), 20, 0.0, 0, 6);"
-            );
+            card.setStyle(HorizonDesignSystem.webSectionCard(28, false));
             titleLabel.setStyle("-fx-font-size: 28px; -fx-font-weight: 800; -fx-text-fill: white; -fx-wrap-text: true;");
             subtitleLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: rgba(255,255,255,0.72); -fx-line-spacing: 4;");
         }
@@ -680,6 +667,7 @@ public class OnboardingOverlayView {
         button.setStyle(base + normalStyle);
         button.setOnMouseEntered(e -> button.setStyle(base + hoverStyle));
         button.setOnMouseExited(e -> button.setStyle(base + normalStyle));
+        HorizonDesignSystem.installButtonMotion(button);
     }
 
     private LinkedHashMap<String, String> mapOf(String... data) {

@@ -16,6 +16,7 @@ import com.syndicati.utils.image.imagekit.ImageKitStorageService;
 import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.session.SessionManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.FadeTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -118,8 +119,9 @@ public class ProfileForumSectionEnhanced {
         root.setPadding(new Insets(16, 0, 0, 0));
 
         VBox card = new VBox(0);
-        card.setStyle("-fx-background-color: #0a0a0c; -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 20; -fx-border-radius: 20;");
+        card.setStyle(HorizonDesignSystem.webObsidianPanel(24));
         card.setPrefHeight(600);
+        HorizonDesignSystem.popIn(card);
 
         switcherContainer.setPrefHeight(500);
         VBox.setVgrow(switcherContainer, Priority.ALWAYS);
@@ -155,8 +157,7 @@ public class ProfileForumSectionEnhanced {
         faceListView.getChildren().add(createSubTabs());
 
         ScrollPane contentScroll = new ScrollPane();
-        contentScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        contentScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(contentScroll);
         contentScroll.setPrefHeight(420);
 
         VBox contentContainer = new VBox(10);
@@ -168,14 +169,15 @@ public class ProfileForumSectionEnhanced {
     }
 
     private void buildDetailsView() {
-        faceDetailsView.setStyle("-fx-background-color: rgba(20, 20, 25, 0.98);");
+        faceDetailsView.setStyle("-fx-background-color: rgba(5, 5, 10, 0.96); -fx-background-radius: 24px;");
         faceDetailsView.setPadding(new Insets(20));
 
         HBox backHeader = new HBox(12);
         backHeader.setAlignment(Pos.CENTER_LEFT);
 
         Button backBtn = new Button("←");
-        backBtn.setStyle("-fx-padding: 8; -fx-font-size: 14; -fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-background-radius: 50%; -fx-border-radius: 50%;");
+        backBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-min-width: 34px; -fx-min-height: 34px; -fx-max-width: 34px; -fx-max-height: 34px; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(backBtn);
         backBtn.setOnAction(e -> showListView());
 
         detailsTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
@@ -186,8 +188,7 @@ public class ProfileForumSectionEnhanced {
         faceDetailsView.getChildren().add(backHeader);
 
         ScrollPane detailScroll = new ScrollPane();
-        detailScroll.setStyle("-fx-control-inner-background: transparent; -fx-padding: 0;");
-        detailScroll.setFitToWidth(true);
+        HorizonDesignSystem.styleScrollPane(detailScroll);
 
         detailsContent.setPadding(new Insets(16, 0, 0, 0));
         Label placeholder = new Label("Select an item to view details");
@@ -201,7 +202,7 @@ public class ProfileForumSectionEnhanced {
 
     private HBox createAdminFilter() {
         HBox filter = new HBox(8);
-        filter.setStyle("-fx-background-color: rgba(255, 255, 255, 0.05); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-padding: 4; -fx-background-radius: 999; -fx-border-radius: 999;");
+        filter.setStyle("-fx-background-color: rgba(255, 255, 255, 0.04); -fx-border-color: rgba(255, 255, 255, 0.10); -fx-border-width: 1; -fx-padding: 5; -fx-background-radius: 999; -fx-border-radius: 999;");
 
         if (isAdminUser(currentUser)) {
             Button myOwnBtn = createFilterButton("My Own", "my".equals(currentFilter));
@@ -216,14 +217,8 @@ public class ProfileForumSectionEnhanced {
 
     private Button createFilterButton(String text, boolean active) {
         Button btn = new Button(text);
-        btn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.8);" : "transparent;") +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: bold; " +
-            "-fx-background-radius: 999; " +
-            "-fx-font-size: 11;"
-        );
+        btn.setStyle(filterPillStyle(active));
+        HorizonDesignSystem.installButtonMotion(btn);
         return btn;
     }
 
@@ -231,16 +226,8 @@ public class ProfileForumSectionEnhanced {
         currentFilter = filterType;
         boolean isMyOwn = "my".equals(filterType);
 
-        myOwnBtn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (isMyOwn ? "rgba(99, 102, 241, 0.8);" : "transparent;") +
-            "-fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 999; -fx-font-size: 11;"
-        );
-        everyoneBtn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (!isMyOwn ? "rgba(99, 102, 241, 0.8);" : "transparent;") +
-            "-fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 999; -fx-font-size: 11;"
-        );
+        myOwnBtn.setStyle(filterPillStyle(isMyOwn));
+        everyoneBtn.setStyle(filterPillStyle(!isMyOwn));
 
         refreshDataAndRender();
     }
@@ -272,20 +259,14 @@ public class ProfileForumSectionEnhanced {
     }
 
     private void styleCategoryButton(Button btn, boolean active) {
-        btn.setStyle(
-            "-fx-padding: 6 12 6 12; " +
-            "-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.2);" : "rgba(255,255,255,0.05);") +
-            "-fx-text-fill: " + (active ? "white;" : "rgba(255,255,255,0.7);") +
-            "-fx-border-color: " + (active ? "rgba(99, 102, 241, 0.3);" : "rgba(255,255,255,0.1);") +
-            "-fx-border-width: 1; -fx-background-radius: 999; -fx-border-radius: 999; -fx-font-size: 11;" +
-            (active ? "-fx-font-weight: bold;" : "")
-        );
+        btn.setStyle(categoryPillStyle(active));
+        HorizonDesignSystem.installButtonMotion(btn);
     }
 
     private HBox createSubTabs() {
         HBox tabs = new HBox(8);
         tabs.setPadding(new Insets(6));
-        tabs.setStyle("-fx-background-color: rgba(255, 255, 255, 0.04); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 999; -fx-border-radius: 999;");
+        tabs.setStyle("-fx-background-color: rgba(255, 255, 255, 0.04); -fx-border-color: rgba(255, 255, 255, 0.10); -fx-border-width: 1; -fx-background-radius: 999px; -fx-border-radius: 999px;");
         tabs.setAlignment(Pos.CENTER);
 
         publicationsBtn = createSubTabButton("📝 Publications", true);
@@ -309,15 +290,8 @@ public class ProfileForumSectionEnhanced {
     }
 
     private void styleSubTabButton(Button btn, boolean active) {
-        btn.setStyle(
-            "-fx-padding: 8 14 8 14; " +
-            "-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.2);" : "transparent;") +
-            "-fx-text-fill: " + (active ? "white;" : "rgba(255, 255, 255, 0.6);") +
-            "-fx-border-color: " + (active ? "rgba(99, 102, 241, 0.3);" : "transparent;") +
-            "-fx-border-width: 1; -fx-background-radius: 8; -fx-border-radius: 8; " +
-            (active ? "-fx-font-weight: bold;" : "") +
-            "-fx-font-size: 11;"
-        );
+        btn.setStyle(subTabStyle(active));
+        HorizonDesignSystem.installButtonMotion(btn);
     }
 
     private void switchTab(String tabName) {
@@ -339,6 +313,34 @@ public class ProfileForumSectionEnhanced {
 
         bookmarkList.setVisible("bookmarks".equals(tabName));
         bookmarkList.setManaged("bookmarks".equals(tabName));
+    }
+
+    private String filterPillStyle(boolean active) {
+        return "-fx-padding: 7 14 7 14; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.buttonPrimaryBackground() : "transparent") + ";" +
+            "-fx-text-fill: " + (active ? "#ffffff" : "rgba(255,255,255,0.70)") + "; " +
+            "-fx-font-weight: 800; " +
+            "-fx-background-radius: 999px; " +
+            "-fx-border-radius: 999px; " +
+            "-fx-font-size: 11; -fx-cursor: hand;";
+    }
+
+    private String categoryPillStyle(boolean active) {
+        return "-fx-padding: 7 13 7 13; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.20) : "rgba(255,255,255,0.045)") + "; " +
+            "-fx-text-fill: " + (active ? "#ffffff" : "rgba(255,255,255,0.68)") + "; " +
+            "-fx-border-color: " + (active ? HorizonDesignSystem.accentRgba(0.38) : "rgba(255,255,255,0.10)") + "; " +
+            "-fx-border-width: 1; -fx-background-radius: 999px; -fx-border-radius: 999px; " +
+            "-fx-font-size: 11; -fx-font-weight: " + (active ? "800" : "700") + "; -fx-cursor: hand;";
+    }
+
+    private String subTabStyle(boolean active) {
+        return "-fx-padding: 9 15 9 15; " +
+            "-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.20) : "transparent") + "; " +
+            "-fx-text-fill: " + (active ? "white" : "rgba(255, 255, 255, 0.60)") + "; " +
+            "-fx-border-color: " + (active ? HorizonDesignSystem.accentRgba(0.34) : "transparent") + "; " +
+            "-fx-border-width: 1; -fx-background-radius: 999px; -fx-border-radius: 999px; " +
+            "-fx-font-weight: " + (active ? "800" : "700") + "; -fx-font-size: 11; -fx-cursor: hand;";
     }
 
     private void refreshDataAndRender() {
@@ -657,35 +659,17 @@ public class ProfileForumSectionEnhanced {
 
     private VBox clickableRow(Runnable onClick) {
         VBox item = new VBox(8);
-        item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        );
+        item.setStyle(rowStyle(false));
         item.setOnMouseClicked(e -> onClick.run());
-        item.setOnMouseEntered(e -> item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.07); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.15); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        ));
-        item.setOnMouseExited(e -> item.setStyle(
-            "-fx-background-color: rgba(255, 255, 255, 0.03); " +
-            "-fx-border-color: rgba(255, 255, 255, 0.06); " +
-            "-fx-border-width: 1; " +
-            "-fx-background-radius: 12; " +
-            "-fx-border-radius: 12; " +
-            "-fx-padding: 12; " +
-            "-fx-cursor: hand;"
-        ));
+        item.setOnMouseEntered(e -> item.setStyle(rowStyle(true)));
+        item.setOnMouseExited(e -> item.setStyle(rowStyle(false)));
         return item;
+    }
+
+    private String rowStyle(boolean hover) {
+        return HorizonDesignSystem.webServiceCard(16, hover) +
+            "-fx-padding: 14;" +
+            "-fx-cursor: hand;";
     }
 
     private void showPublicationDetails(Publication publication) {
@@ -754,7 +738,7 @@ public class ProfileForumSectionEnhanced {
             
             StackPane imageFrame = new StackPane(imageView);
             imageFrame.setAlignment(Pos.CENTER_LEFT);
-            imageFrame.setStyle("-fx-background-color: rgba(0,0,0,0.3); -fx-background-radius: 12; -fx-padding: 2; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12;");
+            imageFrame.setStyle("-fx-background-color: rgba(0,0,0,0.32); -fx-background-radius: 16px; -fx-padding: 3; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1; -fx-border-radius: 16px;");
             
             imageNode = imageFrame;
         } else {
@@ -766,11 +750,13 @@ public class ProfileForumSectionEnhanced {
         authorActions.setAlignment(Pos.CENTER_RIGHT);
         if (currentUser != null && publication.getUser() != null && currentUser.getIdUser().equals(publication.getUser().getIdUser())) {
             Button editBtn = new Button("Edit ✏️");
-            editBtn.setStyle("-fx-background-color: rgba(99, 102, 241, 0.2); -fx-text-fill: #818cf8; -fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 5; -fx-cursor: hand;");
+            editBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-size: 11; -fx-padding: 7 12; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+            HorizonDesignSystem.installButtonMotion(editBtn);
             editBtn.setOnAction(e -> showEditPublicationModal(publication));
             
             Button deleteBtn = new Button("Delete 🗑️");
-            deleteBtn.setStyle("-fx-background-color: rgba(239, 68, 68, 0.15); -fx-text-fill: #fca5a5; -fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 5; -fx-cursor: hand;");
+            deleteBtn.setStyle("-fx-background-color: rgba(239, 68, 68, 0.15); -fx-text-fill: #fca5a5; -fx-font-size: 11; -fx-padding: 7 12; -fx-background-radius: 999px; -fx-border-color: rgba(239, 68, 68, 0.28); -fx-border-width: 1; -fx-border-radius: 999px; -fx-cursor: hand;");
+            HorizonDesignSystem.installButtonMotion(deleteBtn);
             deleteBtn.setOnAction(e -> {
                 publicationController.publicationDelete(publication.getIdPublication());
                 showListView();
@@ -788,10 +774,11 @@ public class ProfileForumSectionEnhanced {
     }
 
     private void styleIconButton(Button btn, boolean active) {
-        btn.setStyle("-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.25)" : "rgba(255,255,255,0.05)") + "; " +
-                     "-fx-text-fill: " + (active ? "#818cf8" : "white") + "; " +
-                     "-fx-font-size: 16; -fx-background-radius: 10; -fx-padding: 8; -fx-cursor: hand; " +
-                     "-fx-border-color: " + (active ? "rgba(99, 102, 241, 0.4)" : "transparent") + "; -fx-border-width: 1;");
+        btn.setStyle("-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.24) : "rgba(255,255,255,0.05)") + "; " +
+                     "-fx-text-fill: " + (active ? "#ffffff" : "white") + "; " +
+                     "-fx-font-size: 16; -fx-background-radius: 12px; -fx-padding: 8; -fx-cursor: hand; " +
+                     "-fx-border-color: " + (active ? HorizonDesignSystem.accentRgba(0.42) : "rgba(255,255,255,0.10)") + "; -fx-border-width: 1; -fx-border-radius: 12px;");
+        HorizonDesignSystem.installButtonMotion(btn);
     }
 
     private HBox createPublicationReactionBar(Publication publication) {
@@ -865,10 +852,11 @@ public class ProfileForumSectionEnhanced {
             boolean active = e.equals(currentEmoji);
             
             Button eBtn = new Button(e + (eCount > 0 ? " " + eCount : ""));
-            eBtn.setStyle("-fx-background-color: " + (active ? "rgba(99, 102, 241, 0.5)" : "rgba(255,255,255,0.03)") + "; " +
+            eBtn.setStyle("-fx-background-color: " + (active ? HorizonDesignSystem.accentRgba(0.42) : "rgba(255,255,255,0.04)") + "; " +
                           "-fx-font-family: 'Segoe UI Emoji'; " +
-                          "-fx-font-size: 14; -fx-padding: 6 10; -fx-background-radius: 10; -fx-cursor: hand; " +
+                          "-fx-font-size: 14; -fx-padding: 7 11; -fx-background-radius: 999px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-width: 1; -fx-border-radius: 999px; -fx-cursor: hand; " +
                           "-fx-text-fill: white; -fx-opacity: " + (active ? "1.0" : "0.8") + ";");
+            HorizonDesignSystem.installButtonMotion(eBtn);
             
             eBtn.setOnAction(evt -> {
                 reactionController.publicationEmoji(publication, currentUser, e);
@@ -913,7 +901,7 @@ public class ProfileForumSectionEnhanced {
         }
 
         VBox composeBox = new VBox(10);
-        composeBox.setStyle("-fx-background-color: rgba(255,255,255,0.02); -fx-padding: 15; -fx-background-radius: 12; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+        composeBox.setStyle(HorizonDesignSystem.webServiceCard(16, false) + "-fx-padding: 16;");
         
         Label composeLabel = new Label("Write a comment...");
         composeLabel.setTextFill(Color.WHITE);
@@ -923,7 +911,10 @@ public class ProfileForumSectionEnhanced {
         commentInput.setPromptText("Type your comment here...");
         commentInput.setWrapText(true);
         commentInput.setPrefRowCount(3);
-        commentInput.setStyle("-fx-background-color: transparent; -fx-control-inner-background: rgba(0,0,0,0.2); -fx-text-fill: white; -fx-prompt-text-fill: rgba(255,255,255,0.4); -fx-background-radius: 8; -fx-border-radius: 8; -fx-border-color: rgba(255,255,255,0.1);");
+        commentInput.setStyle(HorizonDesignSystem.webServiceInput(12, false));
+        commentInput.focusedProperty().addListener((obs, oldValue, focused) ->
+            commentInput.setStyle(HorizonDesignSystem.webServiceInput(12, focused))
+        );
 
         HBox controls = new HBox(15);
         controls.setAlignment(Pos.CENTER_LEFT);
@@ -934,7 +925,8 @@ public class ProfileForumSectionEnhanced {
         visibilityBox.setOnAction(e -> commentVisibility = visibilityBox.isSelected());
 
         Button uploadBtn = new Button("📷 Add Image");
-        uploadBtn.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 5; -fx-cursor: hand;");
+        uploadBtn.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-size: 11; -fx-padding: 7 12; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(uploadBtn);
         
         Label fileLabel = new Label("No file chosen");
         fileLabel.setTextFill(Color.color(1, 1, 1, 0.4));
@@ -972,7 +964,8 @@ public class ProfileForumSectionEnhanced {
         feedback.setFont(Font.font(11));
 
         Button postBtn = new Button("Post Comment");
-        postBtn.setStyle("-fx-padding: 10 20; -fx-background-color: #6366f1; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8; -fx-cursor: hand;");
+        postBtn.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-padding: 10 20; -fx-background-radius: 999px; -fx-border-radius: 999px;");
+        HorizonDesignSystem.installButtonMotion(postBtn);
         postBtn.setOnAction(e -> postPublicationComment(publication, commentInput, feedback));
 
         composeBox.getChildren().addAll(composeLabel, commentInput, controls, postBtn, feedback);
@@ -1299,7 +1292,8 @@ public class ProfileForumSectionEnhanced {
 
     private VBox detailCard() {
         VBox detailCard = new VBox(12);
-        detailCard.setStyle("-fx-background-color: rgba(255, 255, 255, 0.03); -fx-border-color: rgba(255, 255, 255, 0.1); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 16;");
+        detailCard.setStyle(HorizonDesignSystem.webServiceCard(16, false) + "-fx-padding: 18;");
+        HorizonDesignSystem.installWebLift(detailCard);
         return detailCard;
     }
 

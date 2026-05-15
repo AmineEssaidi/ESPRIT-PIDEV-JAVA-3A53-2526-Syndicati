@@ -71,8 +71,7 @@ public class MainApplication extends Application {
         primaryStage.initStyle(StageStyle.TRANSPARENT);
         primaryStage.setResizable(true);
         primaryStage.getIcons().add(new javafx.scene.image.Image(getClass().getResourceAsStream("/app_logo/syndicati.png"), 256, 256, true, true));
-        primaryStage.setMinWidth(1500);
-        primaryStage.setMinHeight(800);
+        applyStageMinSizeForScreen(primaryStage);
 
         // 3. Initialize Views
         loginView = new LoginView();
@@ -81,7 +80,8 @@ public class MainApplication extends Application {
         com.syndicati.views.frontend.auth.IntroCinematicView introView = new com.syndicati.views.frontend.auth.IntroCinematicView();
         
         // 4. Create Scene
-        Scene scene = new Scene(introView.getRoot(), 1500, 800);
+        double[] introWh = fitInitialSceneSize(1500, 800);
+        Scene scene = new Scene(introView.getRoot(), introWh[0], introWh[1]);
         scene.setFill(Color.BLACK);
         applyGlobalStyles(scene);
         if (scene.getRoot() != null) {
@@ -96,6 +96,7 @@ public class MainApplication extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
         centerStageOnScreen(primaryStage);
+        clampStageToVisualBounds(primaryStage);
         applyRoundedShape(scene);
         addResizeHandlers(primaryStage, scene);
         introView.play();
@@ -485,8 +486,7 @@ public class MainApplication extends Application {
             appendRootStyle(landingPageView.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
         }
 
-        primaryStage.setMinWidth(1500);
-        primaryStage.setMinHeight(800);
+        applyStageMinSizeForScreen(primaryStage);
 
         ThemeManager.getInstance().setScene(scene);
         primaryStage.setScene(scene);
@@ -494,10 +494,17 @@ public class MainApplication extends Application {
         if (wasMaximized) {
             primaryStage.setMaximized(true);
         } else {
-            primaryStage.setWidth(currentWidth);
-            primaryStage.setHeight(currentHeight);
+            Rectangle2D vb = primaryVisualBounds();
+            double pad = 20;
+            double maxW = vb.getWidth() - pad;
+            double maxH = vb.getHeight() - pad;
+            double w = Math.min(Math.max(currentWidth, primaryStage.getMinWidth()), maxW);
+            double h = Math.min(Math.max(currentHeight, primaryStage.getMinHeight()), maxH);
+            primaryStage.setWidth(w);
+            primaryStage.setHeight(h);
             primaryStage.setX(currentX);
             primaryStage.setY(currentY);
+            clampStageToVisualBounds(primaryStage);
         }
 
         primaryStage.setTitle("Syndicati - Dashboard");
@@ -519,6 +526,10 @@ public class MainApplication extends Application {
         javafx.application.Platform.runLater(() -> {
             landingPageView.getRoot().layout();
             primaryStage.sizeToScene();
+            applyStageMinSizeForScreen(primaryStage);
+            if (!primaryStage.isMaximized()) {
+                clampStageToVisualBounds(primaryStage);
+            }
             
             // Execute heavy dashboard/home loading
             if (goToDashboard) {
@@ -668,9 +679,7 @@ public class MainApplication extends Application {
         scene.getStylesheets().clear(); 
         applyGlobalStyles(scene);
         
-        // Enforce minimum window size (consistent with start())
-        primaryStage.setMinWidth(1500);
-        primaryStage.setMinHeight(800);
+        applyStageMinSizeForScreen(primaryStage);
         
         ThemeManager.getInstance().setScene(scene);
         primaryStage.setScene(scene);
@@ -683,10 +692,17 @@ public class MainApplication extends Application {
         if (wasMaximized) {
             primaryStage.setMaximized(true);
         } else {
-            primaryStage.setWidth(Math.max(1500, currentWidth));
-            primaryStage.setHeight(Math.max(800, currentHeight));
+            Rectangle2D vb = primaryVisualBounds();
+            double pad = 20;
+            double maxW = vb.getWidth() - pad;
+            double maxH = vb.getHeight() - pad;
+            double w = Math.min(Math.max(currentWidth, primaryStage.getMinWidth()), maxW);
+            double h = Math.min(Math.max(currentHeight, primaryStage.getMinHeight()), maxH);
+            primaryStage.setWidth(w);
+            primaryStage.setHeight(h);
             primaryStage.setX(currentX);
             primaryStage.setY(currentY);
+            clampStageToVisualBounds(primaryStage);
         }
         
         primaryStage.setTitle("Syndicati - Login");
@@ -740,11 +756,86 @@ public class MainApplication extends Application {
             System.out.println("[WARN] Global stylesheet not found: " + GLOBAL_SCROLLBAR_CSS);
         }
     }
+
+    private static Rectangle2D primaryVisualBounds() {
+        return Screen.getPrimary().getVisualBounds();
+    }
+
+    /**
+     * Caps minimum stage size to the primary monitor work area so undecorated windows
+     * (and the custom title-bar controls) are never pushed off-screen.
+     */
+    private void applyStageMinSizeForScreen(Stage stage) {
+        Rectangle2D vb = primaryVisualBounds();
+        double margin = 20;
+        double capW = Math.max(360, vb.getWidth() - margin);
+        double capH = Math.max(260, vb.getHeight() - margin);
+        double targetMinW = 1024;
+        double targetMinH = 640;
+        stage.setMinWidth(Math.min(targetMinW, capW));
+        stage.setMinHeight(Math.min(targetMinH, capH));
+    }
+
+    /** Preferred startup / scene size, never larger than the visible desktop. */
+    private double[] fitInitialSceneSize(double preferW, double preferH) {
+        Rectangle2D vb = primaryVisualBounds();
+        double margin = 20;
+        double capW = Math.max(360, vb.getWidth() - margin);
+        double capH = Math.max(260, vb.getHeight() - margin);
+        return new double[]{
+            Math.min(preferW, capW),
+            Math.min(preferH, capH)
+        };
+    }
+
+    /** Keeps width, height, and top-left inside the primary screen's visual bounds. */
+    private void clampStageToVisualBounds(Stage stage) {
+        if (stage == null || stage.isMaximized()) {
+            return;
+        }
+        Rectangle2D vb = primaryVisualBounds();
+        double pad = 10;
+        double maxW = vb.getWidth() - pad * 2;
+        double maxH = vb.getHeight() - pad * 2;
+
+        double w = stage.getWidth();
+        double h = stage.getHeight();
+        if (w < stage.getMinWidth() || w > maxW) {
+            w = Math.min(Math.max(w, stage.getMinWidth()), maxW);
+            stage.setWidth(w);
+        }
+        if (h < stage.getMinHeight() || h > maxH) {
+            h = Math.min(Math.max(h, stage.getMinHeight()), maxH);
+            stage.setHeight(h);
+        }
+
+        w = stage.getWidth();
+        h = stage.getHeight();
+        double minX = vb.getMinX() + pad;
+        double minY = vb.getMinY() + pad;
+        double maxX = vb.getMinX() + vb.getWidth() - w - pad;
+        double maxY = vb.getMinY() + vb.getHeight() - h - pad;
+
+        double x = stage.getX();
+        double y = stage.getY();
+        if (x < minX) {
+            stage.setX(minX);
+        }
+        if (y < minY) {
+            stage.setY(minY);
+        }
+        if (stage.getX() > maxX) {
+            stage.setX(Math.max(minX, maxX));
+        }
+        if (stage.getY() > maxY) {
+            stage.setY(Math.max(minY, maxY));
+        }
+    }
     
     private void centerStageOnScreen(Stage stage) {
         Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
-        stage.setX((screenBounds.getWidth() - stage.getWidth()) / 2);
-        stage.setY((screenBounds.getHeight() - stage.getHeight()) / 2);
+        stage.setX(screenBounds.getMinX() + (screenBounds.getWidth() - stage.getWidth()) / 2);
+        stage.setY(screenBounds.getMinY() + (screenBounds.getHeight() - stage.getHeight()) / 2);
     }
     
     private void applyRoundedShape(Scene scene) {
@@ -952,7 +1043,18 @@ public class MainApplication extends Application {
             // Re-trigger warmup to ensure profile data is fresh and heavy views are pre-loaded
             nm.warmup();
             
-            javafx.scene.Scene newScene = new javafx.scene.Scene(landingPageView.getRoot(), 1500, 800);
+            double cw = primaryStage.getWidth();
+            double ch = primaryStage.getHeight();
+            if (cw <= 0 || ch <= 0) {
+                double[] wh = fitInitialSceneSize(1500, 800);
+                cw = wh[0];
+                ch = wh[1];
+            } else {
+                double[] wh = fitInitialSceneSize(cw, ch);
+                cw = wh[0];
+                ch = wh[1];
+            }
+            javafx.scene.Scene newScene = new javafx.scene.Scene(landingPageView.getRoot(), cw, ch);
             newScene.setFill(javafx.scene.paint.Color.TRANSPARENT);
             
             // Re-apply the premium scrollbar styling to the new scene
@@ -962,8 +1064,12 @@ public class MainApplication extends Application {
             com.syndicati.utils.localization.LocalizationManager.getInstance().applyOrientation(landingPageView.getRoot());
             
             primaryStage.setScene(newScene);
+            applyStageMinSizeForScreen(primaryStage);
             applyRoundedShape(newScene);
             addResizeHandlers(primaryStage, newScene);
+            if (!primaryStage.isMaximized()) {
+                clampStageToVisualBounds(primaryStage);
+            }
             
             // Restore the page we were on
             landingPageView.navigateToPage(savedPage);

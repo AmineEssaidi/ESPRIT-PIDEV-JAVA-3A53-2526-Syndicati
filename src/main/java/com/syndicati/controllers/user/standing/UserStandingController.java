@@ -18,6 +18,10 @@ public class UserStandingController {
         return standingService.findOrCreateByUserId(userId);
     }
 
+    public UserStanding findOrCreateByUserId(int userId, boolean useCache) {
+        return standingService.findOrCreateByUserId(userId, useCache);
+    }
+
     public boolean save(UserStanding standing) {
         return standingService.save(standing);
     }

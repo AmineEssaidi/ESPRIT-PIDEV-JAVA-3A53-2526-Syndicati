@@ -23,6 +23,7 @@ import com.syndicati.utils.image.QRCodeUtil;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
 import javafx.beans.binding.Bindings;
@@ -130,28 +131,21 @@ public class ResidencePageView implements ViewInterface {
     private StackPane buildHero() {
         StackPane hero = new StackPane();
         hero.prefWidthProperty().bind(Bindings.min(root.widthProperty().multiply(0.95), 1800));
-        hero.setMinHeight(320);
-        hero.setPrefHeight(360);
-        hero.setMaxHeight(390);
-        hero.setPadding(new Insets(62, 44, 62, 44));
+        hero.setMinHeight(600);
+        hero.setPrefHeight(600);
+        hero.setMaxHeight(Region.USE_COMPUTED_SIZE);
+        hero.setPadding(new Insets(160, 64, 160, 64));
         hero.paddingProperty().bind(Bindings.createObjectBinding(
-            () -> root.getWidth() < 980 ? new Insets(34, 24, 34, 24) : new Insets(62, 44, 62, 44),
+            () -> root.getWidth() < 980 ? new Insets(76, 28, 76, 28) : new Insets(160, 64, 160, 64),
             root.widthProperty()
         ));
-        hero.setStyle(
-            "-fx-background-color: " + surfaceStrong() + ";" +
-            "-fx-background-radius: 48px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 48px;" +
-            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.48), 36, 0.16, 0, 10);"
-        );
+        hero.setStyle(HorizonDesignSystem.webHeroPanel());
 
         Region glow = new Region();
         glow.setPrefSize(620, 620);
         glow.setStyle(
             "-fx-background-color: radial-gradient(center 50% 50%, radius 60%, " +
-            tm.toRgba(tm.getAccentHex(), 0.20) + " 0%, " + tm.toRgba(tm.getAccentHex(), 0.00) + " 70%);"
+            tm.toRgba(tm.getAccentHex(), 0.28) + " 0%, " + tm.toRgba(tm.getAccentHex(), 0.00) + " 70%);"
         );
         glow.setTranslateX(260);
         glow.setTranslateY(-90);
@@ -160,17 +154,18 @@ public class ResidencePageView implements ViewInterface {
         content.setAlignment(Pos.CENTER_LEFT);
 
         StackPane badge = pill("Premium Living", 12, 0.10, 0.30);
+        badge.setStyle(HorizonDesignSystem.webAccentBadge());
 
-        Text title = text("Luxury Living\nRedefined.", 62, true, "#ffffff");
-        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 62));
+        Text title = text("Luxury Living\nRedefined.", 88, true, "#ffffff");
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 88));
         // Keep hero typography stable during hover/reflow by avoiding live width jitter.
         title.setWrappingWidth(760);
 
         Text subtitle = text(
-            "Explore our curated selection of high-end residences and apartments. Experience a new standard of comfort and elegance with Horizon.",
-            18,
+            "Explore our curated selection of high-end residences and apartments. Experience a new standard of comfort and elegance with Syndicati.",
+            22,
             false,
-            textMuted()
+            "rgba(255,255,255,0.50)"
         );
         subtitle.setWrappingWidth(720);
 
@@ -391,14 +386,7 @@ public class ResidencePageView implements ViewInterface {
 
     private VBox residenceCard(ResidenceDisplay r) {
         VBox card = new VBox();
-        card.setStyle(
-            "-fx-background-color: " + surfaceCard() + ";" +
-            "-fx-background-radius: 32px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 32px;" +
-            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.24), 18, 0.12, 0, 6);"
-        );
+        card.setStyle(HorizonDesignSystem.webServiceCard(32, false));
 
         StackPane media = new StackPane();
         media.setMinHeight(280);
@@ -519,13 +507,7 @@ public class ResidencePageView implements ViewInterface {
 
     private VBox apartmentCard(ApartmentDisplay apt) {
         VBox card = new VBox();
-        card.setStyle(
-            "-fx-background-color: " + surfaceCard() + ";" +
-            "-fx-background-radius: 32px;" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 32px;"
-        );
+        card.setStyle(HorizonDesignSystem.webServiceCard(32, false));
 
         StackPane media = new StackPane();
         media.setMinHeight(240);
@@ -664,7 +646,7 @@ public class ResidencePageView implements ViewInterface {
             
             VBox aiSection = new VBox(8);
             aiSection.setPadding(new Insets(10));
-            aiSection.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 12px; -fx-border-color: " + borderSoft() + "; -fx-border-radius: 12px;");
+            aiSection.setStyle(HorizonDesignSystem.webSectionCard(12, false) + "-fx-padding: 10;");
             
             Text aiTitle = text("AI Maintenance Insights", 14, true, tm.getAccentHex());
             Text aiText = text(
@@ -676,7 +658,8 @@ public class ResidencePageView implements ViewInterface {
             aiText.setWrappingWidth(340);
             
             Button genBtn = new Button("Generate with AI");
-            genBtn.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 6 12; -fx-background-radius: 8px; -fx-cursor: hand;");
+            genBtn.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-font-size: 11px; -fx-padding: 6 12; -fx-background-radius: 8px; -fx-border-radius: 8px;");
+            HorizonDesignSystem.installButtonMotion(genBtn);
             
             final Maintenance finalMaint = latestMaintenance;
             genBtn.setOnAction(e -> {
@@ -1242,7 +1225,11 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private StackPane miniType(String text) {
-        return pill(text, 11, 0.05, 0.10);
+        StackPane p = new StackPane(text(text, 11, true, textMuted()));
+        p.setPadding(new Insets(8, 14, 8, 14));
+        p.setMaxWidth(StackPane.USE_PREF_SIZE);
+        p.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 100px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-width: 1px; -fx-border-radius: 100px;");
+        return p;
     }
 
     private StackPane featureTag(String value) {
@@ -1274,27 +1261,15 @@ public class ResidencePageView implements ViewInterface {
 
     private Button actionBtn(String label) {
         Button b = new Button(label);
-        b.setStyle(
-            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-            "-fx-text-fill: white;" +
-            "-fx-font-weight: 700;" +
-            "-fx-font-size: 14px;" +
-            "-fx-padding: 12 28 12 28;" +
-            "-fx-background-radius: 12px;"
-        );
+        b.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-font-size: 14px;-fx-padding: 12 28 12 28;-fx-background-radius: 12px;-fx-border-radius: 12px;");
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
     }
 
     private Button mainBtn(String label) {
         Button b = new Button(label);
-        b.setStyle(
-            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-            "-fx-text-fill: white;" +
-            "-fx-font-weight: 700;" +
-            "-fx-font-size: 12px;" +
-            "-fx-padding: 10 12 10 12;" +
-            "-fx-background-radius: 12px;"
-        );
+        b.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-font-size: 12px;-fx-padding: 10 12 10 12;-fx-background-radius: 12px;-fx-border-radius: 12px;");
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
     }
 
@@ -1309,16 +1284,9 @@ public class ResidencePageView implements ViewInterface {
                 "-fx-background-radius: 12px;"
             );
         } else {
-            b.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03);" +
-                "-fx-border-color: " + borderSoft() + ";" +
-                "-fx-border-width: 1px;" +
-                "-fx-text-fill: " + textSoft() + ";" +
-                "-fx-font-weight: 700;" +
-                "-fx-min-width: 48px; -fx-min-height: 48px;" +
-                "-fx-background-radius: 12px; -fx-border-radius: 12px;"
-            );
+            b.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-min-width: 48px; -fx-min-height: 48px;-fx-background-radius: 12px; -fx-border-radius: 12px;");
         }
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
     }
 
@@ -1342,15 +1310,7 @@ public class ResidencePageView implements ViewInterface {
     private TextField input(String placeholder) {
         TextField f = new TextField();
         f.setPromptText(placeholder);
-        f.setStyle(
-            "-fx-background-color: " + surfaceSoft() + ";" +
-            "-fx-border-color: " + borderSoft() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-text-fill: " + tm.getTextColor() + ";" +
-            "-fx-prompt-text-fill: " + textMuted() + ";" +
-            "-fx-background-radius: 12px;" +
-            "-fx-border-radius: 12px;"
-        );
+        f.setStyle(HorizonDesignSystem.input());
         return f;
     }
 
@@ -1362,23 +1322,19 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private String surfaceStrong() {
-        return tm.isDarkMode()
-            ? "linear-gradient(from 0% 0% to 100% 100%, #020202 0%, #070707 58%, #0b0b0b 100%)"
-            : "linear-gradient(from 0% 0% to 100% 100%, #ffffff 0%, #f8fafc 100%)";
+        return tm.isDarkMode() ? "#000000" : "#f8fafc";
     }
 
     private String surfaceCard() {
-        return tm.isDarkMode()
-            ? "linear-gradient(from 0% 0% to 100% 100%, rgba(10,10,10,0.94) 0%, rgba(14,14,14,0.94) 62%, " + tm.toRgba(tm.getAccentHex(), 0.10) + " 100%)"
-            : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)";
+        return HorizonDesignSystem.surface();
     }
 
     private String surfaceSoft() {
-        return tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+        return HorizonDesignSystem.surfaceSoft();
     }
 
     private String borderSoft() {
-        return tm.isDarkMode() ? tm.toRgba(tm.getAccentHex(), 0.34) : "rgba(15,23,42,0.16)";
+        return HorizonDesignSystem.borderStrong();
     }
 
     private String textSoft() {
@@ -1386,15 +1342,11 @@ public class ResidencePageView implements ViewInterface {
     }
 
     private String textMuted() {
-        return tm.isDarkMode() ? "rgba(255,255,255,0.79)" : "rgba(30,41,59,0.82)";
+        return HorizonDesignSystem.mutedText();
     }
 
     private String shell(double radius, String inner, double inset) {
-        double innerRadius = Math.max(0, radius - inset);
-        return "-fx-background-color: " + tm.getEffectiveAccentGradient() + ", " + inner + ";" +
-            "-fx-background-insets: 0, " + inset + ";" +
-            "-fx-background-radius: " + radius + "px, " + innerRadius + "px;" +
-            "-fx-border-color: transparent;";
+        return HorizonDesignSystem.webSectionCard((int) Math.round(radius), false);
     }
 
     private Text text(String value, int size, boolean bold, String color) {
@@ -1410,13 +1362,16 @@ public class ResidencePageView implements ViewInterface {
 
     private void addCardHover(VBox card, Region accentBar) {
         card.setOnMouseEntered(e -> {
+            card.setStyle(HorizonDesignSystem.webServiceCard(32, true));
             TranslateTransition lift = new TranslateTransition(Duration.millis(260), card);
             lift.setToY(-15);
+            lift.setInterpolator(HorizonDesignSystem.WEB_POP);
             lift.play();
 
             ScaleTransition scale = new ScaleTransition(Duration.millis(260), card);
             scale.setToX(1.02);
             scale.setToY(1.02);
+            scale.setInterpolator(HorizonDesignSystem.WEB_POP);
             scale.play();
 
             ScaleTransition bar = new ScaleTransition(Duration.millis(220), accentBar);
@@ -1424,13 +1379,16 @@ public class ResidencePageView implements ViewInterface {
             bar.play();
         });
         card.setOnMouseExited(e -> {
+            card.setStyle(HorizonDesignSystem.webServiceCard(32, false));
             TranslateTransition lift = new TranslateTransition(Duration.millis(220), card);
             lift.setToY(0);
+            lift.setInterpolator(HorizonDesignSystem.WEB_EASE);
             lift.play();
 
             ScaleTransition scale = new ScaleTransition(Duration.millis(220), card);
             scale.setToX(1.0);
             scale.setToY(1.0);
+            scale.setInterpolator(HorizonDesignSystem.WEB_EASE);
             scale.play();
 
             ScaleTransition bar = new ScaleTransition(Duration.millis(200), accentBar);

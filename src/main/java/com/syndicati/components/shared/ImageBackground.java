@@ -16,6 +16,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
@@ -28,6 +29,8 @@ import java.util.List;
  */
 public class ImageBackground {
     private final StackPane root;
+    /** When true: no video, no Ken Burns / crossfade loop (used by admin dashboard panel). */
+    private final boolean staticBackdropOnly;
     private final List<ImageView> imageViews = new ArrayList<>();
     private SequentialTransition animationSequence;
 
@@ -41,20 +44,31 @@ public class ImageBackground {
         "https://ik.imagekit.io/b0dxqylai/syndicati.mp4?updatedAt=1778146299878";
 
     public ImageBackground() {
+        this(false);
+    }
+
+    /**
+     * @param staticBackdropOnly {@code true} for embedded panels (e.g. admin dashboard): one still
+     *        frame, no video, no continuous scale/fade loop (avoids edge bleed and “sliding” next
+     *        to the sidebar).
+     */
+    public ImageBackground(boolean staticBackdropOnly) {
+        this.staticBackdropOnly = staticBackdropOnly;
         this.root = new StackPane();
         setupLayout();
-        // Load images on a virtual thread so it doesn't block UI initialization
         Thread.startVirtualThread(this::loadImagesAndAnimate);
     }
 
     private void setupLayout() {
         root.setMouseTransparent(true);
+        root.setMinSize(0, 0);
         root.setPrefSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
-        root.setMaxSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        root.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         root.setStyle("-fx-background-color: #000000;"); 
 
-        // Ensure background elements size against the actual Scene (matches cinematics),
-        // not against transient computed sizes during view construction.
+        // Size against this StackPane's bounds, not the top-level Scene. Binding to the Scene
+        // forces ImageView/MediaView to request the full window width while embedded (e.g. admin
+        // dashboard), which overflows the sidebar + main split and clips the entire UI horizontally.
         sceneListener = (obs, oldScene, newScene) -> {
             if (mediaView != null) {
                 rebindMediaViewSize();
@@ -66,6 +80,11 @@ public class ImageBackground {
             }
         };
         root.sceneProperty().addListener(sceneListener);
+
+        Rectangle clip = new Rectangle();
+        clip.widthProperty().bind(root.widthProperty());
+        clip.heightProperty().bind(root.heightProperty());
+        root.setClip(clip);
     }
 
     private void rebindMediaViewSize() {
@@ -75,14 +94,8 @@ public class ImageBackground {
             mediaView.fitHeightProperty().unbind();
         } catch (Exception ignored) { }
 
-        javafx.scene.Scene s = root.getScene();
-        if (s != null) {
-            mediaView.fitWidthProperty().bind(s.widthProperty());
-            mediaView.fitHeightProperty().bind(s.heightProperty());
-        } else {
-            mediaView.fitWidthProperty().bind(root.widthProperty());
-            mediaView.fitHeightProperty().bind(root.heightProperty());
-        }
+        mediaView.fitWidthProperty().bind(root.widthProperty());
+        mediaView.fitHeightProperty().bind(root.heightProperty());
     }
 
     private void rebindImageViewSize(ImageView iv) {
@@ -92,14 +105,8 @@ public class ImageBackground {
             iv.fitHeightProperty().unbind();
         } catch (Exception ignored) { }
 
-        javafx.scene.Scene s = root.getScene();
-        if (s != null) {
-            iv.fitWidthProperty().bind(s.widthProperty());
-            iv.fitHeightProperty().bind(s.heightProperty());
-        } else {
-            iv.fitWidthProperty().bind(root.widthProperty());
-            iv.fitHeightProperty().bind(root.heightProperty());
-        }
+        iv.fitWidthProperty().bind(root.widthProperty());
+        iv.fitHeightProperty().bind(root.heightProperty());
     }
 
     private void loadImagesAndAnimate() {
@@ -123,6 +130,22 @@ public class ImageBackground {
             Platform.runLater(() -> {
                 // If video mode got enabled after constructor, stop here.
                 if (videoMode) return;
+
+                if (staticBackdropOnly) {
+                    if (!frames.isEmpty()) {
+                        ImageView iv = new ImageView(frames.get(0));
+                        iv.setPreserveRatio(false);
+                        iv.setSmooth(true);
+                        rebindImageViewSize(iv);
+                        iv.setOpacity(1.0);
+                        iv.setScaleX(1.0);
+                        iv.setScaleY(1.0);
+                        imageViews.add(iv);
+                        root.getChildren().add(iv);
+                        StackPane.setAlignment(iv, Pos.CENTER);
+                    }
+                    return;
+                }
 
                 for (int i = 0; i < frames.size(); i++) {
                     ImageView iv = new ImageView(frames.get(i));
@@ -152,6 +175,9 @@ public class ImageBackground {
     }
 
     private void startAnimationSequence() {
+        if (staticBackdropOnly) {
+            return;
+        }
         if (imageViews.isEmpty() || imageViews.size() == 1) return;
         
         animationSequence = new SequentialTransition();
@@ -194,6 +220,9 @@ public class ImageBackground {
     public void updateTheme() { }
 
     public void setLoginMode() {
+        if (staticBackdropOnly) {
+            return;
+        }
         // Try video background first; fall back to JPG animations (already loaded/possibly still loading).
         // Calling this multiple times should be safe and should not stack layers/timelines.
         if (videoPlayer != null && mediaView != null) {
@@ -244,8 +273,10 @@ public class ImageBackground {
                 }
             }));
 
+            final MediaPlayer player = videoPlayer;
             videoPlayer.setOnError(() -> {
-                System.err.println("Login video playback error, falling back to frames. " + videoPlayer.getError());
+                String error = player != null && player.getError() != null ? player.getError().toString() : "unknown media error";
+                System.err.println("Login video playback error, falling back to frames. " + error);
                 Platform.runLater(() -> {
                     // Remove video layer and allow JPG mode again
                     if (mediaView != null) {
@@ -298,5 +329,6 @@ public class ImageBackground {
             sceneListener = null;
         }
         root.getChildren().clear();
+        root.setClip(null);
     }
 }

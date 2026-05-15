@@ -13,7 +13,6 @@ import com.syndicati.models.user.User;
 import com.syndicati.models.user.UserRelationship;
 import com.syndicati.models.user.UserStanding;
 import com.syndicati.models.user.data.ProfileRepository;
-import com.syndicati.models.user.data.UserStandingRepository;
 import com.syndicati.models.user.data.UserRelationshipRepository;
 import com.syndicati.models.user.data.UserRepository;
 import com.syndicati.utils.navigation.NavigationManager;
@@ -27,6 +26,7 @@ import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
@@ -94,6 +94,8 @@ public class ProfileView implements ViewInterface {
     private final Map<String, Button> detailTabButtons = new LinkedHashMap<>();
     private final List<javafx.animation.Animation> ownedAnimations = new java.util.ArrayList<>();
     private long lastXpInteractionAt = 0L;
+    private int lastRenderedStandingPoints = -1;
+    private int lastRenderedStandingLevel = -1;
     private volatile boolean avatarUpdateInProgress = false;
     private VBox contentHost;
 
@@ -120,12 +122,7 @@ public class ProfileView implements ViewInterface {
 
         // 2. Build heavy content progressively in the background
         javafx.application.Platform.runLater(() -> {
-            com.syndicati.utils.session.SessionManager sm = com.syndicati.utils.session.SessionManager.getInstance();
-            if (sm.isProfileFresh() && sm.isCircleCacheFresh() && sm.isStandingFresh()) {
-                buildContentAsync();
-            } else {
-                Thread.startVirtualThread(this::loadDataAsync);
-            }
+            Thread.startVirtualThread(this::loadDataAsync);
         });
     }
 
@@ -230,11 +227,10 @@ public class ProfileView implements ViewInterface {
                     if (profile != null) sm.setCurrentProfile(profile);
                 }
 
-                if (!sm.isStandingFresh()) {
-                    UserStanding standing = new UserStandingRepository()
-                        .findByUserId(currentUser.getIdUser()).orElse(null);
-                    if (standing != null) sm.setCurrentStanding(standing);
-                }
+                // Standing changes from the web/live polling side; always force a DB read for profile.
+                UserStanding standing = new UserStandingController()
+                    .findOrCreateByUserId(currentUser.getIdUser(), false);
+                sm.setCurrentStanding(standing);
 
                 if (!sm.isCircleCacheFresh()) {
                     UserRelationshipController rc = new UserRelationshipController();
@@ -319,6 +315,7 @@ public class ProfileView implements ViewInterface {
         btn.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
         btn.setOnAction(e -> setMainPage(key));
         styleMainNavButton(btn, false);
+        HorizonDesignSystem.installButtonMotion(btn);
         return btn;
     }
 
@@ -381,7 +378,8 @@ public class ProfileView implements ViewInterface {
         VBox card = new VBox(0);
         card.setMaxWidth(1600);
         card.setAlignment(Pos.TOP_CENTER);
-        card.setStyle(shell(34, "#0a0a0c", 0.16));
+        card.setStyle(HorizonDesignSystem.webSectionCard(34, false));
+        HorizonDesignSystem.popIn(card);
 
         StackPane banner = new StackPane();
         banner.setMinHeight(180);
@@ -448,8 +446,10 @@ public class ProfileView implements ViewInterface {
         quickBtnWrap.setAlignment(Pos.CENTER_RIGHT);
         quickBtnWrap.setPadding(new Insets(4, 0, 0, 0));
 
-        Button showActionsBtn = new Button("▦  QUICK ACTIONS  ›");
+        Button showActionsBtn = new Button("ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“Ãƒâ€šÃ‚Â¦  QUICK ACTIONS  ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âº");
+        showActionsBtn.setText("\u22EF  QUICK ACTIONS  \u203A");
         styleQuickActionsButton(showActionsBtn, false);
+        HorizonDesignSystem.installButtonMotion(showActionsBtn);
         quickBtnWrap.getChildren().add(showActionsBtn);
         defaultInfo.getChildren().add(quickBtnWrap);
 
@@ -472,7 +472,8 @@ public class ProfileView implements ViewInterface {
         HBox switcherTopBar = new HBox(10);
         switcherTopBar.setAlignment(Pos.CENTER_LEFT);
 
-        Button switcherBackBtn = new Button("←");
+        Button switcherBackBtn = new Button("ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Ãƒâ€šÃ‚Â");
+        switcherBackBtn.setText("\u2190");
         switcherBackBtn.setStyle(
             "-fx-min-width: 30px; -fx-min-height: 30px;" +
             "-fx-max-width: 30px; -fx-max-height: 30px;" +
@@ -481,6 +482,7 @@ public class ProfileView implements ViewInterface {
             "-fx-border-width: 1px; -fx-border-radius: 999px; -fx-background-radius: 999px;" +
             "-fx-text-fill: rgba(255,255,255,0.75); -fx-font-weight: 700; -fx-cursor: hand;"
         );
+        HorizonDesignSystem.installButtonMotion(switcherBackBtn);
         Text switcherTitle = text("QUICK ACTIONS", 12, true, "rgba(255,255,255,0.55)");
         switcherTopBar.getChildren().addAll(switcherBackBtn, switcherTitle);
 
@@ -492,12 +494,12 @@ public class ProfileView implements ViewInterface {
         c.setPercentWidth(33.33);
         c.setFillWidth(true);
         actions.getColumnConstraints().addAll(c, c, c);
-        actions.add(createActionTile("🎥 Host Spotlight", "host", switcherView, showActionsBtn), 0, 0);
-        actions.add(createActionTile("🔑 Join by Code", "join", switcherView, showActionsBtn), 1, 0);
-        actions.add(createActionTile("🔐 2FA", "2fa", switcherView, showActionsBtn), 2, 0);
-        actions.add(createActionTile("👆 Biometrics", "biometrics", switcherView, showActionsBtn), 0, 1);
-        actions.add(createActionTile("👤 Face ID", "faceid", switcherView, showActionsBtn), 1, 1);
-        actions.add(createActionTile("⚙️ Settings", "settings", switcherView, showActionsBtn), 2, 1);
+        actions.add(createActionTile("ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â¥ Host Spotlight", "host", switcherView, showActionsBtn), 0, 0);
+        actions.add(createActionTile("ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ Join by Code", "join", switcherView, showActionsBtn), 1, 0);
+        actions.add(createActionTile("ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â 2FA", "2fa", switcherView, showActionsBtn), 2, 0);
+        actions.add(createActionTile("ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â  Biometrics", "biometrics", switcherView, showActionsBtn), 0, 1);
+        actions.add(createActionTile("ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“Ãƒâ€šÃ‚Â¤ Face ID", "faceid", switcherView, showActionsBtn), 1, 1);
+        actions.add(createActionTile("ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Settings", "settings", switcherView, showActionsBtn), 2, 1);
 
         switcherView.getChildren().addAll(switcherTopBar, actions);
 
@@ -553,6 +555,7 @@ public class ProfileView implements ViewInterface {
         switcherView.setOpacity(1);
         switcherView.setTranslateX(0);
         switcherView.toFront();
+        HorizonDesignSystem.dropdownIn(switcherView);
     }
 
     private void showDefaultHeroInfo(VBox defaultView, VBox switcherView, VBox detailView, Button showBtn) {
@@ -568,6 +571,7 @@ public class ProfileView implements ViewInterface {
         defaultView.setOpacity(1);
         defaultView.setTranslateX(0);
         defaultView.toFront();
+        HorizonDesignSystem.dropdownIn(defaultView);
     }
 
     private void styleQuickActionsButton(Button button, boolean active) {
@@ -647,7 +651,6 @@ public class ProfileView implements ViewInterface {
 
         User currentUser = SessionManager.getInstance().getCurrentUser();
         UserStanding standing = SessionManager.getInstance().getCurrentStanding();
-        // Removed blocking DB lookup from UI thread
 
         int levelValue = standing != null ? standing.getLevel() : 1;
         int pointsValue = standing != null ? standing.getPoints() : 0;
@@ -656,67 +659,112 @@ public class ProfileView implements ViewInterface {
         HBox header = new HBox(16);
         header.setAlignment(Pos.CENTER_LEFT);
 
-        VBox level = new VBox(0, text(String.valueOf(levelValue), 28, true, "#ffffff"), text("LVL", 10, true, tm.getAccentHex()));
+        Text levelNumber = text(String.valueOf(levelValue), 28, true, "#ffffff");
+        VBox level = new VBox(0, levelNumber, text("LVL", 10, true, tm.getAccentHex()));
         level.setAlignment(Pos.CENTER);
         level.setMinSize(72, 72);
-        level.setStyle(shell(16, "rgba(10,10,15,0.80)", 0.16));
+        level.setStyle(standingLevelStyle(false));
+        installBreathingGlow(level, 0.22);
 
-        VBox title = new VBox(4, text("RESIDENT STANDING", 18, true, "#ffffff"), text("Your status within the Horizon community", 12, false, textMuted()));
+        Text liveBadge = text("LIVE XP", 10, true, tm.getAccentHex());
+        HBox titleLine = new HBox(10, text("RESIDENT STANDING", 18, true, "#ffffff"), liveBadge);
+        titleLine.setAlignment(Pos.CENTER_LEFT);
+        VBox title = new VBox(4, titleLine, text("Your status within the Horizon community", 12, false, textMuted()));
         HBox.setHgrow(title, Priority.ALWAYS);
 
-        VBox points = new VBox(2, text(String.valueOf(pointsValue), 24, true, "#ffffff"), text("SYNDIC PTS", 10, true, "rgba(255,255,255,0.50)"));
+        Text pointsNumber = text(String.valueOf(pointsValue), 24, true, "#ffffff");
+        VBox points = new VBox(2, pointsNumber, text("SYNDIC PTS", 10, true, "rgba(255,255,255,0.50)"));
         points.setAlignment(Pos.CENTER_RIGHT);
+        installBreathingGlow(points, 0.14);
 
         header.getChildren().addAll(level, title, points);
 
         boolean isAllGood = "NORMAL".equals(standingLabel) || "GOOD".equals(standingLabel);
-        boolean isLimited = "LIMITED".equals(standingLabel);
-        boolean isAtRisk = "AT_RISK".equals(standingLabel);
+        boolean isWarned = "WARNED".equals(standingLabel);
         boolean isSuspended = "SUSPENDED".equals(standingLabel);
+        boolean isBanned = "BANNED".equals(standingLabel);
 
         HBox standingBar = new HBox(12,
             standingPoint("All good", isAllGood),
-            standingPoint("Limited", isLimited),
-            standingPoint("At risk", isAtRisk),
-            standingPoint("Suspended", isSuspended)
+            standingPoint("Warned", isWarned),
+            standingPoint("Suspended", isSuspended),
+            standingPoint("Banned", isBanned)
         );
         standingBar.setAlignment(Pos.CENTER_LEFT);
 
-        int nextLevelXp = (levelValue + 1) * 100;
         int currentXp = pointsValue % 100;
-        int xpRemaining = 100 - currentXp;
+        int previousPoints = lastRenderedStandingPoints >= 0 ? lastRenderedStandingPoints : pointsValue;
+        int previousLevel = lastRenderedStandingLevel >= 0 ? lastRenderedStandingLevel : levelValue;
+        int previousXp = Math.max(0, previousPoints % 100);
+        int gainedXp = lastRenderedStandingPoints >= 0 ? Math.max(0, pointsValue - lastRenderedStandingPoints) : 0;
+
+        if (previousLevel != levelValue) {
+            animateIntegerText(levelNumber, previousLevel, levelValue, 650);
+        }
+        if (previousPoints != pointsValue) {
+            animateIntegerText(pointsNumber, previousPoints, pointsValue, 760);
+            playXpPulse(points);
+            playXpPulse(level);
+        }
 
         VBox xp = new VBox(8);
         HBox xpTop = new HBox();
         xpTop.setAlignment(Pos.CENTER_LEFT);
         Text left = text("XP TOWARDS LEVEL " + (levelValue + 1), 11, true, textMuted());
+        Text gain = text(gainedXp > 0 ? "+" + gainedXp + " XP" : "SYNCED", 11, true, gainedXp > 0 ? tm.getAccentHex() : "rgba(255,255,255,0.42)");
         Text right = text(currentXp + " / 100", 11, true, tm.getTextColor());
         
         javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        xpTop.getChildren().addAll(left, spacer, right);
+        xpTop.getChildren().addAll(left, gain, spacer, right);
 
         StackPane progressTrack = new StackPane();
         progressTrack.setAlignment(Pos.CENTER_LEFT);
-        progressTrack.setMinHeight(8);
-        progressTrack.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 999px;");
+        progressTrack.setMinHeight(10);
+        progressTrack.setStyle("-fx-background-color: " + surfaceSoft() + "; -fx-background-radius: 999px; -fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + "; -fx-border-radius: 999px;");
         StackPane fill = new StackPane();
-        fill.setMinHeight(8);
-        fill.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-background-radius: 999px;");
+        fill.setMinHeight(10);
+        fill.setStyle("-fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-background-radius: 999px; -fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.55) + ", 18, 0.22, 0, 0);");
+        StackPane shine = new StackPane();
+        shine.setMouseTransparent(true);
+        shine.setMinSize(58, 10);
+        shine.setMaxSize(58, 10);
+        shine.setOpacity(0.0);
+        shine.setStyle("-fx-background-color: linear-gradient(to right, transparent, rgba(255,255,255,0.55), transparent); -fx-background-radius: 999px;");
         
-        // Use StackPane alignment so fill snaps to the left at the computed percentage.
-        // No live binding needed — this is a static snapshot at render time.
         StackPane.setAlignment(fill, Pos.CENTER_LEFT);
+        StackPane.setAlignment(shine, Pos.CENTER_LEFT);
         double clampedXp = Math.min(Math.max(currentXp, 0.0), 100.0);
-        fill.setMaxWidth(Double.MAX_VALUE);
-        fill.prefWidthProperty().bind(progressTrack.widthProperty().multiply(clampedXp / 100.0));
+        double previousClampedXp = Math.min(Math.max(previousXp, 0.0), 100.0);
+        fill.setMinWidth(0);
+        javafx.beans.property.DoubleProperty progressValue = new javafx.beans.property.SimpleDoubleProperty(previousClampedXp / 100.0);
+        fill.prefWidthProperty().bind(progressTrack.widthProperty().multiply(progressValue));
+        fill.maxWidthProperty().bind(progressTrack.widthProperty().multiply(progressValue));
+        animateProgress(progressValue, clampedXp / 100.0);
+        animateProgressShine(shine, progressTrack);
         
-        progressTrack.getChildren().add(fill);
+        progressTrack.getChildren().addAll(fill, shine);
 
-        xp.getChildren().addAll(xpTop, progressTrack);
+        HBox xpMeta = new HBox(10,
+            standingMetricChip("TOTAL", String.valueOf(pointsValue)),
+            standingMetricChip("NEXT", Math.max(0, 100 - currentXp) + " XP"),
+            standingMetricChip("LEVEL", String.valueOf(levelValue))
+        );
+        xpMeta.setAlignment(Pos.CENTER_LEFT);
+
+        HBox tickRow = new HBox();
+        tickRow.setAlignment(Pos.CENTER_LEFT);
+        tickRow.setSpacing(0);
+        tickRow.getChildren().addAll(
+            xpTick("0"), flexibleTickSpace(), xpTick("25"), flexibleTickSpace(), xpTick("50"), flexibleTickSpace(), xpTick("75"), flexibleTickSpace(), xpTick("100")
+        );
+
+        xp.getChildren().addAll(xpTop, progressTrack, tickRow, xpMeta);
 
         card.getChildren().addAll(header, standingBar, xp);
+        lastRenderedStandingPoints = pointsValue;
+        lastRenderedStandingLevel = levelValue;
         return card;
     }
 
@@ -1407,35 +1455,31 @@ public class ProfileView implements ViewInterface {
         VBox tile = new VBox(6);
         tile.setAlignment(Pos.CENTER);
         tile.setPadding(new Insets(13, 8, 13, 8));
-        tile.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.04);" +
-            "-fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1px;" +
-            "-fx-background-radius: 16px; -fx-border-radius: 16px;"
-        );
+        tile.setStyle(HorizonDesignSystem.webSectionCard(16, false));
         tile.setCursor(javafx.scene.Cursor.HAND);
         tile.setMinHeight(78);
         
-        javafx.scene.text.Text icon = text(label.split(" ")[0], 18, true, tm.getAccentHex());
-        javafx.scene.text.Text title = text(label.substring(label.indexOf(" ")+1).toUpperCase(), 10, true, "rgba(255,255,255,0.70)");
+        String cleanIcon = quickActionIcon(actionId);
+        String cleanTitle = quickActionTitle(actionId);
+        javafx.scene.text.Text icon = text(cleanIcon, 18, true, tm.getAccentHex());
+        javafx.scene.text.Text title = text(cleanTitle.toUpperCase(), 10, true, "rgba(255,255,255,0.70)");
         
         tile.getChildren().addAll(icon, title);
         
         tile.setOnMouseEntered(e -> {
-            tile.setStyle(
-                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.12) + ";" +
-                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.30) + "; -fx-border-width: 1px;" +
-                "-fx-background-radius: 16px; -fx-border-radius: 16px;"
-            );
-            tile.setTranslateY(-3);
+            tile.setStyle(HorizonDesignSystem.webSectionCard(16, true));
+            javafx.animation.TranslateTransition lift = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(180), tile);
+            lift.setToY(-5);
+            lift.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            lift.play();
             title.setFill(Color.WHITE);
         });
         tile.setOnMouseExited(e -> {
-            tile.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.04);" +
-                "-fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1px;" +
-                "-fx-background-radius: 16px; -fx-border-radius: 16px;"
-            );
-            tile.setTranslateY(0);
+            tile.setStyle(HorizonDesignSystem.webSectionCard(16, false));
+            javafx.animation.TranslateTransition settle = new javafx.animation.TranslateTransition(javafx.util.Duration.millis(170), tile);
+            settle.setToY(0);
+            settle.setInterpolator(HorizonDesignSystem.WEB_EASE);
+            settle.play();
             title.setFill(Color.web("rgba(255,255,255,0.70)"));
         });
         tile.setOnMouseClicked(e -> {
@@ -1444,6 +1488,30 @@ public class ProfileView implements ViewInterface {
         });
         
         return tile;
+    }
+
+    private String quickActionIcon(String actionId) {
+        return switch (actionId) {
+            case "host" -> "\u2605";
+            case "join" -> "+";
+            case "2fa" -> "\u25C9";
+            case "biometrics" -> "\u25C7";
+            case "faceid" -> "\u25C9";
+            case "settings" -> "\u2699";
+            default -> "\u22EF";
+        };
+    }
+
+    private String quickActionTitle(String actionId) {
+        return switch (actionId) {
+            case "host" -> "Host Spotlight";
+            case "join" -> "Join by Code";
+            case "2fa" -> "2FA";
+            case "biometrics" -> "Biometrics";
+            case "faceid" -> "Face ID";
+            case "settings" -> "Settings";
+            default -> actionId == null ? "Action" : actionId;
+        };
     }
     
     private void showActionPanel(String actionId, VBox switcherView, Button showActionsBtn) {
@@ -1468,7 +1536,8 @@ public class ProfileView implements ViewInterface {
         header.setPadding(new Insets(0, 0, 12, 0));
         header.setStyle("-fx-border-color: rgba(255,255,255,0.1); -fx-border-width: 0 0 1 0;");
         
-        javafx.scene.control.Button backBtn = new javafx.scene.control.Button("←");
+        javafx.scene.control.Button backBtn = new javafx.scene.control.Button("ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Ãƒâ€šÃ‚Â");
+        backBtn.setText("\u2190");
         backBtn.setStyle(
             "-fx-min-width: 30px; -fx-min-height: 30px;" +
             "-fx-max-width: 30px; -fx-max-height: 30px;" +
@@ -1477,12 +1546,14 @@ public class ProfileView implements ViewInterface {
             "-fx-border-radius: 999px; -fx-background-radius: 999px;" +
             "-fx-text-fill: rgba(255,255,255,0.75); -fx-font-weight: 700; -fx-cursor: hand;"
         );
+        HorizonDesignSystem.installButtonMotion(backBtn);
         backBtn.setOnAction(e -> hideActionPanel(switcherView, detailView, showActionsBtn));
         
         javafx.scene.text.Text title = text(getTitleForAction(actionId), 14, true, "rgba(255,255,255,0.88)");
         
         header.getChildren().addAll(backBtn, title);
         detailView.getChildren().add(header);
+        HorizonDesignSystem.dropdownIn(detailView);
         
         // Add content based on action
         VBox content = new VBox(12);
@@ -1514,7 +1585,7 @@ public class ProfileView implements ViewInterface {
                 javafx.scene.control.TextArea bioArea = new javafx.scene.control.TextArea();
                 bioArea.setPromptText("Tell us a bit about yourself...");
                 bioArea.setWrapText(true);
-                bioArea.setStyle("-fx-padding: 9; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-control-inner-background: rgba(255,255,255,0.05); -fx-background-radius: 12; -fx-border-radius: 12;");
+                bioArea.setStyle(profileInputStyle() + "-fx-control-inner-background: " + surfaceCard() + ";");
                 bioArea.setPrefHeight(50);
                 bioArea.setText(profile != null && profile.getDescriptionProfile() != null ? profile.getDescriptionProfile() : "");
                 content.getChildren().add(bioArea);
@@ -1524,7 +1595,7 @@ public class ProfileView implements ViewInterface {
                 content.getChildren().add(text("Phone", 11, true, "rgba(255,255,255,0.70)"));
                 javafx.scene.control.TextField phoneField = new javafx.scene.control.TextField();
                 phoneField.setPromptText("Phone number");
-                phoneField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                phoneField.setStyle(profileInputStyle());
                 phoneField.setText(user != null && user.getPhone() != null ? user.getPhone() : "");
                 content.getChildren().add(phoneField);
                 content.getChildren().add(text(" ", 8, false, "transparent"));
@@ -1537,18 +1608,18 @@ public class ProfileView implements ViewInterface {
                 javafx.scene.control.ComboBox<String> themeCombo = new javafx.scene.control.ComboBox<>();
                 themeCombo.getItems().addAll("Dark", "Light", "Auto");
                 themeCombo.setValue(themeFromCode(profile == null ? null : profile.getTheme()));
-                themeCombo.setStyle("-fx-padding: 8; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-background-radius: 12; -fx-border-radius: 12;");
+                themeCombo.setStyle(profileInputStyle());
                 HBox.setHgrow(themeCombo, Priority.ALWAYS);
                 
                 javafx.scene.control.ComboBox<String> langCombo = new javafx.scene.control.ComboBox<>();
                 langCombo.getItems().addAll("English", "French", "Arabic", "Spanish");
                 langCombo.setValue(languageFromLocale(profile == null ? null : profile.getLocale()));
-                langCombo.setStyle("-fx-padding: 8; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-background-radius: 12; -fx-border-radius: 12;");
+                langCombo.setStyle(profileInputStyle());
                 HBox.setHgrow(langCombo, Priority.ALWAYS);
                 
                 javafx.scene.control.TextField tzField = new javafx.scene.control.TextField();
                 tzField.setPromptText("UTC+1");
-                tzField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                tzField.setStyle(profileInputStyle());
                 tzField.setText(timezoneText(profile == null ? null : profile.getTimezone()));
                 HBox.setHgrow(tzField, Priority.ALWAYS);
                 
@@ -1561,26 +1632,27 @@ public class ProfileView implements ViewInterface {
                 content.getChildren().add(text("Current Password", 11, true, "rgba(255,255,255,0.70)"));
                 javafx.scene.control.PasswordField currentPwdField = new javafx.scene.control.PasswordField();
                 currentPwdField.setPromptText("Required to change password");
-                currentPwdField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                currentPwdField.setStyle(profileInputStyle());
                 content.getChildren().add(currentPwdField);
                 content.getChildren().add(text(" ", 8, false, "transparent"));
                 
                 content.getChildren().add(text("New Password", 11, true, "rgba(255,255,255,0.70)"));
                 javafx.scene.control.PasswordField newPwdField = new javafx.scene.control.PasswordField();
                 newPwdField.setPromptText("Min 6 characters");
-                newPwdField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                newPwdField.setStyle(profileInputStyle());
                 content.getChildren().add(newPwdField);
                 content.getChildren().add(text(" ", 8, false, "transparent"));
                 
                 content.getChildren().add(text("Confirm Password", 11, true, "rgba(255,255,255,0.70)"));
                 javafx.scene.control.PasswordField confirmPwdField = new javafx.scene.control.PasswordField();
                 confirmPwdField.setPromptText("Confirm new password");
-                confirmPwdField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 12; -fx-border-radius: 12;");
+                confirmPwdField.setStyle(profileInputStyle());
                 content.getChildren().add(confirmPwdField);
                 content.getChildren().add(text(" ", 4, false, "transparent"));
                 
                 javafx.scene.control.Button saveBtn = new javafx.scene.control.Button("Save Changes");
-                saveBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
+                saveBtn.setStyle(profilePrimaryButtonStyle(14));
+                HorizonDesignSystem.installButtonMotion(saveBtn);
                 saveBtn.setOnAction(e -> {
                     User sessionUser = SessionManager.getInstance().getCurrentUser();
                     if (sessionUser == null || sessionUser.getIdUser() == null) {
@@ -1661,14 +1733,16 @@ public class ProfileView implements ViewInterface {
                 content.getChildren().add(text("Host Spotlight", 13, true, textSoft()));
                 content.getChildren().add(text("Start a video spotlight session and invite residents to join.", 11, false, textMuted()));
                 javafx.scene.control.Button startBtn = new javafx.scene.control.Button("Start Spotlight");
-                startBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
+                startBtn.setStyle(profilePrimaryButtonStyle(14));
+                HorizonDesignSystem.installButtonMotion(startBtn);
                 content.getChildren().add(startBtn);
             }
             case "join" -> {
                 content.getChildren().add(text("Join by Invitation Code", 13, true, textSoft()));
                 content.getChildren().add(text("Enter a room code to join an existing spotlight session.", 11, false, textMuted()));
                 javafx.scene.control.Button joinBtn = new javafx.scene.control.Button("Join Session");
-                joinBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 14; -fx-font-weight: 800; -fx-cursor: hand;");
+                joinBtn.setStyle(profilePrimaryButtonStyle(14));
+                HorizonDesignSystem.installButtonMotion(joinBtn);
                 content.getChildren().add(joinBtn);
             }
         }
@@ -1715,10 +1789,22 @@ public class ProfileView implements ViewInterface {
     }
     
     private String formatRole(String role) {
+        if (role == null) {
+            return "Resident";
+        }
+        if ("ADMIN".equals(role)) {
+            return "\u25C9 Administrator";
+        }
+        if ("OWNER".equals(role)) {
+            return "\u25C7 Property Owner";
+        }
+        if ("RESIDENT".equals(role)) {
+            return "\u25CF Resident";
+        }
         return switch(role) {
-            case "ADMIN" -> "🔐 Administrator";
-            case "OWNER" -> "👑 Property Owner";
-            case "RESIDENT" -> "👤 Resident";
+            case "ADMIN" -> "ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â Administrator";
+            case "OWNER" -> "ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ Property Owner";
+            case "RESIDENT" -> "ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“Ãƒâ€šÃ‚Â¤ Resident";
             default -> role;
         };
     }
@@ -1872,16 +1958,20 @@ public class ProfileView implements ViewInterface {
 
         Button generateBtn = new Button("Generate with AI");
         generateBtn.setStyle(fancyAvatarSecondaryButtonStyle());
+        HorizonDesignSystem.installButtonMotion(generateBtn);
         Button uploadBtn = new Button("Upload Image");
         uploadBtn.setStyle(fancyAvatarPrimaryButtonStyle());
+        HorizonDesignSystem.installButtonMotion(uploadBtn);
         Button cancelBtn = new Button("Cancel");
         cancelBtn.setStyle(fancyAvatarGhostButtonStyle());
+        HorizonDesignSystem.installButtonMotion(cancelBtn);
 
         HBox actions = new HBox(8, generateBtn, uploadBtn, cancelBtn);
         actions.setAlignment(Pos.CENTER_RIGHT);
 
         VBox content = new VBox(12, title, subtitle, actions);
-        content.setStyle("-fx-padding: 14; -fx-background-color: linear-gradient(to bottom right, #11131a, #171a24); -fx-background-radius: 18; -fx-border-radius: 18; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+        content.setStyle(HorizonDesignSystem.webSectionCard(18, false) + "-fx-padding: 14;");
+        HorizonDesignSystem.popIn(content);
 
         AtomicReference<String> resultRef = new AtomicReference<>(null);
         generateBtn.setOnAction(e -> { resultRef.set("generate"); stage.close(); });
@@ -1917,25 +2007,23 @@ public class ProfileView implements ViewInterface {
         area.setWrapText(true);
         area.setPrefRowCount(5);
         area.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.06);" +
-            "-fx-text-fill: white;" +
-            "-fx-prompt-text-fill: rgba(255,255,255,0.4);" +
-            "-fx-control-inner-background: rgba(255,255,255,0.06);" +
-            "-fx-background-radius: 18;" +
-            "-fx-border-color: rgba(255,255,255,0.12);" +
-            "-fx-border-radius: 18;"
+            HorizonDesignSystem.input() +
+            "-fx-control-inner-background: " + surfaceCard() + ";"
         );
 
         Button generateBtn = new Button("Generate");
         generateBtn.setStyle(fancyAvatarPrimaryButtonStyle());
+        HorizonDesignSystem.installButtonMotion(generateBtn);
         Button cancelBtn = new Button("Cancel");
         cancelBtn.setStyle(fancyAvatarGhostButtonStyle());
+        HorizonDesignSystem.installButtonMotion(cancelBtn);
 
         HBox actions = new HBox(8, generateBtn, cancelBtn);
         actions.setAlignment(Pos.CENTER_RIGHT);
 
         VBox content = new VBox(12, title, subtitle, area, actions);
-        content.setStyle("-fx-padding: 14; -fx-background-color: linear-gradient(to bottom right, #11131a, #171a24); -fx-background-radius: 18; -fx-border-radius: 18; -fx-border-color: rgba(255,255,255,0.08); -fx-border-width: 1;");
+        content.setStyle(HorizonDesignSystem.webSectionCard(18, false) + "-fx-padding: 14;");
+        HorizonDesignSystem.popIn(content);
 
         AtomicReference<String> resultRef = new AtomicReference<>(null);
         generateBtn.setOnAction(e -> { resultRef.set(safePrompt(area.getText())); stage.close(); });
@@ -2065,39 +2153,20 @@ public class ProfileView implements ViewInterface {
         }
 
         DialogPane pane = dialog.getDialogPane();
-        pane.setStyle(
-            "-fx-background-color: linear-gradient(to bottom right, #11131a, #171a24);" +
-            "-fx-border-color: rgba(255,255,255,0.10);" +
-            "-fx-border-width: 1;" +
-            "-fx-background-radius: 22;" +
-            "-fx-border-radius: 22;" +
-            "-fx-padding: 18;"
-        );
+        pane.setStyle(HorizonDesignSystem.webSectionCard(22, false) + "-fx-padding: 18;");
         return dialog;
     }
 
     private String fancyAvatarPrimaryButtonStyle() {
-        return "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-            "-fx-text-fill: white;" +
-            "-fx-font-weight: 800;" +
-            "-fx-background-radius: 999px;" +
-            "-fx-padding: 10 18 10 18;";
+        return HorizonDesignSystem.buttonPrimary() + "-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding: 10 18 10 18;";
     }
 
     private String fancyAvatarSecondaryButtonStyle() {
-        return "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-text-fill: rgba(255,255,255,0.92);" +
-            "-fx-font-weight: 700;" +
-            "-fx-background-radius: 999px;" +
-            "-fx-padding: 10 18 10 18;";
+        return HorizonDesignSystem.buttonGhost() + "-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding: 10 18 10 18;";
     }
 
     private String fancyAvatarGhostButtonStyle() {
-        return "-fx-background-color: transparent;" +
-            "-fx-text-fill: rgba(255,255,255,0.60);" +
-            "-fx-font-weight: 700;" +
-            "-fx-background-radius: 999px;" +
-            "-fx-padding: 10 18 10 18;";
+        return HorizonDesignSystem.buttonGhost() + "-fx-background-color:transparent;-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding: 10 18 10 18;";
     }
 
     private String safePrompt(String text) {
@@ -2284,11 +2353,36 @@ public class ProfileView implements ViewInterface {
         return true;
     }
 
+    private VBox standingMetricChip(String label, String value) {
+        VBox chip = new VBox(2, text(label, 9, true, "rgba(255,255,255,0.42)"), text(value, 12, true, "#ffffff"));
+        chip.setPadding(new Insets(8, 12, 8, 12));
+        chip.setMinWidth(74);
+        chip.setStyle("-fx-background-color: rgba(255,255,255,0.055);" +
+            "-fx-background-radius: 14px;" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 14px;");
+        return chip;
+    }
+
+    private Text xpTick(String label) {
+        return text(label, 9, true, "rgba(255,255,255,0.38)");
+    }
+
+    private javafx.scene.layout.Region flexibleTickSpace() {
+        javafx.scene.layout.Region region = new javafx.scene.layout.Region();
+        HBox.setHgrow(region, Priority.ALWAYS);
+        return region;
+    }
     private VBox standingPoint(String label, boolean active) {
         VBox point = new VBox(6);
         point.setAlignment(Pos.CENTER);
         Circle dot = new Circle(10);
         dot.setFill(active ? Color.web(tm.getAccentHex()) : Color.web("#2f3136"));
+        if (active) {
+            dot.setEffect(new javafx.scene.effect.DropShadow(18, Color.web(tm.toRgba(tm.getAccentHex(), 0.72))));
+            installBreathingGlow(dot, 0.18);
+        }
         Text txt = text(label, 11, true, active ? "#ffffff" : textMuted());
         point.getChildren().addAll(dot, txt);
         return point;
@@ -2346,7 +2440,7 @@ public class ProfileView implements ViewInterface {
             statusBox.setPadding(new Insets(12));
             statusBox.setStyle(shell(12, tm.toRgba(tm.getAccentHex(), 0.10), 0.15));
             
-            Text statusIcon = text("✓", 18, true, tm.getAccentHex());
+            Text statusIcon = text("ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ", 18, true, tm.getAccentHex());
             VBox statusInfo = new VBox(3,
                 text("Authenticator App Configured", 12, true, "#ffffff"),
                 text("Your account is protected with TOTP", 11, false, textMuted())
@@ -2383,7 +2477,7 @@ public class ProfileView implements ViewInterface {
             statusBox.setPadding(new Insets(12));
             statusBox.setStyle(shell(12, "rgba(255,255,255,0.05)", 0.12));
             
-            Text statusIcon = text("◯", 18, true, "rgba(255,255,255,0.50)");
+            Text statusIcon = text("ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒâ€šÃ‚Â¯", 18, true, "rgba(255,255,255,0.50)");
             VBox statusInfo = new VBox(3,
                 text("Authenticator App Setup", 12, true, "#ffffff"),
                 text("Set up time-based one-time passwords", 11, false, textMuted())
@@ -2399,7 +2493,8 @@ public class ProfileView implements ViewInterface {
             content.getChildren().add(text("Click the button below to generate a secret code. Save it in a secure location.", 11, false, textMuted()));
             
             javafx.scene.control.Button generateBtn = new javafx.scene.control.Button("Generate Secret");
-            generateBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            generateBtn.setStyle(profilePrimaryButtonStyle(10));
+            HorizonDesignSystem.installButtonMotion(generateBtn);
             content.getChildren().add(generateBtn);
             content.getChildren().add(text(" ", 8, false, "transparent"));
             
@@ -2419,17 +2514,18 @@ public class ProfileView implements ViewInterface {
             javafx.scene.control.PasswordField maskedSecretField = new javafx.scene.control.PasswordField();
             maskedSecretField.setEditable(false);
             maskedSecretField.setPromptText("Secret key will appear here");
-            maskedSecretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            maskedSecretField.setStyle(profileInputStyle());
 
             javafx.scene.control.TextField visibleSecretField = new javafx.scene.control.TextField();
             visibleSecretField.setEditable(false);
             visibleSecretField.setPromptText("Secret key will appear here");
-            visibleSecretField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            visibleSecretField.setStyle(profileInputStyle());
             visibleSecretField.setVisible(false);
             visibleSecretField.setManaged(false);
 
             javafx.scene.control.Button toggleSecretBtn = new javafx.scene.control.Button("Show");
-            toggleSecretBtn.setStyle("-fx-padding: 6 10 6 10; -fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.85); -fx-border-color: rgba(255,255,255,0.06); -fx-border-radius: 6; -fx-background-radius: 6;");
+            toggleSecretBtn.setStyle(profileGhostButtonStyle(8) + "-fx-padding: 6 10 6 10;");
+            HorizonDesignSystem.installButtonMotion(toggleSecretBtn);
             HBox secretRow = new HBox(8, maskedSecretField, visibleSecretField, toggleSecretBtn);
             secretRow.setAlignment(Pos.CENTER);
             HBox.setHgrow(maskedSecretField, Priority.ALWAYS);
@@ -2471,10 +2567,11 @@ public class ProfileView implements ViewInterface {
             javafx.scene.control.TextField codeField = new javafx.scene.control.TextField();
             codeField.setPromptText("000000");
             codeField.setMaxWidth(120);
-            codeField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10; -fx-font-size: 13px;");
+            codeField.setStyle(profileInputStyle() + "-fx-font-size: 13px;");
             
             javafx.scene.control.Button verifyBtn = new javafx.scene.control.Button("Verify & Activate");
-            verifyBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            verifyBtn.setStyle(profilePrimaryButtonStyle(10));
+            HorizonDesignSystem.installButtonMotion(verifyBtn);
             
             HBox codeRow = new HBox(10);
             codeRow.setAlignment(Pos.CENTER_LEFT);
@@ -2564,7 +2661,7 @@ public class ProfileView implements ViewInterface {
             warningBox.setPadding(new Insets(12));
             warningBox.setStyle(shell(12, "rgba(255,150,0,0.10)", 0.18));
             
-            Text warningIcon = text("⚠", 16, true, "#ffa600");
+            Text warningIcon = text("ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ", 16, true, "#ffa600");
             Text warningText = text("Windows Hello is not available on this device.", 11, false, "#ffffff");
             warningBox.getChildren().addAll(warningIcon, warningText);
             content.getChildren().add(warningBox);
@@ -2622,11 +2719,12 @@ public class ProfileView implements ViewInterface {
         
         javafx.scene.control.TextField deviceNameField = new javafx.scene.control.TextField();
         deviceNameField.setPromptText("e.g., My Laptop, Windows PC");
-        deviceNameField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+        deviceNameField.setStyle(profileInputStyle());
         content.getChildren().add(deviceNameField);
         
         javafx.scene.control.Button registerBtn = new javafx.scene.control.Button("Register Device");
-        registerBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+        registerBtn.setStyle(profilePrimaryButtonStyle(10));
+        HorizonDesignSystem.installButtonMotion(registerBtn);
         registerBtn.setOnAction(e -> {
             String deviceName = deviceNameField.getText();
             if (deviceName == null || deviceName.trim().isEmpty()) {
@@ -2662,7 +2760,7 @@ public class ProfileView implements ViewInterface {
             statusBox.setPadding(new Insets(12));
             statusBox.setStyle(shell(12, tm.toRgba(tm.getAccentHex(), 0.10), 0.15));
             
-            Text statusIcon = text("✓", 18, true, tm.getAccentHex());
+            Text statusIcon = text("ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ", 18, true, tm.getAccentHex());
             VBox statusInfo = new VBox(3,
                 text("Face ID Enrolled", 12, true, "#ffffff"),
                 text("Your face is securely enrolled and encrypted locally", 11, false, textMuted())
@@ -2692,7 +2790,7 @@ public class ProfileView implements ViewInterface {
             statusBox.setPadding(new Insets(12));
             statusBox.setStyle(shell(12, "rgba(255,255,255,0.05)", 0.12));
             
-            Text statusIcon = text("◯", 18, true, "rgba(255,255,255,0.50)");
+            Text statusIcon = text("ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒâ€šÃ‚Â¯", 18, true, "rgba(255,255,255,0.50)");
             VBox statusInfo = new VBox(3,
                 text("Face ID Setup", 12, true, "#ffffff"),
                 text("Enroll your face for authentication", 11, false, textMuted())
@@ -2710,13 +2808,14 @@ public class ProfileView implements ViewInterface {
             javafx.scene.control.PasswordField pinField = new javafx.scene.control.PasswordField();
             pinField.setPromptText("4-8 digit PIN");
             pinField.setMaxWidth(150);
-            pinField.setStyle("-fx-padding: 9 12 9 12; -fx-background-color: rgba(255,255,255,0.05); -fx-text-fill: white; -fx-border-color: rgba(255,255,255,0.12); -fx-border-width: 1; -fx-background-radius: 10; -fx-border-radius: 10;");
+            pinField.setStyle(profileInputStyle());
             content.getChildren().add(pinField);
             content.getChildren().add(text(" ", 8, false, "transparent"));
             
             // Enrollment button
             javafx.scene.control.Button startEnrollBtn = new javafx.scene.control.Button("Start Enrollment");
-            startEnrollBtn.setStyle("-fx-padding: 11 16 11 16; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            startEnrollBtn.setStyle(profilePrimaryButtonStyle(10));
+            HorizonDesignSystem.installButtonMotion(startEnrollBtn);
             
             VBox enrollmentBox = new VBox(12);
             enrollmentBox.setPadding(new Insets(14));
@@ -2742,10 +2841,12 @@ public class ProfileView implements ViewInterface {
             
             // Start camera capture button
             javafx.scene.control.Button startCaptureBtn = new javafx.scene.control.Button("Start Camera");
-            startCaptureBtn.setStyle("-fx-padding: 8 12 8 12; -fx-background-color: rgba(255,255,255,0.10); -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            startCaptureBtn.setStyle(profileGhostButtonStyle(10));
+            HorizonDesignSystem.installButtonMotion(startCaptureBtn);
             
             javafx.scene.control.Button completeEnrollBtn = new javafx.scene.control.Button("Complete Enrollment");
-            completeEnrollBtn.setStyle("-fx-padding: 9 14 9 14; -fx-background-color: " + tm.getEffectiveAccentGradient() + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-font-weight: 800; -fx-cursor: hand;");
+            completeEnrollBtn.setStyle(profilePrimaryButtonStyle(10));
+            HorizonDesignSystem.installButtonMotion(completeEnrollBtn);
             completeEnrollBtn.setDisable(true);
             
             enrollmentBox.getChildren().addAll(
@@ -2777,7 +2878,8 @@ public class ProfileView implements ViewInterface {
             // Start camera capture
             startCaptureBtn.setOnAction(e -> {
                 startCaptureBtn.setDisable(true);
-                startCaptureBtn.setText("📷 Capturing...");
+                startCaptureBtn.setText("ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â· Capturing...");
+                startCaptureBtn.setText("\u25CF Capturing...");
                 
                 Thread.ofVirtual().name("ProfileFaceID-Camera").start(() -> {
                     try {
@@ -2872,7 +2974,8 @@ public class ProfileView implements ViewInterface {
                             enrollmentHint.setText("Face capture complete! " + framesCaptured[0] + " frames captured.");
                             progressBar.setProgress(1.0);
                             startCaptureBtn.setDisable(true);
-                            startCaptureBtn.setText("✓ Frames Captured");
+                            startCaptureBtn.setText("ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ Frames Captured");
+                            startCaptureBtn.setText("\u2713 Frames Captured");
                             
                             if (!enrollmentBox.getChildren().contains(completeEnrollBtn)) {
                                 enrollmentBox.getChildren().add(completeEnrollBtn);
@@ -2910,30 +3013,55 @@ public class ProfileView implements ViewInterface {
 
     private VBox cardShell() {
         VBox c = new VBox(16);
-        c.setStyle(shell(28, surfaceCard(), 0.16));
+        c.setStyle(HorizonDesignSystem.webProfileCard());
+        HorizonDesignSystem.installLift(c, 1.006, -2);
         return c;
     }
 
     private String shell(double radius, String bg, double borderOpacity) {
-        return "-fx-background-color: " + bg + ";"
-            + "-fx-border-color: rgba(60,60,80," + borderOpacity + ");"
-            + "-fx-border-width: 1px;"
-            + "-fx-background-radius: " + radius + "px;"
-            + "-fx-border-radius: " + radius + "px;";
+        if (radius >= 100) {
+            return "-fx-background-color:" + HorizonDesignSystem.surfaceSoft() + ";" +
+                "-fx-background-radius:999px;" +
+                "-fx-border-color:" + HorizonDesignSystem.borderStrong() + ";" +
+                "-fx-border-width:1;" +
+                "-fx-border-radius:999px;";
+        }
+        return HorizonDesignSystem.webSectionCard((int) Math.round(radius), false);
+    }
+
+    private String profileInputStyle() {
+        return HorizonDesignSystem.input() +
+            "-fx-padding: 9 12 9 12;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-radius: 12px;";
+    }
+
+    private String profilePrimaryButtonStyle(int radius) {
+        return HorizonDesignSystem.buttonPrimary() +
+            "-fx-padding: 11 16 11 16;" +
+            "-fx-background-radius: " + radius + "px;" +
+            "-fx-border-radius: " + radius + "px;" +
+            "-fx-font-weight: 800;";
+    }
+
+    private String profileGhostButtonStyle(int radius) {
+        return HorizonDesignSystem.buttonGhost() +
+            "-fx-padding: 9 14 9 14;" +
+            "-fx-background-radius: " + radius + "px;" +
+            "-fx-border-radius: " + radius + "px;" +
+            "-fx-font-weight: 800;";
     }
 
     private String surfaceCard() {
-        return tm.isDarkMode()
-            ? "#0a0a0c"
-            : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)";
+        return tm.isDarkMode() ? "rgba(0,0,0,0.86)" : "rgba(255,255,255,0.96)";
     }
 
     private String surfaceSoft() {
-        return tm.isDarkMode() ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.08)";
+        return HorizonDesignSystem.surfaceSoft();
     }
 
     private String borderSoft() {
-        return tm.isDarkMode() ? tm.toRgba(tm.getAccentHex(), 0.34) : "rgba(15,23,42,0.16)";
+        return HorizonDesignSystem.borderStrong();
     }
 
     private String textSoft() {
@@ -2941,7 +3069,7 @@ public class ProfileView implements ViewInterface {
     }
 
     private String textMuted() {
-        return tm.isDarkMode() ? "rgba(255,255,255,0.79)" : "rgba(30,41,59,0.82)";
+        return HorizonDesignSystem.mutedText();
     }
 
     private Pane spacer(double width) {
@@ -2950,8 +3078,91 @@ public class ProfileView implements ViewInterface {
         return p;
     }
 
+
+    private String standingLevelStyle(boolean hot) {
+        double alpha = hot ? 0.42 : 0.24;
+        return "-fx-background-color: radial-gradient(focus-angle 35deg, focus-distance 20%, center 30% 18%, radius 120%, " + tm.toRgba(tm.getAccentHex(), 0.28) + " 0%, rgba(10,10,15,0.82) 62%, rgba(0,0,0,0.94) 100%);" +
+            "-fx-background-radius: 18px;" +
+            "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), alpha) + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 18px;" +
+            "-fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), hot ? 0.42 : 0.24) + ", " + (hot ? 34 : 22) + ", 0.20, 0, 0);";
+    }
+
+    private void animateIntegerText(Text target, int from, int to, int millis) {
+        if (target == null || from == to) return;
+        javafx.beans.property.IntegerProperty value = new javafx.beans.property.SimpleIntegerProperty(from);
+        value.addListener((obs, oldValue, newValue) -> target.setText(String.valueOf(newValue.intValue())));
+        javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.millis(millis),
+                new javafx.animation.KeyValue(value, to, HorizonDesignSystem.WEB_EASE)
+            )
+        );
+        ownedAnimations.add(timeline);
+        timeline.play();
+    }
+
+    private void animateProgress(javafx.beans.property.DoubleProperty progressValue, double targetValue) {
+        double target = Math.max(0.0, Math.min(1.0, targetValue));
+        javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(javafx.util.Duration.millis(820),
+                new javafx.animation.KeyValue(progressValue, target, HorizonDesignSystem.WEB_EASE)
+            )
+        );
+        ownedAnimations.add(timeline);
+        timeline.play();
+    }
+
+    private void animateProgressShine(StackPane shine, StackPane track) {
+        Platform.runLater(() -> {
+            double travel = Math.max(0, track.getWidth() - 58);
+            shine.setTranslateX(0);
+            javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.ZERO,
+                    new javafx.animation.KeyValue(shine.opacityProperty(), 0.0),
+                    new javafx.animation.KeyValue(shine.translateXProperty(), 0.0)
+                ),
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(180),
+                    new javafx.animation.KeyValue(shine.opacityProperty(), 0.75, HorizonDesignSystem.WEB_EASE)
+                ),
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(880),
+                    new javafx.animation.KeyValue(shine.translateXProperty(), travel, HorizonDesignSystem.WEB_EASE),
+                    new javafx.animation.KeyValue(shine.opacityProperty(), 0.0, HorizonDesignSystem.WEB_EASE)
+                )
+            );
+            ownedAnimations.add(timeline);
+            timeline.play();
+        });
+    }
+
+    private void playXpPulse(javafx.scene.Node node) {
+        javafx.animation.ScaleTransition pulse = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(260), node);
+        pulse.setFromX(1.0);
+        pulse.setFromY(1.0);
+        pulse.setToX(1.045);
+        pulse.setToY(1.045);
+        pulse.setAutoReverse(true);
+        pulse.setCycleCount(2);
+        pulse.setInterpolator(HorizonDesignSystem.WEB_POP);
+        ownedAnimations.add(pulse);
+        pulse.play();
+    }
+
+    private void installBreathingGlow(javafx.scene.Node node, double glowAlpha) {
+        node.setEffect(new javafx.scene.effect.DropShadow(22, Color.web(tm.toRgba(tm.getAccentHex(), glowAlpha))));
+        javafx.animation.ScaleTransition breath = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(1500), node);
+        breath.setFromX(1.0);
+        breath.setFromY(1.0);
+        breath.setToX(1.018);
+        breath.setToY(1.018);
+        breath.setAutoReverse(true);
+        breath.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        breath.setInterpolator(HorizonDesignSystem.WEB_EASE);
+        ownedAnimations.add(breath);
+        breath.play();
+    }
     private Text text(String value, int size, boolean bold, String color) {
-        Text t = new Text(value);
+        Text t = new Text(cleanUiGlyphText(value));
         t.setFont(Font.font(
             bold ? MainApplication.getInstance().getBoldFontFamily() : MainApplication.getInstance().getLightFontFamily(),
             bold ? FontWeight.BOLD : FontWeight.NORMAL,
@@ -2959,6 +3170,16 @@ public class ProfileView implements ViewInterface {
         ));
         t.setFill(Color.web(color));
         return t;
+    }
+
+    private String cleanUiGlyphText(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.contains("\u00C3") || value.contains("\u00E2")) {
+            return "\u25CF";
+        }
+        return value;
     }
 
     private void stopOwnedAnimations() {

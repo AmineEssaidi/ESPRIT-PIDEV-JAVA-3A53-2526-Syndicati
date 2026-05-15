@@ -40,10 +40,10 @@ REM Set Java environment
 if not defined JAVA_HOME set JAVA_HOME=c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\jdk-25
 set PATH=%JAVA_HOME%\bin;c:\Users\amine\OneDrive\Desktop\Syndicati_Java\tools\maven\bin;%PATH%
 
-REM Start Python Workers
-echo Starting AI Workers...
+REM Start local biometric worker only.
+REM The chat/agent now calls Gemini/Groq directly from Java, so no LangGraph worker is required.
+echo Starting biometric worker...
 start "InsightFace Worker" /B python workers\insightface_service.py
-start "LangGraph Agent Worker" /B python workers\langgraph_agent_service.py
 
 REM Launch app
 echo Starting Syndicati...

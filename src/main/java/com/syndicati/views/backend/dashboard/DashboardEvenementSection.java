@@ -2,6 +2,7 @@ package com.syndicati.views.backend.dashboard;
 
 import com.syndicati.models.evenement.Evenement;
 import com.syndicati.models.evenement.Participation;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -88,17 +89,10 @@ final class DashboardEvenementSection {
         searchField.setPromptText("Search events by title, type or date...");
         searchField.setPrefWidth(280);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
 
         String[][] filters = new String[][]{
             {"title", "Title"},
@@ -111,7 +105,7 @@ final class DashboardEvenementSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        HBox headerControls = new HBox(8, searchField, filterRow, sortPill);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
@@ -141,7 +135,7 @@ final class DashboardEvenementSection {
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
         renderEventsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -198,7 +192,7 @@ final class DashboardEvenementSection {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
 
-        sortPill.setText(queryState.ascending ? "Order: A-Z" : "Order: Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
         tableHost.getChildren().clear();
         tableHost.getChildren().add(
             view.dataTableWithCrud(
@@ -268,17 +262,10 @@ final class DashboardEvenementSection {
         searchField.setPromptText("Search by event, resident, or date...");
         searchField.setPrefWidth(280);
         searchField.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        searchField.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "white" : "#111827") + ";" +
-            "-fx-prompt-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.45)" : "rgba(15,23,42,0.45)") + ";"
-        );
+        searchField.setStyle(HorizonDesignSystem.webServiceInput(16, false));
+        HorizonDesignSystem.installFocusGlow(searchField);
 
-        Button sortPill = view.pillAction("Order: A-Z", false);
+        Button sortPill = view.pillAction("\u2191", false);
 
         String[][] filters = new String[][]{
             {"event", "Event"},
@@ -291,7 +278,7 @@ final class DashboardEvenementSection {
         Map<String, Button> filterButtons = new LinkedHashMap<>();
 
         VBox tableHost = new VBox();
-        HBox headerControls = new HBox(8, filterRow, sortPill, searchField);
+        HBox headerControls = new HBox(8, searchField, filterRow, sortPill);
         headerControls.setAlignment(Pos.CENTER_LEFT);
 
         for (String[] filter : filters) {
@@ -321,7 +308,7 @@ final class DashboardEvenementSection {
         filterButtons.forEach((k, btn) -> styleQueryPill(view, btn, false));
         renderParticipationsTable(view, baseRows, queryState, tableHost, sortPill, headerControls);
 
-        wrap.getChildren().addAll(stats, tableHost);
+        wrap.getChildren().add(tableHost);
         return wrap;
     }
 
@@ -378,7 +365,7 @@ final class DashboardEvenementSection {
             visibleRows = result.pageRows.toArray(new String[0][]);
         }
 
-        sortPill.setText(queryState.ascending ? "Order: A-Z" : "Order: Z-A");
+        sortPill.setText(queryState.ascending ? "\u2191" : "\u2193");
         tableHost.getChildren().clear();
         tableHost.getChildren().add(
             view.dataTableWithCrud(
@@ -393,20 +380,16 @@ final class DashboardEvenementSection {
     }
 
     private static void styleQueryPill(DashboardView view, Button btn, boolean active) {
+        btn.setStyle(queryPillStyle(view, active));
+        HorizonDesignSystem.installButtonMotion(btn);
+    }
+
+    private static String queryPillStyle(DashboardView view, boolean active) {
         if (active) {
-            btn.setStyle(
-                "-fx-background-color: " + view.accentRgba(1.0) + ";" +
-                "-fx-text-fill: white;" +
-                "-fx-border-width: 0;" +
-                "-fx-font-weight: bold;"
-            );
-        } else {
-            btn.setStyle(
-                "-fx-background-color: transparent;" +
-                "-fx-text-fill: " + (view.isDark() ? "rgba(255,255,255,0.6)" : "rgba(15,23,42,0.6)") + ";" +
-                "-fx-border-color: " + (view.isDark() ? "rgba(255,255,255,0.2)" : "rgba(15,23,42,0.2)") + ";" +
-                "-fx-border-width: 1;"
-            );
+            return "-fx-background-color:" + view.accentGradient() + ";-fx-border-color:" + view.accentRgba(0.36) + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:white;-fx-font-weight:700;-fx-cursor:hand;";
         }
+        return "-fx-background-color:transparent;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:1;-fx-background-radius:999px;-fx-border-radius:999px;-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.76)" : "rgba(15,23,42,0.82)") + ";-fx-font-weight:700;-fx-cursor:hand;";
     }
 }
+
+

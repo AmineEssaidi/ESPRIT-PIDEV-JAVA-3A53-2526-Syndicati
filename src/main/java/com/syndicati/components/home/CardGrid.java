@@ -11,6 +11,7 @@ import javafx.scene.text.Text;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.BlurType;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 
 public class CardGrid {
     private final GridPane root;
@@ -35,40 +36,17 @@ public class CardGrid {
         ThemeManager theme = ThemeManager.getInstance();
         StackPane card = new StackPane();
         card.setPrefSize(240, 180);
-        card.setStyle(
-            "-fx-background-color: " + theme.getLiquidGlassBackground() + ";" +
-            "-fx-background-radius: 28px;" +
-            "-fx-border-color: " + theme.getLiquidGlassBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 28px;"
-        );
-        DropShadow glow = new DropShadow();
-        glow.setBlurType(BlurType.GAUSSIAN);
-        glow.setColor(theme.getNeonGlowColor().deriveColor(0, 1, 1, 0.2));
-        glow.setRadius(16);
-        glow.setOffsetX(0);
-        glow.setOffsetY(4);
-        card.setEffect(glow);
+        card.setStyle(HorizonDesignSystem.webSectionCard(28, false));
 
         Text t = new Text(title);
         t.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 16));
         t.setFill(Color.web(theme.getTextColor()));
         card.getChildren().add(t);
         StackPane.setAlignment(t, Pos.TOP_LEFT);
-        StackPane.setMargin(t, new Insets(16));        card.setOnMouseEntered(e -> card.setStyle(
-            "-fx-background-color: " + theme.getTabHoverColor() + ";" +
-            "-fx-background-radius: 28px;" +
-            "-fx-border-color: " + theme.getLiquidGlassBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 28px;"
-        ));
-        card.setOnMouseExited(e -> card.setStyle(
-            "-fx-background-color: " + theme.getLiquidGlassBackground() + ";" +
-            "-fx-background-radius: 28px;" +
-            "-fx-border-color: " + theme.getLiquidGlassBorder() + ";" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 28px;"
-        ));
+        StackPane.setMargin(t, new Insets(16));
+        card.setOnMouseEntered(e -> card.setStyle(HorizonDesignSystem.webSectionCard(28, true)));
+        card.setOnMouseExited(e -> card.setStyle(HorizonDesignSystem.webSectionCard(28, false)));
+        HorizonDesignSystem.installWebLift(card);
 
         return card;
     }

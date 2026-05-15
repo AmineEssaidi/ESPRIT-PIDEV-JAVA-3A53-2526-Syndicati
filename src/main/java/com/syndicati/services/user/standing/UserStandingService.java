@@ -18,11 +18,15 @@ public class UserStandingService {
     }
 
     public UserStanding findOrCreateByUserId(int userId) {
+        return findOrCreateByUserId(userId, true);
+    }
+
+    public UserStanding findOrCreateByUserId(int userId, boolean useCache) {
         if (userId <= 0) {
             return standingRepository.createDefault(0);
         }
 
-        Optional<UserStanding> existing = standingRepository.findByUserId(userId);
+        Optional<UserStanding> existing = standingRepository.findByUserId(userId, useCache);
         if (existing.isPresent()) {
             return existing.get();
         }

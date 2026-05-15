@@ -55,8 +55,8 @@ public final class DbChangePoller {
                 }
 
                 boolean any = false;
-                // Forum is high-churn (comments/reactions) and can cause UI thrash.
-                // Keep polling focused on lower-churn modules; forum updates should be user-driven or manually refreshed.
+                any |= checkTopic(DataUpdateBus.Topic.FORUM, "publication", "id");
+                any |= checkTopic(DataUpdateBus.Topic.FORUM, "commentaire", "id_commentaire");
                 any |= checkTopic(DataUpdateBus.Topic.EVENTS, "evenement", "id_event");
                 any |= checkTopic(DataUpdateBus.Topic.RESIDENCE, "residence", "id_residence");
                 any |= checkTopic(DataUpdateBus.Topic.RESIDENCE, "appartement", "id_app");

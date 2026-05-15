@@ -5,11 +5,16 @@ import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.utils.image.ImageLoaderUtil;
 import com.syndicati.services.user.profile.ProfileService;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
 import javafx.animation.PauseTransition;
+import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Point2D;
@@ -29,7 +34,6 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.stage.Popup;
 import javafx.util.Duration;
 
 import java.util.HashMap;
@@ -50,12 +54,16 @@ public class DynamicHeader {
     private Runnable backgroundUpdateCallback;
 
     private HBox navbar;
+    private StackPane navbarShell;
+    private Region navbarGlow;
     private HBox leftSection;
     private HBox rightSection;
     private HBox tabsPill;
+    private StackPane tabsStack;
+    private Region tabHighlight;
 
     private final Map<String, Button> tabButtons = new LinkedHashMap<>();
-    private final Map<String, Popup> tabDropdownPopups = new HashMap<>();
+    private final Map<String, VBox> tabDropdownPopups = new HashMap<>();
 
     private VBox notificationDropdown;
     private VBox profileDropdown;
@@ -66,9 +74,12 @@ public class DynamicHeader {
     private PauseTransition closeProfileDelay;
     private PauseTransition closeNotificationDelay;
     private String activeTab = "home";
+    private String lastAnimatedActiveTab = "";
 
     private Circle profileTriggerAvatarCircle;
     private Label profileTriggerInitialLabel;
+
+    private static final double HEADER_DROPDOWN_GAP = 10;
 
     public DynamicHeader() {
         this.root = new StackPane();
@@ -78,7 +89,7 @@ public class DynamicHeader {
     }
 
     private void buildLayout() {
-        root.setPadding(new Insets(10, 30, 0, 30));
+        root.setPadding(new Insets(22, 30, 0, 30));
         root.setAlignment(Pos.TOP_CENTER);
         root.setStyle("-fx-background-color: transparent;");
         root.setPickOnBounds(false);
@@ -88,20 +99,21 @@ public class DynamicHeader {
 
         navbar = new HBox();
         navbar.setAlignment(Pos.CENTER_LEFT);
-        navbar.setPadding(new Insets(12, 22, 12, 22));
+        navbar.setPadding(new Insets(12, 24, 12, 24));
         navbar.setSpacing(16);
-        navbar.setMinHeight(80);
-        navbar.setPrefHeight(80);
+        navbar.setMinHeight(76);
+        navbar.setPrefHeight(76);
         navbar.setPickOnBounds(true);
+        installNavbarIslandHover();
 
         leftSection = buildLeftSection();
         HBox centerSection = buildCenterSection();
         rightSection = buildRightSection();
 
-        leftSection.setMinWidth(320);
-        leftSection.setPrefWidth(320);
-        rightSection.setMinWidth(320);
-        rightSection.setPrefWidth(320);
+        leftSection.setMinWidth(260);
+        leftSection.setPrefWidth(260);
+        rightSection.setMinWidth(260);
+        rightSection.setPrefWidth(260);
 
         Region leftSpacer = new Region();
         Region rightSpacer = new Region();
@@ -109,7 +121,16 @@ public class DynamicHeader {
         HBox.setHgrow(rightSpacer, Priority.ALWAYS);
 
         navbar.getChildren().addAll(leftSection, leftSpacer, centerSection, rightSpacer, rightSection);
-        root.getChildren().add(navbar);
+        navbarShell = new StackPane();
+        navbarShell.setPickOnBounds(false);
+        navbarGlow = new Region();
+        navbarGlow.setMouseTransparent(true);
+        navbarGlow.setOpacity(0);
+        navbarGlow.prefWidthProperty().bind(navbar.widthProperty());
+        navbarGlow.prefHeightProperty().bind(navbar.heightProperty());
+        navbarGlow.setStyle(navbarGlowStyle());
+        navbarShell.getChildren().addAll(navbarGlow, navbar);
+        root.getChildren().add(navbarShell);
         if (notificationDropdown != null) {
             root.getChildren().add(notificationDropdown);
             StackPane.setAlignment(notificationDropdown, Pos.TOP_LEFT);
@@ -145,11 +166,24 @@ public class DynamicHeader {
     private HBox buildCenterSection() {
         HBox center = new HBox();
         center.setAlignment(Pos.CENTER);
+        center.setPickOnBounds(false);
+
+        tabsStack = new StackPane();
+        tabsStack.setAlignment(Pos.TOP_LEFT);
+        tabsStack.setPickOnBounds(false);
+        tabHighlight = new Region();
+        tabHighlight.setManaged(false);
+        tabHighlight.setMouseTransparent(true);
+        tabHighlight.setOpacity(0);
+        tabHighlight.setStyle(tabHighlightStyle(false));
+        StackPane.setAlignment(tabHighlight, Pos.TOP_LEFT);
 
         tabsPill = new HBox();
         tabsPill.setAlignment(Pos.CENTER);
         tabsPill.setSpacing(4);
-        tabsPill.setPadding(new Insets(8));
+        tabsPill.setPadding(new Insets(9));
+        tabsPill.widthProperty().addListener((obs, oldValue, newValue) -> Platform.runLater(() -> moveTabHighlightToActive(false)));
+        tabsPill.heightProperty().addListener((obs, oldValue, newValue) -> Platform.runLater(() -> moveTabHighlightToActive(false)));
 
         Button home = createTabButton("home", lm.get("home"));
         home.setOnAction(e -> {
@@ -175,40 +209,43 @@ public class DynamicHeader {
         attachTabDropdown("about", about, aboutItems);
 
         tabsPill.getChildren().addAll(home, services, about);
-        center.getChildren().add(tabsPill);
+        tabsStack.getChildren().addAll(tabHighlight, tabsPill);
+        center.getChildren().add(tabsStack);
         updateTabsState();
+        Platform.runLater(() -> moveTabHighlightToActive(false));
         return center;
     }
 
     private Button createTabButton(String key, String text) {
         Button tab = new Button(text);
         tabButtons.put(key, tab);
-        tab.setPadding(new Insets(12, 20, 12, 20));
+        tab.setPadding(new Insets(11, 24, 11, 24));
+        tab.setMinHeight(44);
+        tab.setMinWidth(96);
         tab.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
         tab.setOnMouseEntered(e -> {
             if (!key.equals(activeTab)) {
-                tab.setStyle(
-                    "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)") + ";" +
-                    "-fx-background-radius: 25px;" +
-                    "-fx-text-fill: " + (themeManager.isDarkMode() ? "#ffffff" : "#111827") + ";" +
-                    "-fx-cursor: hand;"
-                );
+                tab.setStyle(navTabTextStyle(false, true));
+                moveTabHighlight(tab, true, true);
+                HorizonDesignSystem.activePulse(tab);
             }
         });
-        tab.setOnMouseExited(e -> updateTabsState());
+        tab.setOnMouseExited(e -> {
+            updateTabsState();
+            moveTabHighlightToActive(true);
+        });
         return tab;
     }
 
     private void attachTabDropdown(String key, Button anchorTab, Map<String, String> items) {
-        Popup popup = new Popup();
-        popup.setAutoHide(true);
-        popup.setHideOnEscape(true);
-
         VBox content = new VBox();
         content.setPadding(new Insets(10));
         content.setSpacing(3);
         content.setPrefWidth(210);
         content.setStyle("-fx-background-color: transparent;"); // Prevent white flash
+        content.setVisible(false);
+        content.setManaged(false);
+        content.setMouseTransparent(true);
 
         for (Map.Entry<String, String> entry : items.entrySet()) {
             Button row = new Button(entry.getKey());
@@ -229,19 +266,20 @@ public class DynamicHeader {
 
         content.setOnMouseEntered(e -> cancelTabCloseDelay());
         content.setOnMouseExited(e -> scheduleCloseTabPopup(key));
-        popup.getContent().add(content);
+        root.getChildren().add(content);
+        StackPane.setAlignment(content, Pos.TOP_LEFT);
 
         anchorTab.setOnMouseEntered(e -> showTabPopup(key, anchorTab));
         anchorTab.setOnMouseExited(e -> scheduleCloseTabPopup(key));
         anchorTab.setOnAction(e -> {
-            if (popup.isShowing()) {
-                popup.hide();
+            if (content.isVisible()) {
+                closeTabPopup(content);
             } else {
                 showTabPopup(key, anchorTab);
             }
         });
 
-        tabDropdownPopups.put(key, popup);
+        tabDropdownPopups.put(key, content);
     }
 
     private void showTabPopup(String key, Button anchor) {
@@ -249,18 +287,17 @@ public class DynamicHeader {
         closeNotificationPopup();
         closeProfilePopup();
 
-        Popup popup = tabDropdownPopups.get(key);
-        if (popup == null) {
+        VBox content = tabDropdownPopups.get(key);
+        if (content == null) {
             return;
         }
 
-        for (Map.Entry<String, Popup> e : tabDropdownPopups.entrySet()) {
+        for (Map.Entry<String, VBox> e : tabDropdownPopups.entrySet()) {
             if (!e.getKey().equals(key)) {
-                e.getValue().hide();
+                closeTabPopup(e.getValue());
             }
         }
 
-        Node content = popup.getContent().get(0);
         content.applyCss();
         content.autosize();
         double w = content.prefWidth(-1);
@@ -270,24 +307,47 @@ public class DynamicHeader {
             return;
         }
 
-        popup.show(anchor, b.getMinX() + (b.getWidth() - w) / 2.0, b.getMaxY() + 12);
+        double x = b.getMinX() + (b.getWidth() - w) / 2.0;
+        double y = dropdownTopScreen();
+        Point2D local = root.screenToLocal(x, y);
+        if (local == null) {
+            return;
+        }
+        content.relocate(local.getX(), local.getY());
+        content.setVisible(true);
+        content.setMouseTransparent(false);
+        content.toFront();
+        HorizonDesignSystem.dropdownIn(content);
     }
 
+
+    private double tabDropdownTopScreen(Node anchor) {
+        return dropdownTopScreen();
+    }
     private void scheduleCloseTabPopup(String key) {
         cancelTabCloseDelay();
         closeTabDelay = new PauseTransition(Duration.millis(160));
         closeTabDelay.setOnFinished(e -> {
-            Popup popup = tabDropdownPopups.get(key);
-            if (popup != null && popup.isShowing()) {
-                Node content = popup.getContent().isEmpty() ? null : popup.getContent().get(0);
-                boolean hoveringContent = content != null && content.isHover();
+            VBox content = tabDropdownPopups.get(key);
+            if (content != null && content.isVisible()) {
+                boolean hoveringContent = content.isHover();
                 boolean hoveringAnchor = tabButtons.containsKey(key) && tabButtons.get(key).isHover();
                 if (!hoveringContent && !hoveringAnchor) {
-                    popup.hide();
+                    closeTabPopup(content);
                 }
             }
         });
         closeTabDelay.play();
+    }
+
+    private void closeTabPopup(VBox content) {
+        if (content == null) {
+            return;
+        }
+        content.setMouseTransparent(true);
+        if (content.isVisible()) {
+            HorizonDesignSystem.dropdownOut(content, () -> content.setVisible(false));
+        }
     }
 
     private void cancelTabCloseDelay() {
@@ -501,9 +561,9 @@ public class DynamicHeader {
     private StackPane buildProfileTrigger() {
         StackPane wrap = new StackPane();
         wrap.setAlignment(Pos.CENTER);
-        wrap.setMinSize(42, 42);
+        wrap.setMinSize(48, 48);
 
-        Circle avatar = new Circle(13);
+        Circle avatar = new Circle(20);
         Label initial = new Label(currentInitial());
         initial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 11));
         initial.setTextFill(Color.WHITE);
@@ -515,12 +575,22 @@ public class DynamicHeader {
         profileTriggerAvatarCircle = avatar;
         profileTriggerInitialLabel = initial;
 
-        Circle online = new Circle(4, Color.web("#22c55e"));
+        Circle online = new Circle(5.5, Color.web("#22c55e"));
         StackPane.setAlignment(online, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(online, new Insets(0, 2, 2, 0));
+        StackPane.setMargin(online, new Insets(0, 1, 1, 0));
 
         wrap.getChildren().addAll(avatar, initial, online);
-        wrap.setStyle("-fx-cursor: hand;");
+        wrap.setStyle(
+            "-fx-cursor: hand;" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.045)" : "rgba(15,23,42,0.05)") + ";" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.08)") + ";" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 999px;"
+        );
+        wrap.setMinSize(48, 48);
+        wrap.setPrefSize(48, 48);
+        wrap.setMaxSize(48, 48);
         profileAnchor = wrap;
 
         profileDropdown = buildProfileDropdown();
@@ -555,15 +625,15 @@ public class DynamicHeader {
         VBox box = new VBox();
         box.setPadding(new Insets(0));
         box.setSpacing(0);
-        box.setPrefWidth(300);
-        box.setMaxWidth(300);
-        box.setMinWidth(300);
+        box.setPrefWidth(320);
+        box.setMaxWidth(320);
+        box.setMinWidth(320);
         box.setStyle(profileDropdownCardStyle());
 
         HBox head = new HBox();
         head.setAlignment(Pos.CENTER_LEFT);
         head.setSpacing(10);
-        head.setPadding(new Insets(18, 20, 14, 20));
+        head.setPadding(new Insets(20, 22, 16, 22));
         Circle pic = new Circle(20);
         boolean hasAvatar = applyAvatarFill(pic);
         Label picInitial = new Label(currentInitial());
@@ -646,6 +716,7 @@ public class DynamicHeader {
         notificationDropdown.setVisible(true);
         notificationDropdown.setMouseTransparent(false);
         notificationDropdown.toFront();
+        HorizonDesignSystem.dropdownIn(notificationDropdown);
     }
 
     private void positionProfileDropdown() {
@@ -666,19 +737,17 @@ public class DynamicHeader {
         double popupH = Math.max(profileDropdown.prefHeight(-1), 220);
 
         double xScreen = anchorScreen.getMaxX() - popupW;
-        double yScreen = anchorScreen.getMaxY() + 12;
+        double yScreen = dropdownTopScreen();
 
         double minX = rootScreen.getMinX() + 8;
         double maxX = rootScreen.getMaxX() - popupW - 8;
         double minY = rootScreen.getMinY() + 8;
-        double maxY = rootScreen.getMaxY() - popupH - 8;
+        double maxY = root.getScene().getWindow().getY() + root.getScene().getWindow().getHeight() - popupH - 24;
 
         if (maxX >= minX) {
             xScreen = Math.max(minX, Math.min(xScreen, maxX));
         }
-        if (maxY >= minY) {
-            yScreen = Math.max(minY, Math.min(yScreen, maxY));
-        }
+        yScreen = Math.max(minY, Math.min(yScreen, maxY));
 
         Point2D local = root.screenToLocal(xScreen, yScreen);
         profileDropdown.relocate(local.getX(), local.getY());
@@ -702,7 +771,7 @@ public class DynamicHeader {
         double popupH = Math.max(notificationDropdown.prefHeight(-1), 220);
 
         double xScreen = anchorScreen.getMaxX() - popupW;
-        double yScreen = anchorScreen.getMaxY() + 12;
+        double yScreen = dropdownTopScreen();
 
         double minX = rootScreen.getMinX() + 8;
         double maxX = rootScreen.getMaxX() - popupW - 8;
@@ -718,8 +787,17 @@ public class DynamicHeader {
 
         Point2D local = root.screenToLocal(xScreen, yScreen);
         notificationDropdown.relocate(local.getX(), local.getY());
-    }
+    }
 
+    private double dropdownTopScreen() {
+        double localTop = root.getPadding().getTop() + 76 + HEADER_DROPDOWN_GAP;
+        Point2D screenPoint = root.localToScreen(0, localTop);
+        if (screenPoint != null) {
+            return screenPoint.getY();
+        }
+        Bounds rootScreen = root.localToScreen(root.getBoundsInLocal());
+        return rootScreen == null ? localTop : rootScreen.getMinY() + localTop;
+    }
     private void scheduleCloseNotificationPopup() {
         cancelNotificationCloseDelay();
         closeNotificationDelay = new PauseTransition(Duration.millis(180));
@@ -767,18 +845,11 @@ public class DynamicHeader {
         profileDropdown.setVisible(true);
         profileDropdown.setMouseTransparent(false);
         profileDropdown.toFront();
+        HorizonDesignSystem.dropdownIn(profileDropdown);
     }
 
     private String profileDropdownCardStyle() {
-        String dropdownBg = themeManager.isDarkMode() ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.96)";
-        String dropdownBorder = themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)";
-        return
-            "-fx-background-color: " + dropdownBg + ";" +
-            "-fx-background-radius: 30px;" +
-            "-fx-border-color: " + dropdownBorder + ";" +
-            "-fx-border-radius: 30px;" +
-            "-fx-border-width: 1;" +
-            "-fx-effect: dropshadow(one-pass-box, rgba(0,0,0,0.55), 28, 0.2, 0, 8);";
+        return HorizonDesignSystem.webFloatingIsland(30, false);
     }
 
     private void refreshProfileTriggerAvatar() {
@@ -852,7 +923,7 @@ public class DynamicHeader {
 
     private void scheduleCloseProfilePopup() {
         cancelProfileCloseDelay();
-        closeProfileDelay = new PauseTransition(Duration.millis(450));
+        closeProfileDelay = new PauseTransition(Duration.millis(620));
         closeProfileDelay.setOnFinished(e -> {
             if (profileDropdown == null) {
                 return;
@@ -879,23 +950,27 @@ public class DynamicHeader {
     }
 
     private void closeAllTabPopups() {
-        for (Popup popup : tabDropdownPopups.values()) {
-            popup.hide();
+        for (VBox content : tabDropdownPopups.values()) {
+            closeTabPopup(content);
         }
     }
 
     private void closeNotificationPopup() {
         cancelNotificationCloseDelay();
-        if (notificationDropdown != null) {
-            notificationDropdown.setVisible(false);
+        if (notificationDropdown != null && notificationDropdown.isVisible()) {
+            notificationDropdown.setMouseTransparent(true);
+            HorizonDesignSystem.dropdownOut(notificationDropdown, () -> notificationDropdown.setVisible(false));
+        } else if (notificationDropdown != null) {
             notificationDropdown.setMouseTransparent(true);
         }
     }
 
     private void closeProfilePopup() {
         cancelProfileCloseDelay();
-        if (profileDropdown != null) {
-            profileDropdown.setVisible(false);
+        if (profileDropdown != null && profileDropdown.isVisible()) {
+            profileDropdown.setMouseTransparent(true);
+            HorizonDesignSystem.dropdownOut(profileDropdown, () -> profileDropdown.setVisible(false));
+        } else if (profileDropdown != null) {
             profileDropdown.setMouseTransparent(true);
         }
     }
@@ -905,107 +980,147 @@ public class DynamicHeader {
             String key = e.getKey();
             Button tab = e.getValue();
             boolean selected = key.equals(activeTab);
-            tab.setStyle(
-                "-fx-background-color: " + (selected
-                    ? (themeManager.isDarkMode() ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.07)")
-                    : "transparent") + ";" +
-                "-fx-background-radius: 25px;" +
-                "-fx-text-fill: " + (selected
-                    ? (themeManager.isDarkMode() ? "#ffffff" : "#111827")
-                    : (themeManager.isDarkMode() ? "#d1d5db" : "#374151")) + ";" +
-                "-fx-cursor: hand;"
-            );
+            tab.setStyle(navTabTextStyle(selected, false));
             tab.setFont(Font.font(
                 MainApplication.getInstance().getLightFontFamily(),
                 selected ? FontWeight.SEMI_BOLD : FontWeight.NORMAL,
                 13
             ));
+            if (selected && !key.equals(lastAnimatedActiveTab)) {
+                HorizonDesignSystem.activePulse(tab);
+            }
+        }
+        lastAnimatedActiveTab = activeTab;
+        Platform.runLater(() -> moveTabHighlightToActive(true));
+    }
+
+    private String navTabTextStyle(boolean selected, boolean hovering) {
+        String color = selected
+            ? "#ffffff"
+            : (hovering ? themeManager.getAccentHex() : (themeManager.isDarkMode() ? "#f5f5f5" : "#374151"));
+        String background = selected
+            ? themeManager.toRgba(themeManager.getAccentHex(), 0.15)
+            : (hovering ? (themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.055)") : "transparent");
+        return "-fx-background-color: " + background + ";" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-color: transparent;" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 999px;" +
+            "-fx-text-fill: " + color + ";" +
+            "-fx-cursor: hand;";
+    }
+
+    private String tabHighlightStyle(boolean hover) {
+        double alpha = hover ? 0.14 : 0.09;
+        return "-fx-background-color: " + themeManager.getEffectiveAccentGradient() + ", " + themeManager.toRgba(themeManager.getAccentHex(), alpha) + ";" +
+            "-fx-background-insets: 0, 1.4;" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-color: " + themeManager.toRgba(themeManager.getAccentHex(), hover ? 0.36 : 0.22) + ";" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 999px;" +
+            "-fx-effect: dropshadow(gaussian, " + themeManager.toRgba(themeManager.getAccentHex(), hover ? 0.24 : 0.14) + ", " + (hover ? 24 : 14) + ", 0.18, 0, 0);";
+    }
+
+    private void moveTabHighlightToActive(boolean animated) {
+        Button active = tabButtons.get(activeTab);
+        if (active != null) {
+            moveTabHighlight(active, false, animated);
         }
     }
 
+    private void moveTabHighlight(Button tab, boolean hover, boolean animated) {
+        if (tabsStack == null || tabHighlight == null || tab == null || tab.getScene() == null) {
+            return;
+        }
+        tabsStack.applyCss();
+        tabsStack.layout();
+        Bounds b = tabsStack.sceneToLocal(tab.localToScene(tab.getBoundsInLocal()));
+        tabHighlight.setStyle(tabHighlightStyle(hover));
+        double w = Math.max(1, b.getWidth());
+        double h = Math.max(1, b.getHeight());
+        double x = b.getMinX();
+        double y = b.getMinY();
+        if (!animated) {
+            tabHighlight.setPrefSize(w, h);
+            tabHighlight.setMinSize(w, h);
+            tabHighlight.setMaxSize(w, h);
+            tabHighlight.setTranslateX(x);
+            tabHighlight.setTranslateY(y);
+            tabHighlight.setOpacity(1);
+            return;
+        }
+        Timeline tl = new Timeline(new KeyFrame(Duration.millis(260),
+            new KeyValue(tabHighlight.translateXProperty(), x, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.translateYProperty(), y, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.prefWidthProperty(), w, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.prefHeightProperty(), h, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.minWidthProperty(), w, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.minHeightProperty(), h, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.maxWidthProperty(), w, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.maxHeightProperty(), h, HorizonDesignSystem.WEB_EASE),
+            new KeyValue(tabHighlight.opacityProperty(), 1, HorizonDesignSystem.WEB_EASE)
+        ));
+        tl.play();
+    }
+
     private void styleGhostPill(Button button) {
-        button.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.92)") + ";" +
-            "-fx-background-radius: 22px;" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.16)") + ";" +
-            "-fx-border-radius: 22px;" +
-            "-fx-border-width: 1;" +
-            "-fx-text-fill: " + (themeManager.isDarkMode() ? "#f8fafc" : "#111827") + ";" +
-            "-fx-cursor: hand;"
-        );
+        button.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-background-radius: 999px; -fx-border-radius: 999px; -fx-padding: 8 14 8 14;");
         button.setMinHeight(42);
+        HorizonDesignSystem.installButtonMotion(button);
     }
 
     private void styleDropdownRow(Button row) {
         String text = themeManager.isDarkMode() ? "#e5e7eb" : "#1f2937";
-        row.setStyle(
+        String base =
             "-fx-background-color: transparent;" +
-            "-fx-background-radius: 10px;" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-color: transparent;" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 12px;" +
             "-fx-text-fill: " + text + ";" +
-            "-fx-cursor: hand;"
-        );
-        row.setOnMouseEntered(e -> row.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.10)") + ";" +
-            "-fx-background-radius: 10px;" +
+            "-fx-cursor: hand;";
+        String hover =
+            "-fx-background-color: " + themeManager.toRgba(themeManager.getAccentHex(), themeManager.isDarkMode() ? 0.14 : 0.08) + ";" +
+            "-fx-background-radius: 12px;" +
+            "-fx-border-color: " + themeManager.toRgba(themeManager.getAccentHex(), 0.26) + ";" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 12px;" +
             "-fx-text-fill: " + text + ";" +
-            "-fx-cursor: hand;"
-        ));
-        row.setOnMouseExited(e -> row.setStyle(
-            "-fx-background-color: transparent;" +
-            "-fx-background-radius: 10px;" +
-            "-fx-text-fill: " + text + ";" +
-            "-fx-cursor: hand;"
-        ));
+            "-fx-cursor: hand;";
+        row.setStyle(base);
+        row.setOnMouseEntered(e -> row.setStyle(hover));
+        row.setOnMouseExited(e -> row.setStyle(base));
+        HorizonDesignSystem.installButtonMotion(row);
     }
 
     private void applyThemeStyling() {
-        navbar.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.97)") + ";" +
-            "-fx-background-radius: 50px;" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-radius: 50px;" +
-            "-fx-border-width: 1;" +
-            "-fx-effect: dropshadow(gaussian, " + (themeManager.isDarkMode() ? "rgba(0,0,0,0.40)" : "rgba(15,23,42,0.12)") + ", 26, 0.28, 0, 6);"
-        );
+        if (navbarGlow != null) {
+            navbarGlow.setStyle(navbarGlowStyle());
+        }
+        if (tabHighlight != null) {
+            tabHighlight.setStyle(tabHighlightStyle(false));
+        }
+        navbar.setStyle(HorizonDesignSystem.webFloatingIsland(999, false));
 
         tabsPill.setStyle(
-            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.05)" : "rgba(248,250,252,0.96)") + ";" +
-            "-fx-background-radius: 30px;" +
-            "-fx-border-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-radius: 30px;" +
+            "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.045)") + ";" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-color: " + HorizonDesignSystem.border() + ";" +
+            "-fx-border-radius: 999px;" +
             "-fx-border-width: 1;"
         );
 
-        String dropdownBg = themeManager.isDarkMode() ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.96)";
-        String dropdownBorder = themeManager.isDarkMode() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)";
-
-        for (Popup popup : tabDropdownPopups.values()) {
-            if (!popup.getContent().isEmpty() && popup.getContent().get(0) instanceof VBox box) {
-                box.setStyle(
-                    "-fx-background-color: " + dropdownBg + ";" +
-                    "-fx-background-radius: 20px;" +
-                    "-fx-border-color: " + dropdownBorder + ";" +
-                    "-fx-border-radius: 20px;" +
-                    "-fx-border-width: 1;" +
-                    "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 24, 0.25, 0, 8);"
-                );
-                for (Node n : box.getChildren()) {
-                    if (n instanceof Button b) {
-                        styleDropdownRow(b);
-                    }
+        for (VBox box : tabDropdownPopups.values()) {
+            box.setStyle(HorizonDesignSystem.webFloatingIsland(22, false));
+            for (Node n : box.getChildren()) {
+                if (n instanceof Button b) {
+                    styleDropdownRow(b);
                 }
             }
         }
 
         if (notificationDropdown != null) {
-            notificationDropdown.setStyle(
-                "-fx-background-color: " + dropdownBg + ";" +
-                "-fx-background-radius: 30px;" +
-                "-fx-border-color: " + dropdownBorder + ";" +
-                "-fx-border-radius: 30px;" +
-                "-fx-border-width: 1;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 28, 0.28, 0, 8);"
-            );
+            notificationDropdown.setStyle(HorizonDesignSystem.webFloatingIsland(30, false));
             for (Node n : notificationDropdown.getChildren()) {
                 if (n instanceof HBox h) {
                     for (Node child : h.getChildren()) {
@@ -1018,14 +1133,7 @@ public class DynamicHeader {
         }
 
         if (profileDropdown != null) {
-            profileDropdown.setStyle(
-                "-fx-background-color: " + dropdownBg + ";" +
-                "-fx-background-radius: 30px;" +
-                "-fx-border-color: " + dropdownBorder + ";" +
-                "-fx-border-radius: 30px;" +
-                "-fx-border-width: 1;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 28, 0.28, 0, 8);"
-            );
+            profileDropdown.setStyle(profileDropdownCardStyle());
             for (Node n : profileDropdown.getChildren()) {
                 if (n instanceof Button b) {
                     styleDropdownRow(b);
@@ -1033,12 +1141,37 @@ public class DynamicHeader {
             }
         }
 
-        if (profileDropdown != null) {
-            root.getChildren().remove(profileDropdown);
-            profileDropdown = null;
-        }
-
         updateTabsState();
+    }
+
+    private String navbarGlowStyle() {
+        return "-fx-background-color: " + themeManager.getEffectiveAccentGradient() + ";" +
+            "-fx-background-radius: 999px;" +
+            "-fx-effect: dropshadow(gaussian, " + themeManager.toRgba(themeManager.getAccentHex(), 0.48) + ", 46, 0.30, 0, 0);";
+    }
+
+    private void installNavbarIslandHover() {
+        navbar.setOnMouseEntered(e -> {
+            Timeline tl = new Timeline(new KeyFrame(Duration.millis(320),
+                new KeyValue(navbar.translateYProperty(), -2, HorizonDesignSystem.WEB_EASE),
+                new KeyValue(navbarGlow.opacityProperty(), 0.72, HorizonDesignSystem.WEB_EASE)
+            ));
+            tl.play();
+            navbar.setStyle(navbarHoverStyle());
+        });
+        navbar.setOnMouseExited(e -> {
+            Timeline tl = new Timeline(new KeyFrame(Duration.millis(320),
+                new KeyValue(navbar.translateYProperty(), 0, HorizonDesignSystem.WEB_EASE),
+                new KeyValue(navbarGlow.opacityProperty(), 0, HorizonDesignSystem.WEB_EASE)
+            ));
+            tl.play();
+            applyThemeStyling();
+        });
+    }
+
+    private String navbarHoverStyle() {
+        return HorizonDesignSystem.webFloatingIsland(999, true) +
+            "-fx-border-color: " + themeManager.toRgba(themeManager.getAccentHex(), 0.48) + ";";
     }
 
     public void setBackgroundUpdateCallback(Runnable callback) {

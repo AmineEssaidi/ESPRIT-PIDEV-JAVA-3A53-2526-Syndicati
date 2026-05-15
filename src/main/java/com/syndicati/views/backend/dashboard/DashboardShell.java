@@ -1,6 +1,7 @@
 package com.syndicati.views.backend.dashboard;
 
 import com.syndicati.utils.navigation.NavigationManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -33,9 +34,6 @@ final class DashboardShell {
         VBox.setVgrow(sb, Priority.ALWAYS);
         sb.setStyle("-fx-background-color:transparent;");
         sb.setPadding(new Insets(12, 10, 12, 10));
-        sb.setCache(true);
-        sb.setCacheHint(javafx.scene.CacheHint.SPEED);
-
         VBox topPill = view.glassPill(Pos.CENTER);
         topPill.setPadding(new Insets(12, 10, 12, 10));
         topPill.setSpacing(8);
@@ -72,15 +70,8 @@ final class DashboardShell {
         toggle.setFont(Font.font(view.boldFont(), FontWeight.BOLD, 12));
         toggle.setPadding(new Insets(7, 10, 7, 10));
         toggle.setMaxWidth(view.sidebarExpanded ? Double.MAX_VALUE : Region.USE_PREF_SIZE);
-        toggle.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:10px;" +
-            "-fx-background-radius:10px;" +
-            "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.8)" : "rgba(15,23,42,0.84)") + ";" +
-            "-fx-cursor:hand;"
-        );
+        toggle.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-background-radius:10px;-fx-border-radius:10px;");
+        HorizonDesignSystem.installButtonMotion(toggle);
         toggle.setOnAction(e -> view.toggleSidebar());
         Tooltip.install(toggle, new Tooltip(view.sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"));
         topPill.getChildren().addAll(logoRow, toggle);
@@ -134,23 +125,24 @@ final class DashboardShell {
         return sb;
     }
 
-    static VBox buildMainArea(DashboardView view) {
+    static Region buildMainArea(DashboardView view) {
         return view.createMainArea();
     }
 
     static HBox buildHeader(DashboardView view) {
         HBox h = new HBox(14);
         h.setAlignment(Pos.CENTER_LEFT);
-        h.setPadding(new Insets(12, 24, 12, 24));
-        h.setMinHeight(58);
-        h.setMaxHeight(58);
-        h.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(0,0,0,0.98)" : "rgba(255,255,255,0.98)") + ";-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:0 0 1 0;");
+        h.setPadding(new Insets(16, 26, 16, 26));
+        h.setMinHeight(78);
+        h.setMaxHeight(78);
+        h.setStyle("-fx-background-color:transparent;");
 
         HBox searchBar = new HBox(8);
         searchBar.setAlignment(Pos.CENTER_LEFT);
-        searchBar.setPadding(new Insets(7, 14, 7, 14));
-        searchBar.setPrefWidth(280);
-        searchBar.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.04)") + ";-fx-background-radius:10px;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)") + ";-fx-border-width:1;-fx-border-radius:10px;");
+        searchBar.setPadding(new Insets(10, 18, 10, 18));
+        searchBar.setPrefWidth(360);
+        searchBar.setStyle(HorizonDesignSystem.webFloatingIsland(999, false) + "-fx-padding:10 18 10 18;");
+        HorizonDesignSystem.installIslandMotion(searchBar);
         Text sch = new Text(" Search admin...");
         sch.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 13));
         sch.setFill(view.isDark() ? Color.web("rgba(255,255,255,0.60)") : Color.web("rgba(15,23,42,0.62)"));
@@ -163,9 +155,9 @@ final class DashboardShell {
 
         HBox up = new HBox(8);
         up.setAlignment(Pos.CENTER);
-        up.setPadding(new Insets(5, 12, 5, 6));
-        up.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";-fx-background-radius:20px;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.12)") + ";-fx-border-width:1;-fx-border-radius:20px;-fx-cursor:hand;");
-        Circle av = new Circle(14);
+        up.setPadding(new Insets(7, 14, 7, 8));
+        up.setStyle(HorizonDesignSystem.webFloatingIsland(999, false) + "-fx-padding:7 14 7 8;");
+        Circle av = new Circle(17);
         boolean hasAvatarImage = view.applyAvatarFill(av);
         Text ini = view.t(view.currentInitial(), view.boldFont(), FontWeight.BOLD, 12);
         ini.setFill(Color.WHITE);
@@ -181,6 +173,7 @@ final class DashboardShell {
         Text chevron = view.t("v", view.boldFont(), FontWeight.BOLD, 13);
         chevron.setFill(view.isDark() ? Color.web("rgba(255,255,255,0.65)") : Color.web("rgba(15,23,42,0.65)"));
         up.getChildren().addAll(avStack, ui, chevron);
+        HorizonDesignSystem.installIslandMotion(up);
 
         attachProfileDropdown(view, up);
 
@@ -192,14 +185,7 @@ final class DashboardShell {
         StackPane bell = new StackPane();
         bell.setPrefSize(38, 38);
         bell.setMaxSize(38, 38);
-        bell.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.05)") + ";" +
-            "-fx-background-radius:19;" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:19;" +
-            "-fx-cursor:hand;"
-        );
+        bell.setStyle(HorizonDesignSystem.webFloatingIsland(999, false) + "-fx-padding:0;");
 
         Text bellIc = view.t("\uD83D\uDD14", view.boldFont(), FontWeight.BOLD, 13);
         bellIc.setFill(view.isDark() ? Color.web("rgba(255,255,255,0.88)") : Color.web("rgba(15,23,42,0.84)"));
@@ -213,7 +199,7 @@ final class DashboardShell {
         Runnable showPopup = () -> {
             cancelNotificationCloseDelay(view);
             if (view.profilePopup != null && view.profilePopup.isShowing()) {
-                view.profilePopup.hide();
+                hidePopupWithMotion(view.profilePopup);
             }
             showNotificationPopupInsideStage(view, bell, dropdownCard);
         };
@@ -230,7 +216,7 @@ final class DashboardShell {
 
         bell.setOnMouseClicked(e -> {
             if (view.notificationPopup != null && view.notificationPopup.isShowing()) {
-                view.notificationPopup.hide();
+                hidePopupWithMotion(view.notificationPopup);
             } else {
                 showPopup.run();
             }
@@ -247,14 +233,8 @@ final class DashboardShell {
         box.setPrefWidth(300);
         box.setMinWidth(300);
         box.setMaxWidth(300);
-        box.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(12,12,18,0.94)" : "rgba(255,255,255,0.98)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-background-radius:16px;" +
-            "-fx-border-radius:16px;" +
-            "-fx-effect:dropshadow(one-pass-box," + (view.isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
-        );
+        box.setStyle(HorizonDesignSystem.webFloatingIsland(28, false));
+        HorizonDesignSystem.installIslandMotion(box);
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -269,19 +249,12 @@ final class DashboardShell {
         Button close = new Button("x");
         close.setPadding(new Insets(4, 10, 4, 10));
         close.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        close.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";" +
-            "-fx-background-radius:999;" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.14)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-border-radius:999;" +
-            "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.88)" : "rgba(15,23,42,0.84)") + ";" +
-            "-fx-cursor:hand;"
-        );
+        close.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-background-radius:999px;-fx-border-radius:999px;");
+        HorizonDesignSystem.installButtonMotion(close);
         close.setOnAction(e -> {
             cancelNotificationCloseDelay(view);
             if (view.notificationPopup != null) {
-                view.notificationPopup.hide();
+                hidePopupWithMotion(view.notificationPopup);
             }
         });
 
@@ -313,7 +286,7 @@ final class DashboardShell {
 
         row.getChildren().addAll(tTitle, tBody, tTime);
         row.setStyle("-fx-background-color:transparent;-fx-background-radius:14px;");
-        row.setOnMouseEntered(e -> row.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:14px;"));
+        row.setOnMouseEntered(e -> row.setStyle("-fx-background-color:" + HorizonDesignSystem.surfaceSoft() + ";-fx-background-radius:14px;"));
         row.setOnMouseExited(e -> row.setStyle("-fx-background-color:transparent;-fx-background-radius:14px;"));
         return row;
     }
@@ -323,7 +296,7 @@ final class DashboardShell {
         view.notificationHideDelay = new PauseTransition(Duration.millis(180));
         view.notificationHideDelay.setOnFinished(e -> {
             if (view.notificationPopup != null && view.notificationPopup.isShowing() && !anchor.isHover() && !card.isHover()) {
-                view.notificationPopup.hide();
+                hidePopupWithMotion(view.notificationPopup);
             }
         });
         view.notificationHideDelay.playFromStart();
@@ -361,6 +334,7 @@ final class DashboardShell {
 
         if (!view.notificationPopup.isShowing()) {
             view.notificationPopup.show(bell, desiredX, desiredY);
+            HorizonDesignSystem.dropdownIn(card);
         }
 
         double popupW = view.notificationPopup.getWidth() > 0 ? view.notificationPopup.getWidth() : width;
@@ -387,14 +361,8 @@ final class DashboardShell {
         VBox card = new VBox(8);
         card.setPrefWidth(280);
         card.setPadding(new Insets(14, 12, 10, 12));
-        card.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(12,12,18,0.90)" : "rgba(255,255,255,0.98)") + ";" +
-            "-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.12)") + ";" +
-            "-fx-border-width:1;" +
-            "-fx-background-radius:16px;" +
-            "-fx-border-radius:16px;" +
-            "-fx-effect:dropshadow(one-pass-box," + (view.isDark() ? "rgba(0,0,0,0.45)" : "rgba(15,23,42,0.14)") + ",30,0,0,10);"
-        );
+        card.setStyle(HorizonDesignSystem.webObsidianPanel(20));
+        HorizonDesignSystem.installIslandMotion(card);
 
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -418,7 +386,7 @@ final class DashboardShell {
 
         Region sep1 = new Region();
         sep1.setPrefHeight(1);
-        sep1.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.10)") + ";");
+        sep1.setStyle("-fx-background-color:" + HorizonDesignSystem.border() + ";");
 
         VBox items = new VBox(4);
         items.getChildren().addAll(
@@ -430,33 +398,15 @@ final class DashboardShell {
 
         Region sep2 = new Region();
         sep2.setPrefHeight(1);
-        sep2.setStyle("-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.10)") + ";");
+        sep2.setStyle("-fx-background-color:" + HorizonDesignSystem.border() + ";");
 
         Button logout = dropdownItem(view, "\u23FB", "Log Out", () -> com.syndicati.MainApplication.getInstance().logout());
-        logout.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:#ef4444;" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        );
-        logout.setOnMouseEntered(e -> logout.setStyle(
-            "-fx-background-color:rgba(239,68,68,0.12);" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:#ef4444;" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
-        logout.setOnMouseExited(e -> logout.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:#ef4444;" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
+        String logoutBase = "-fx-background-color:transparent;-fx-background-radius:12px;-fx-border-color:transparent;-fx-border-radius:12px;-fx-text-fill:#ef4444;-fx-padding:9 10 9 10;-fx-alignment:CENTER_LEFT;-fx-cursor:hand;";
+        String logoutHover = "-fx-background-color:rgba(239,68,68,0.12);-fx-background-radius:12px;-fx-border-color:rgba(239,68,68,0.20);-fx-border-width:1;-fx-border-radius:12px;-fx-text-fill:#ef4444;-fx-padding:9 10 9 10;-fx-alignment:CENTER_LEFT;-fx-cursor:hand;";
+        logout.setStyle(logoutBase);
+        logout.setOnMouseEntered(e -> logout.setStyle(logoutHover));
+        logout.setOnMouseExited(e -> logout.setStyle(logoutBase));
+        HorizonDesignSystem.installButtonMotion(logout);
 
         card.getChildren().addAll(header, sep1, items, sep2, logout);
 
@@ -469,14 +419,14 @@ final class DashboardShell {
         PauseTransition hideDelay = new PauseTransition(Duration.millis(170));
         hideDelay.setOnFinished(e -> {
             if (view.profilePopup != null && view.profilePopup.isShowing() && !profilePill.isHover() && !card.isHover()) {
-                view.profilePopup.hide();
+                hidePopupWithMotion(view.profilePopup);
             }
         });
 
         Runnable showPopup = () -> {
             hideDelay.stop();
             if (view.notificationPopup != null && view.notificationPopup.isShowing()) {
-                view.notificationPopup.hide();
+                hidePopupWithMotion(view.notificationPopup);
             }
             showProfilePopupInsideStage(view, profilePill, card);
         };
@@ -491,7 +441,7 @@ final class DashboardShell {
         });
         profilePill.setOnMouseClicked(e -> {
             if (view.profilePopup != null && view.profilePopup.isShowing()) {
-                view.profilePopup.hide();
+                hidePopupWithMotion(view.profilePopup);
             } else {
                 showPopup.run();
             }
@@ -519,6 +469,7 @@ final class DashboardShell {
 
         if (!view.profilePopup.isShowing()) {
             view.profilePopup.show(profilePill, desiredX, desiredY);
+            HorizonDesignSystem.dropdownIn(card);
         }
 
         double popupW = view.profilePopup.getWidth() > 0 ? view.profilePopup.getWidth() : 280;
@@ -544,37 +495,19 @@ final class DashboardShell {
     static Button dropdownItem(DashboardView view, String icon, String label, Runnable action) {
         Button b = new Button(icon + "   " + label);
         b.setMaxWidth(Double.MAX_VALUE);
-        b.setFont(Font.font(view.lightFont(), FontWeight.NORMAL, 12));
-        b.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.9)" : "rgba(15,23,42,0.88)") + ";" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        );
-        b.setOnMouseEntered(e -> b.setStyle(
-            "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.07)") + ";" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,1)" : "rgba(15,23,42,1)") + ";" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
-        b.setOnMouseExited(e -> b.setStyle(
-            "-fx-background-color:transparent;" +
-            "-fx-background-radius:8px;" +
-            "-fx-text-fill:" + (view.isDark() ? "rgba(255,255,255,0.9)" : "rgba(15,23,42,0.88)") + ";" +
-            "-fx-padding:9 10 9 10;" +
-            "-fx-alignment:CENTER_LEFT;" +
-            "-fx-cursor:hand;"
-        ));
+        b.setFont(Font.font(view.boldFont(), FontWeight.BOLD, 12));
+        String base = "-fx-background-color:transparent;-fx-background-radius:14px;-fx-border-color:transparent;-fx-border-radius:14px;-fx-text-fill:" + HorizonDesignSystem.text() + ";-fx-padding:10 12 10 12;-fx-alignment:CENTER_LEFT;-fx-cursor:hand;";
+        String hover = "-fx-background-color:" + (view.isDark() ? "rgba(255,255,255,0.065)" : "rgba(15,23,42,0.06)") + ";-fx-background-radius:14px;-fx-border-color:" + (view.isDark() ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.10)") + ";-fx-border-width:1;-fx-border-radius:14px;-fx-text-fill:" + HorizonDesignSystem.text() + ";-fx-padding:10 12 10 12;-fx-alignment:CENTER_LEFT;-fx-cursor:hand;";
+        b.setStyle(base);
+        b.setOnMouseEntered(e -> b.setStyle(hover));
+        b.setOnMouseExited(e -> b.setStyle(base));
+        HorizonDesignSystem.installButtonMotion(b);
         b.setOnAction(e -> {
             if (view.profilePopup != null) {
-                view.profilePopup.hide();
+                hidePopupWithMotion(view.profilePopup);
             }
             if (view.notificationPopup != null) {
-                view.notificationPopup.hide();
+                hidePopupWithMotion(view.notificationPopup);
             }
             action.run();
         });
@@ -596,5 +529,16 @@ final class DashboardShell {
         if (view.exitCallback != null) {
             view.exitCallback.run();
         }
+    }
+
+    private static void hidePopupWithMotion(Popup popup) {
+        if (popup == null || !popup.isShowing()) {
+            return;
+        }
+        if (popup.getContent().isEmpty()) {
+            popup.hide();
+            return;
+        }
+        HorizonDesignSystem.dropdownOut(popup.getContent().get(0), popup::hide);
     }
 }

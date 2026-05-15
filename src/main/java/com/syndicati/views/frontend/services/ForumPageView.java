@@ -26,6 +26,7 @@ import com.syndicati.utils.image.imagekit.ImageKitStorageService;
 import com.syndicati.utils.image.imagekit.ImageKitUploadResult;
 import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.application.Platform;
 import java.io.File;
 import java.io.IOException;
@@ -99,13 +100,15 @@ public class ForumPageView implements ViewInterface {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm");
     private static final DateTimeFormatter SHORT_DATE_FMT = DateTimeFormatter.ofPattern("MMM dd");
     private static final List<String> CATEGORIES = List.of(
-            "Announcement", "Suggestion", "Jeux Video", "Informatique", "Nouveauté", "Discussion General", "Culture",
+            "Announcement", "Suggestion", "Jeux Video", "Informatique", "NouveautÃƒÂ©", "Discussion General", "Culture",
             "Sport");
     private static final List<String> MODERATOR_ROLES = List.of("OWNER", "ADMIN", "SUPERADMIN", "SYNDIC");
-    private static final List<String> EMOJIS = List.of("❤️", "😂", "😮", "😢", "😡", "👍", "🔥", "✨");
+    private static final List<String> EMOJIS = List.of(
+            "\u2764", "\uD83D\uDE02", "\uD83D\uDE2E", "\uD83D\uDE22",
+            "\uD83D\uDE21", "\uD83D\uDC4D", "\uD83D\uDD25", "\u2728");
 
     private final StackPane root = new StackPane();
-    private final VBox mainLayout = new VBox(18);
+    private final VBox mainLayout = new VBox(0);
     private final VBox notificationBox = new VBox(10);
     private final ThemeManager tm = ThemeManager.getInstance();
     private final SessionManager session = SessionManager.getInstance();
@@ -136,6 +139,8 @@ public class ForumPageView implements ViewInterface {
     private final Text heroMeta = new Text("");
     private final Text heroBody = new Text("Select a publication from the right panel.");
     private final Text heroCategory = new Text("Discussion General");
+    private final Label heroAuthorLabel = new Label("Horizon Community");
+    private final Text heroAuthorInitial = new Text("H");
     private final HBox ownerActions = new HBox(8);
 
     private final Button postLikeButton = new Button("Like");
@@ -266,9 +271,11 @@ public class ForumPageView implements ViewInterface {
     private javafx.animation.Timeline commentRenderTimeline;
 
     public ForumPageView() {
-        mainLayout.setPadding(new Insets(24));
+        mainLayout.setPadding(new Insets(0));
         mainLayout.setStyle("-fx-background-color: transparent;");
         mainLayout.setAlignment(Pos.TOP_CENTER);
+        mainLayout.setFillWidth(true);
+        mainLayout.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 
         notificationBox.setPickOnBounds(false);
         notificationBox.setAlignment(Pos.TOP_RIGHT);
@@ -277,14 +284,25 @@ public class ForumPageView implements ViewInterface {
         notificationBox.setPrefWidth(400);
         notificationBox.setMaxWidth(Region.USE_PREF_SIZE);
 
-        mainLayout.getChildren().addAll(buildHero(), buildSplit());
+        Node forumShell = buildSplit();
+        if (forumShell instanceof Region region) {
+            region.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+            region.prefWidthProperty().bind(root.widthProperty());
+        }
+        VBox.setVgrow(forumShell, Priority.ALWAYS);
+        mainLayout.getChildren().add(forumShell);
         root.getChildren().addAll(mainLayout, notificationBox);
 
         showFace(readFace);
         loadCategory("General");
 
-        // Live updates for forum were causing noticeable stutter under high-churn tables (comments/reactions).
-        // Keep forum refresh user-driven (buttons) and cache-first instead.
+        updatesSubscription = updates.subscribe(DataUpdateBus.Topic.FORUM, t -> Platform.runLater(() -> {
+            db.clearCache("forum:category:" + currentFilter);
+            loadCategory(currentFilter);
+            if (current != null) {
+                refreshPublicationDetail();
+            }
+        }));
     }
 
     @Override
@@ -337,57 +355,25 @@ public class ForumPageView implements ViewInterface {
         try { ImageLoaderUtil.clearCache(); } catch (Exception ignored) {}
     }
 
-    private Node buildHero() {
-        VBox hero = new VBox(12);
-        hero.setPadding(new Insets(34));
-        hero.setMaxWidth(1800);
-        hero.setStyle(
-                "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #090909 0%, #131313 100%);" +
-                        "-fx-background-radius: 48px;" +
-                        "-fx-border-color: rgba(255,255,255,0.08);" +
-                        "-fx-border-radius: 48px;");
-
-        Label badge = new Label("COMMUNITY HUB");
-        badge.setStyle(
-                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.14) + ";" +
-                        "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.45) + ";" +
-                        "-fx-border-radius: 100px;" +
-                        "-fx-background-radius: 100px;" +
-                        "-fx-padding: 7 16 7 16;" +
-                        "-fx-font-size: 11px;" +
-                        "-fx-font-weight: 800;" +
-                        "-fx-text-fill: white;");
-
-        Text title = new Text("Voices of Horizon");
-        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 66));
-        title.setFill(Color.WHITE);
-
-        Text subtitle = new Text(
-                "Join the conversation. Connect with neighbors, share ideas, and shape your community.");
-        subtitle.setWrappingWidth(840);
-        subtitle.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 17));
-        subtitle.setFill(Color.web("rgba(255,255,255,0.68)"));
-
-        hero.getChildren().addAll(badge, title, subtitle);
-        return hero;
-    }
-
     private Node buildSplit() {
         HBox split = new HBox();
         split.setMinWidth(0);
-        split.setMaxWidth(1800);
-        split.setPrefHeight(860);
+        split.setMaxWidth(Double.MAX_VALUE);
+        split.setMinHeight(700);
+        split.setPrefHeight(780);
         split.setStyle(
                 "-fx-background-color: #0a0a0c;" +
                         "-fx-background-radius: 32px;" +
                         "-fx-border-color: rgba(255,255,255,0.08);" +
-                        "-fx-border-radius: 32px;");
+                        "-fx-border-width: 1px;" +
+                        "-fx-border-radius: 32px;" +
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.60), 60, 0.25, 0, 20);");
 
         VBox main = buildMainPanel();
         VBox side = buildSidePanel();
-        side.setPrefWidth(360);
-        side.setMaxWidth(360);
-        side.setMinWidth(360);
+        side.setPrefWidth(350);
+        side.setMaxWidth(350);
+        side.setMinWidth(300);
 
         main.setMinWidth(0);
         main.prefWidthProperty().bind(
@@ -427,46 +413,75 @@ public class ForumPageView implements ViewInterface {
         readFace.setMaxWidth(Double.MAX_VALUE);
         readFace.setPrefWidth(Region.USE_COMPUTED_SIZE);
 
-        detailHero.setPrefHeight(320);
-        detailHero.setMinHeight(320);
-        detailHero.setMaxHeight(320);
+        detailHero.setPrefHeight(400);
+        detailHero.setMinHeight(400);
+        detailHero.setMaxHeight(400);
         detailHero.setMinWidth(0);
         detailHero.setMaxWidth(Double.MAX_VALUE);
         detailHero.setClip(detailHeroClip);
         detailHero.setStyle(
-                "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #1a1a2e 0%, #16213e 100%); -fx-border-radius: 24px 0px 0px 24px;");
+                "-fx-background-color: #14141e;" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-width: 0 0 1px 0;");
 
-        detailHeroClip.setArcWidth(24);
-        detailHeroClip.setArcHeight(24);
+        detailHeroClip.setArcWidth(0);
+        detailHeroClip.setArcHeight(0);
         detailHeroClip.widthProperty().bind(detailHero.widthProperty());
         detailHeroClip.heightProperty().bind(detailHero.heightProperty());
 
         detailHeroImage.setSmooth(true);
         detailHeroImage.setPreserveRatio(false);
-        detailHero.widthProperty().addListener((obs, oldV, newV) -> refreshHeroViewport());
-        detailHero.heightProperty().addListener((obs, oldV, newV) -> refreshHeroViewport());
+        detailHeroImage.fitWidthProperty().bind(detailHero.widthProperty());
+        detailHeroImage.fitHeightProperty().bind(detailHero.heightProperty());
 
         heroTitle.setFill(Color.WHITE);
-        heroTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 42));
+        heroTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 38));
         heroMeta.setFill(Color.web("rgba(255,255,255,0.72)"));
+        heroMeta.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
         heroCategory.setFill(Color.web("rgba(255,255,255,0.95)"));
         heroBody.setFill(Color.web("rgba(255,255,255,0.90)"));
-        heroBody.wrappingWidthProperty().bind(detailHero.widthProperty().subtract(52));
-
-        VBox heroOverlay = new VBox(10);
-        heroOverlay.setPadding(new Insets(28));
-        heroOverlay.setAlignment(Pos.BOTTOM_LEFT);
-        heroOverlay.setStyle(
-                "-fx-background-color: linear-gradient(from 0% 100% to 0% 0%, rgba(20,20,30,0.94) 3%, rgba(20,20,30,0.08) 100%);");
+        heroBody.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
 
         Label categoryPill = new Label();
         categoryPill.textProperty().bind(heroCategory.textProperty());
         categoryPill.setStyle(categoryStyle(heroCategory.getText()));
         heroCategory.textProperty().addListener((obs, oldVal, newVal) -> categoryPill.setStyle(categoryStyle(newVal)));
 
-        heroOverlay.getChildren().addAll(categoryPill, heroMeta, heroTitle);
-        detailHero.getChildren().setAll(detailHeroImage, heroOverlay);
-        StackPane.setAlignment(heroOverlay, Pos.BOTTOM_LEFT);
+        HBox metaRow = new HBox(10, categoryPill, heroMeta);
+        metaRow.setAlignment(Pos.CENTER_LEFT);
+        metaRow.setMinWidth(0);
+
+        Circle authorAvatar = new Circle(20);
+        authorAvatar.setFill(Color.web("rgba(255,255,255,0.12)"));
+        authorAvatar.setStroke(Color.web("rgba(255,255,255,0.22)"));
+        authorAvatar.setStrokeWidth(1);
+        heroAuthorInitial.setFill(Color.WHITE);
+        heroAuthorInitial.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 14));
+        StackPane authorAvatarWrap = new StackPane(authorAvatar, heroAuthorInitial);
+        heroAuthorLabel.setStyle("-fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: 800;");
+        HBox authorRow = new HBox(8, authorAvatarWrap, heroAuthorLabel);
+        authorRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox copy = new VBox(12, metaRow, heroTitle, authorRow);
+        copy.setAlignment(Pos.BOTTOM_LEFT);
+        copy.setMinWidth(0);
+        copy.setMaxWidth(Double.MAX_VALUE);
+        copy.setPadding(new Insets(0));
+        heroTitle.wrappingWidthProperty().bind(copy.widthProperty().subtract(8));
+
+        Region heroFade = new Region();
+        heroFade.setStyle(
+                "-fx-background-color: linear-gradient(to top, #14141e 5%, rgba(20,20,30,0.0) 100%);");
+        heroFade.prefWidthProperty().bind(detailHero.widthProperty());
+        heroFade.prefHeightProperty().bind(detailHero.heightProperty());
+
+        StackPane overlay = new StackPane(copy);
+        overlay.setAlignment(Pos.BOTTOM_LEFT);
+        overlay.setPadding(new Insets(0, 40, 40, 40));
+        overlay.prefWidthProperty().bind(detailHero.widthProperty());
+        overlay.prefHeightProperty().bind(detailHero.heightProperty());
+
+        detailHero.getChildren().setAll(detailHeroImage, heroFade, overlay);
 
         FlowPane reactionCluster = buildPublicationReactionCluster();
 
@@ -476,7 +491,11 @@ public class ForumPageView implements ViewInterface {
         actionsBar.setPrefWidth(Region.USE_COMPUTED_SIZE);
         actionsBar.setMaxWidth(Double.MAX_VALUE);
         actionsBar.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 14px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 14px;");
+                "-fx-background-color: rgba(255,255,255,0.03);" +
+                        "-fx-background-radius: 16px;" +
+                        "-fx-border-color: rgba(255,255,255,0.10);" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-border-radius: 16px;");
 
         Rectangle actionsBarClip = new Rectangle();
         actionsBarClip.widthProperty().bind(actionsBar.widthProperty());
@@ -520,10 +539,13 @@ public class ForumPageView implements ViewInterface {
                         "-fx-text-fill: white; -fx-padding: 8 14 8 14;");
         feelingButton.setOnAction(e -> showSentimentAnalysis());
 
-        VBox publicationBody = new VBox(10, heroBody, actionsBar);
-        publicationBody.setPadding(new Insets(22, 0, 10, 0));
+        VBox publicationBody = new VBox(22, heroBody, actionsBar);
+        publicationBody.setPadding(new Insets(0));
         publicationBody.setMinWidth(0);
         publicationBody.setMaxWidth(Double.MAX_VALUE);
+        publicationBody.setStyle(
+                "-fx-background-color: transparent;");
+        heroBody.wrappingWidthProperty().bind(publicationBody.widthProperty().subtract(38));
 
         buildPublicationReportPanel();
         buildPublicationEmojiPanel();
@@ -536,8 +558,8 @@ public class ForumPageView implements ViewInterface {
         VBox.setMargin(commentsSection, new Insets(20, 0, 0, 0));
         commentsSection.setMaxWidth(Double.MAX_VALUE);
 
-        VBox content = new VBox(publicationBody, inlinePanels, commentsSection);
-        content.setPadding(new Insets(0, 26, 26, 26));
+        VBox content = new VBox(14, publicationBody, inlinePanels, commentsSection);
+        content.setPadding(new Insets(40, 40, 40, 40));
         content.setMinWidth(0);
         content.setFillWidth(true);
         content.setMaxWidth(Double.MAX_VALUE);
@@ -557,7 +579,7 @@ public class ForumPageView implements ViewInterface {
         scroll.setClip(scrollClip);
 
         // Force content to fit scroll pane width
-        content.prefWidthProperty().bind(scroll.widthProperty().subtract(52));
+        content.prefWidthProperty().bind(scroll.widthProperty().subtract(80));
         content.setMaxWidth(Double.MAX_VALUE);
 
         readFace.getChildren().addAll(detailHero, scroll);
@@ -566,7 +588,7 @@ public class ForumPageView implements ViewInterface {
     private FlowPane buildPublicationReactionCluster() {
         styleReactionButton(postLikeButton);
         styleReactionButton(postDislikeButton);
-        styleReactionButton(postEmojiButton);
+        styleForumEmojiButton(postEmojiButton, false, false);
         styleReactionButton(postBookmarkButton);
         styleReactionButton(postReportButton);
 
@@ -627,8 +649,7 @@ public class ForumPageView implements ViewInterface {
 
         VBox card = new VBox(12);
         card.setPadding(new Insets(22));
-        card.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
+        card.setStyle(HorizonDesignSystem.webServiceCard(16, false));
 
         Text heading = new Text("Create Publication");
         heading.setFill(Color.WHITE);
@@ -711,8 +732,7 @@ public class ForumPageView implements ViewInterface {
 
         VBox card = new VBox(12);
         card.setPadding(new Insets(22));
-        card.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.10); -fx-border-radius: 16px;");
+        card.setStyle(HorizonDesignSystem.webServiceCard(16, false));
 
         Text heading = new Text("Edit Publication");
         heading.setFill(Color.WHITE);
@@ -794,17 +814,26 @@ public class ForumPageView implements ViewInterface {
 
     private VBox buildCommentsSection() {
         VBox wrap = new VBox(10);
-        wrap.setPadding(new Insets(18));
+        wrap.setPadding(new Insets(20));
         wrap.setFillWidth(true);
         wrap.setMaxWidth(Double.MAX_VALUE);
         wrap.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03); -fx-border-color: rgba(255,255,255,0.12); -fx-border-radius: 16px; -fx-background-radius: 16px;");
+                "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.04), rgba(255,107,107,0.03));" +
+                        "-fx-border-color: rgba(255,255,255,0.12);" +
+                        "-fx-border-radius: 18px; -fx-background-radius: 18px;");
 
         Text heading = new Text("Discussion");
         heading.setFill(Color.WHITE);
         heading.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 18));
 
-        commentInput.setPromptText("Share your thoughts...");
+        Label helper = new Label("Reply, react, or use Feeling to read the room.");
+        helper.setStyle("-fx-text-fill: rgba(255,255,255,0.50); -fx-font-size: 12px;");
+        Region headingSpacer = new Region();
+        HBox.setHgrow(headingSpacer, Priority.ALWAYS);
+        HBox headingRow = new HBox(10, heading, headingSpacer, helper);
+        headingRow.setAlignment(Pos.CENTER_LEFT);
+
+        commentInput.setPromptText("Write a thoughtful reply...");
         commentInput.setPrefRowCount(3);
         commentInput.setMaxWidth(Double.MAX_VALUE);
         tuneInput(commentInput);
@@ -904,9 +933,17 @@ public class ForumPageView implements ViewInterface {
         imageRow.setMaxWidth(Double.MAX_VALUE);
 
         Button send = primaryButton("Post Comment", this::submitComment);
+        send.setMinHeight(42);
 
-        commentFormContainer.getChildren().setAll(commentInput, commentValidation, imageRow, commentImagePreviews,
-                toggleIsland, send);
+        VBox composerCard = new VBox(10, commentInput, commentValidation, imageRow, commentImagePreviews, toggleIsland, send);
+        composerCard.setPadding(new Insets(14));
+        composerCard.setStyle(
+                "-fx-background-color: rgba(0,0,0,0.20);" +
+                        "-fx-background-radius: 16px;" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-radius: 16px;");
+
+        commentFormContainer.getChildren().setAll(composerCard);
         commentFormContainer.setFillWidth(true);
 
         announcementHint.setTextFill(Color.web("rgba(255,255,255,0.5)"));
@@ -914,26 +951,26 @@ public class ForumPageView implements ViewInterface {
         announcementHint.setManaged(false);
         announcementHint.setVisible(false);
 
-        wrap.getChildren().addAll(heading, commentsBox, commentFormContainer, announcementHint);
+        wrap.getChildren().addAll(headingRow, commentsBox, commentFormContainer, announcementHint);
         return wrap;
     }
 
     private VBox buildSidePanel() {
-        VBox side = new VBox(10);
-        side.setPadding(new Insets(14));
-        side.setStyle("-fx-background-color: rgba(0,0,0,0.2);");
-        side.setPrefWidth(360);
+        VBox side = new VBox(0);
+        side.setPadding(new Insets(0));
+        side.setStyle(
+                "-fx-background-color: rgba(0,0,0,0.20);");
+        side.setPrefWidth(350);
         side.setMinWidth(300);
-        side.setMaxWidth(360);
+        side.setMaxWidth(350);
 
         Text title = new Text("Discussions");
         title.setFill(Color.WHITE);
         title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
 
-        HBox topActions = new HBox(8,
-                filterGeneral,
-                filterAnnouncements);
-        topActions.setPadding(new Insets(10, 0, 10, 0));
+        HBox topActions = new HBox(8, filterGeneral, filterAnnouncements);
+        topActions.setPadding(new Insets(0));
+        topActions.setAlignment(Pos.CENTER_LEFT);
 
         styleFilterButton(filterGeneral, true);
         styleFilterButton(filterAnnouncements, false);
@@ -954,14 +991,24 @@ public class ForumPageView implements ViewInterface {
 
         Button createSwitcher = ghostButton("+ New Post", () -> openCreateFace(false));
         createSwitcher.setMaxWidth(Double.MAX_VALUE);
+        createSwitcher.setMinHeight(42);
 
+        VBox commandDeck = new VBox(16, title, topActions, createSwitcher);
+        commandDeck.setPadding(new Insets(16));
+        commandDeck.setStyle(
+                "-fx-background-color: transparent;" +
+                        "-fx-border-color: rgba(255,255,255,0.10);" +
+                        "-fx-border-width: 0 0 1px 0;");
+
+        listBox.setPadding(new Insets(16));
+        listBox.setSpacing(12);
         ScrollPane scroll = new ScrollPane(listBox);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollBarPolicy.NEVER);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        side.getChildren().addAll(title, topActions, createSwitcher, scroll);
+        side.getChildren().addAll(commandDeck, scroll);
         return side;
     }
 
@@ -969,7 +1016,7 @@ public class ForumPageView implements ViewInterface {
         btn.setStyle(
                 "-fx-background-color: " + (active ? tm.getAccentHex() : "rgba(255,255,255,0.05)") + ";" +
                         "-fx-text-fill: " + (active ? "white" : "rgba(255,255,255,0.6)") + ";" +
-                        "-fx-font-size: 11px; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 6 12 6 12;");
+                        "-fx-font-size: 11px; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8 14 8 14;");
     }
 
     private void loadCategory(String category) {
@@ -983,6 +1030,7 @@ public class ForumPageView implements ViewInterface {
             // Clear UI immediately for responsiveness.
             listBox.getChildren().clear();
             listItemsById.clear();
+            listBox.getChildren().add(sideRailState("Loading discussions", "Fetching the latest community posts..."));
         }
 
         // 2) Refresh in background and update UI + cache.
@@ -996,14 +1044,22 @@ public class ForumPageView implements ViewInterface {
                         renderCategoryList(pubs);
                     }
                 });
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                javafx.application.Platform.runLater(() -> {
+                    listBox.getChildren().clear();
+                    listBox.getChildren().add(sideRailState("Could not load posts", "Check your connection and try again."));
+                });
+            }
         });
     }
 
     private void renderCategoryList(List<Publication> pubs) {
         listBox.getChildren().clear();
         listItemsById.clear();
-        if (pubs == null) return;
+        if (pubs == null || pubs.isEmpty()) {
+            listBox.getChildren().add(sideRailState("No discussions yet", "Create the first post for this category."));
+            return;
+        }
         for (Publication p : pubs) {
             if (p == null) continue;
             VBox item = buildListItem(p);
@@ -1012,28 +1068,43 @@ public class ForumPageView implements ViewInterface {
                 listItemsById.put(p.getIdPublication(), item);
             }
         }
-        if (!pubs.isEmpty()) {
-            selectPublication(pubs.get(0));
-        }
+        selectPublication(pubs.get(0));
+    }
+
+    private VBox sideRailState(String title, String message) {
+        VBox state = new VBox(8);
+        state.setAlignment(Pos.CENTER_LEFT);
+        state.setPadding(new Insets(18));
+        state.setMinHeight(128);
+        state.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.035);" +
+                        "-fx-background-radius: 16px;" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-radius: 16px;");
+
+        Label icon = new Label("\u2726");
+        icon.setStyle("-fx-text-fill: " + tm.getAccentHex() + "; -fx-font-size: 18px; -fx-font-weight: 900;");
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: 900;");
+        Label messageLabel = new Label(message);
+        messageLabel.setWrapText(true);
+        messageLabel.setStyle("-fx-text-fill: rgba(255,255,255,0.58); -fx-font-size: 11px;");
+        state.getChildren().addAll(icon, titleLabel, messageLabel);
+        return state;
     }
 
     private VBox buildListItem(Publication p) {
         VBox item = new VBox(6);
-        item.setPadding(new Insets(14));
+        item.setPadding(new Insets(16));
         item.setCursor(Cursor.HAND);
-        item.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12px;");
+        item.setStyle(forumListItemStyle(false, false));
 
-        item.setOnMouseEntered(e -> item.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.07); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.15); -fx-border-radius: 12px;"));
+        item.setOnMouseEntered(e -> item.setStyle(forumListItemStyle(true, false)));
         item.setOnMouseExited(e -> {
             if (current != null && current.getIdPublication().equals(p.getIdPublication())) {
-                item.setStyle(
-                        "-fx-background-color: rgba(255,255,255,0.1); -fx-background-radius: 12px; -fx-border-color: "
-                                + tm.getAccentHex() + "; -fx-border-radius: 12px;");
+                item.setStyle(forumListItemStyle(false, true));
             } else {
-                item.setStyle(
-                        "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12px;");
+                item.setStyle(forumListItemStyle(false, false));
             }
         });
 
@@ -1045,23 +1116,28 @@ public class ForumPageView implements ViewInterface {
 
         Text title = new Text(p.getTitrePublication());
         title.setFill(Color.WHITE);
-        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
-        title.setWrappingWidth(300);
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 15));
+        title.setWrappingWidth(235);
 
         String authorName = (p.getUser() != null)
                 ? (p.getUser().getFirstName() + " " + p.getUser().getLastName())
                 : "Anonymous";
-        Label meta = new Label("by " + authorName + " • " + p.getDatePublication().format(SHORT_DATE_FMT));
+        Label meta = new Label("by " + authorName + " Ã¢â‚¬Â¢ " + p.getDatePublication().format(SHORT_DATE_FMT));
         meta.setTextFill(Color.web("rgba(255,255,255,0.5)"));
         meta.setStyle("-fx-font-size: 11px;");
+
+        Label snippet = new Label(compactText(p.getDescPublication(), 86));
+        snippet.setWrapText(true);
+        snippet.setMaxWidth(238);
+        snippet.setStyle("-fx-text-fill: rgba(255,255,255,0.44); -fx-font-size: 11px; -fx-padding: 2 0 0 0;");
 
         HBox row = new HBox(12);
         row.setAlignment(Pos.CENTER_LEFT);
         
-        Circle avatar = createAvatar(18, p.getUser());
+        Circle avatar = createAvatar(20, p.getUser());
         
         VBox textContent = new VBox(2);
-        textContent.getChildren().addAll(cat, title, meta);
+        textContent.getChildren().addAll(cat, title, meta, snippet);
         HBox.setHgrow(textContent, Priority.ALWAYS);
         
         row.getChildren().addAll(avatar, textContent);
@@ -1069,16 +1145,20 @@ public class ForumPageView implements ViewInterface {
         return item;
     }
 
+    private String compactText(String value, int max) {
+        String clean = value == null ? "" : value.replaceAll("\\s+", " ").trim();
+        if (clean.isBlank()) return "No description provided.";
+        if (clean.length() <= max) return clean;
+        return clean.substring(0, Math.max(0, max - 1)).trim() + "...";
+    }
+
     private void selectPublication(Publication p) {
         if (current != null && listItemsById.containsKey(current.getIdPublication())) {
-            listItemsById.get(current.getIdPublication()).setStyle(
-                    "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.05); -fx-border-radius: 12px;");
+            listItemsById.get(current.getIdPublication()).setStyle(forumListItemStyle(false, false));
         }
         current = p;
         if (listItemsById.containsKey(p.getIdPublication())) {
-            listItemsById.get(p.getIdPublication()).setStyle(
-                    "-fx-background-color: rgba(255,255,255,0.1); -fx-background-radius: 12px; -fx-border-color: "
-                            + tm.getAccentHex() + "; -fx-border-radius: 12px;");
+            listItemsById.get(p.getIdPublication()).setStyle(forumListItemStyle(false, true));
         }
 
         refreshPublicationDetail();
@@ -1097,6 +1177,8 @@ public class ForumPageView implements ViewInterface {
                 ? (current.getUser().getFirstName() + " " + current.getUser().getLastName())
                 : "Anonymous";
         heroMeta.setText("Published on " + current.getDatePublication().format(DATE_FMT) + " by " + author);
+        heroAuthorLabel.setText(author);
+        heroAuthorInitial.setText(author == null || author.isBlank() ? "H" : author.substring(0, 1).toUpperCase());
 
         String img = current.getImagePublication();
         if (img != null && !img.isBlank() && !"-".equals(img)) {
@@ -1149,8 +1231,8 @@ public class ForumPageView implements ViewInterface {
         if (currentHeroImage == null || detailHeroImage.getImage() == null)
             return;
 
-        double viewW = detailHero.getWidth();
-        double viewH = detailHero.getHeight();
+        double viewW = detailHeroImage.getFitWidth();
+        double viewH = detailHeroImage.getFitHeight();
         if (viewW <= 0 || viewH <= 0)
             return;
 
@@ -1174,8 +1256,6 @@ public class ForumPageView implements ViewInterface {
         }
 
         detailHeroImage.setViewport(new Rectangle2D(sx, sy, sw, sh));
-        detailHeroImage.setFitWidth(viewW);
-        detailHeroImage.setFitHeight(viewH);
     }
 
     private void refreshPublicationReactions() {
@@ -1257,7 +1337,7 @@ public class ForumPageView implements ViewInterface {
         for (String emoji : EMOJIS) {
             String hex = Integer.toHexString(emoji.codePointAt(0));
             // Special case for heart
-            if (emoji.equals("❤️")) hex = "2764";
+            if (emoji.equals("Ã¢ÂÂ¤Ã¯Â¸Â")) hex = "2764";
             
             String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
             
@@ -1471,9 +1551,10 @@ public class ForumPageView implements ViewInterface {
 
     private Node buildCommentItem(Commentaire c) {
         VBox item = new VBox(8);
-        item.setPadding(new Insets(14));
-        item.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.02); -fx-background-radius: 12px; -fx-border-color: rgba(255,255,255,0.06); -fx-border-radius: 12px;");
+        item.setPadding(new Insets(16));
+        item.setStyle(forumCommentCardStyle(false));
+        item.setOnMouseEntered(e -> item.setStyle(forumCommentCardStyle(true)));
+        item.setOnMouseExited(e -> item.setStyle(forumCommentCardStyle(false)));
 
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
@@ -1502,8 +1583,8 @@ public class ForumPageView implements ViewInterface {
 
         Text body = new Text(c.getContenuCommentaire());
         body.setFill(Color.web("rgba(255,255,255,0.9)"));
-        body.setFont(Font.font(13));
-        body.setWrappingWidth(700);
+        body.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
+        body.wrappingWidthProperty().bind(item.widthProperty().subtract(42));
 
         VBox content = new VBox(8, body);
 
@@ -1566,7 +1647,8 @@ public class ForumPageView implements ViewInterface {
 
         Button like = commentActionButton("Like (" + likes + ")", liked, "#22c55e");
         Button dislike = commentActionButton("Dislike (" + dislikes + ")", disliked, "#ef4444");
-        Button emoji = commentActionButton("Emoji", false, tm.getAccentHex());
+        Button emoji = new Button("\u2728 React");
+        styleForumEmojiButton(emoji, false, true);
         if (cid != null) {
             likeBtnByCommentId.put(cid, like);
             dislikeBtnByCommentId.put(cid, dislike);
@@ -1820,29 +1902,59 @@ public class ForumPageView implements ViewInterface {
     private void updateEmojiButtonStyle(Button btn, String emoji) {
         if (emoji != null && !emoji.isBlank()) {
             String hex = Integer.toHexString(emoji.codePointAt(0));
-            if (emoji.equals("❤️")) hex = "2764";
+            if (emoji.equals("\u2764")) hex = "2764";
             String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
             
             ImageView iv = new ImageView(new Image(url, true));
-            iv.setFitWidth(20);
-            iv.setFitHeight(20);
+            iv.setFitWidth(16);
+            iv.setFitHeight(16);
             iv.setPreserveRatio(true);
             
             btn.setGraphic(iv);
-            btn.setText("");
-            btn.setStyle(
-                "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
-                "-fx-border-color: " + tm.getAccentHex() + "88;" +
-                "-fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 6 12 6 12; -fx-cursor: hand;");
+            btn.setText("Reacted");
+            styleForumEmojiButton(btn, true, isCommentEmojiButton(btn));
         } else {
             btn.setGraphic(null);
-            btn.setText("Emoji");
-            btn.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05);" +
-                "-fx-border-color: rgba(255,255,255,0.12);" +
-                "-fx-text-fill: rgba(255,255,255,0.4);" +
-                "-fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+            btn.setText("\u2728 React");
+            styleForumEmojiButton(btn, false, isCommentEmojiButton(btn));
         }
+    }
+
+    private boolean isCommentEmojiButton(Button btn) {
+        return btn.getProperties().containsKey("forum-comment-emoji");
+    }
+
+    private void styleForumEmojiButton(Button btn, boolean active, boolean compact) {
+        btn.getProperties().put("forum-comment-emoji", compact);
+        btn.setCursor(Cursor.HAND);
+        btn.setMinHeight(compact ? 26 : 38);
+        btn.setPrefHeight(compact ? 26 : 38);
+        btn.setMinWidth(compact ? 78 : 96);
+        btn.setPadding(compact ? new Insets(5, 10, 5, 10) : new Insets(8, 16, 8, 16));
+        btn.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, compact ? 11 : 12));
+        applyForumEmojiButtonStyle(btn, active, false, compact);
+        btn.setOnMouseEntered(e -> applyForumEmojiButtonStyle(btn, active, true, compact));
+        btn.setOnMouseExited(e -> applyForumEmojiButtonStyle(btn, active, false, compact));
+        HorizonDesignSystem.installButtonMotion(btn);
+    }
+
+    private void applyForumEmojiButtonStyle(Button btn, boolean active, boolean hover, boolean compact) {
+        String background = active
+                ? "linear-gradient(from 0% 0% to 100% 100%, " + tm.toRgba(tm.getAccentHex(), hover ? 0.32 : 0.24) + ", rgba(255,107,215," + (hover ? "0.24" : "0.16") + "))"
+                : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255," + (hover ? "0.105" : "0.065") + "), rgba(255,107,107," + (hover ? "0.13" : "0.08") + "))";
+        String border = active ? tm.toRgba(tm.getAccentHex(), hover ? 0.72 : 0.55) : "rgba(255,107,107," + (hover ? "0.52" : "0.32") + ")";
+        String shadow = hover || active ? "-fx-effect: dropshadow(gaussian, rgba(255,107,107,0.22), 18, 0.32, 0, 5);" : "-fx-effect: none;";
+        int radius = compact ? 11 : 14;
+        btn.setStyle(
+                "-fx-background-color: " + background + ";" +
+                        "-fx-text-fill: rgba(255,255,255,0.92);" +
+                        "-fx-background-radius: " + radius + "px;" +
+                        "-fx-border-color: " + border + ";" +
+                        "-fx-border-radius: " + radius + "px;" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-padding: " + (compact ? "5 10 5 10" : "8 16 8 16") + ";" +
+                        "-fx-cursor: hand;" +
+                        shadow);
     }
 
     private Button commentActionButton(String text, boolean active, String colorHex) {
@@ -1931,7 +2043,7 @@ public class ForumPageView implements ViewInterface {
         FlowPane emojis = new FlowPane(12, 12);
         for (String emoji : EMOJIS) {
             String hex = Integer.toHexString(emoji.codePointAt(0));
-            if (emoji.equals("❤️")) hex = "2764";
+            if (emoji.equals("Ã¢ÂÂ¤Ã¯Â¸Â")) hex = "2764";
             String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
             
             ImageView iv = new ImageView(new Image(url, true));
@@ -2079,7 +2191,7 @@ public class ForumPageView implements ViewInterface {
         if (id != null && id > 0) {
             // Discord announcement
             if ("Announcement".equalsIgnoreCase(cat)) {
-                discordService.sendAnnouncement("📢 **NEW ANNOUNCEMENT**\n\n**" + title + "**\n" + desc, createImage);
+                discordService.sendAnnouncement("Ã°Å¸â€œÂ¢ **NEW ANNOUNCEMENT**\n\n**" + title + "**\n" + desc, createImage);
             } else if ("Jeux Video".equalsIgnoreCase(cat)) {
                 String author = (session.getCurrentUser() != null)
                         ? (session.getCurrentUser().getFirstName() + " " + session.getCurrentUser().getLastName())
@@ -2179,86 +2291,171 @@ public class ForumPageView implements ViewInterface {
 
     private void prepareSentimentPanelForLoading(VBox panel) {
         panel.getChildren().clear();
-        panel.setPadding(new Insets(20));
+        panel.setPadding(new Insets(18));
         panel.setVisible(true);
         panel.setManaged(true);
-        panel.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 16px; -fx-border-color: rgba(255,255,255,0.1); -fx-border-radius: 16px;");
+        panel.setStyle(
+            "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, rgba(255,107,107,0.13), rgba(255,255,255,0.035) 44%, rgba(255,107,215,0.09));" +
+            "-fx-background-radius: 22px;" +
+            "-fx-border-color: rgba(255,255,255,0.13), rgba(255,107,107,0.30);" +
+            "-fx-border-radius: 22px;" +
+            "-fx-border-width: 1px, 1.4px;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.30), 24, 0.28, 0, 12);"
+        );
 
-        Label loading = new Label("Analyzing...");
-        loading.setStyle("-fx-text-fill: rgba(255,255,255,0.7); -fx-font-size: 13px; -fx-font-weight: bold;");
-        panel.getChildren().add(loading);
+        HBox loadingRow = new HBox(12);
+        loadingRow.setAlignment(Pos.CENTER_LEFT);
+
+        StackPane orb = new StackPane();
+        orb.setMinSize(48, 48);
+        orb.setPrefSize(48, 48);
+        Circle glow = new Circle(24, Color.web(tm.toRgba(tm.getAccentHex(), 0.18)));
+        Circle core = new Circle(8, Color.web(tm.getAccentHex()));
+        orb.getChildren().addAll(glow, core);
+
+        VBox copy = new VBox(4);
+        Label title = new Label("Reading the room");
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 15));
+        title.setTextFill(Color.WHITE);
+        Label subtitle = new Label("AI is checking sentiment, confidence, and emotion signals.");
+        subtitle.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        subtitle.setTextFill(Color.web("rgba(255,255,255,0.62)"));
+        copy.getChildren().addAll(title, subtitle);
+        HBox.setHgrow(copy, Priority.ALWAYS);
+
+        Label pulse = new Label("\u25CF  \u25CF  \u25CF");
+        pulse.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 11));
+        pulse.setTextFill(Color.web(tm.getAccentHex()));
+
+        loadingRow.getChildren().addAll(orb, copy, pulse);
+        panel.getChildren().add(loadingRow);
+
+        FadeTransition shimmer = new FadeTransition(Duration.millis(760), pulse);
+        shimmer.setFromValue(0.35);
+        shimmer.setToValue(1);
+        shimmer.setAutoReverse(true);
+        shimmer.setCycleCount(4);
+        shimmer.play();
     }
 
     private void fillSentimentPanel(VBox panel, SentimentResult result) {
         String baseColor = "#fbbf24"; // Neutral
-        String emoji = "😐";
+        String emoji = "Ã°Å¸ËœÂ";
         
         String s = result.sentiment.toLowerCase();
         if (s.contains("pos") || s.contains("happy") || s.contains("joy")) {
             baseColor = "#22c55e";
-            emoji = "✨";
+            emoji = "Ã¢Å“Â¨";
         } else if (s.contains("neg") || s.contains("angry") || s.contains("sad")) {
             baseColor = "#ef4444";
-            emoji = "💢";
+            emoji = "Ã°Å¸â€™Â¢";
         }
         
         // Match specific emotions if possible
         String e = result.primaryEmotion.toLowerCase();
-        if (e.contains("joy") || e.contains("happy")) emoji = "😊";
-        else if (e.contains("angry") || e.contains("rage")) emoji = "😡";
-        else if (e.contains("sad")) emoji = "😢";
-        else if (e.contains("surprise")) emoji = "😲";
-        else if (e.contains("fear")) emoji = "😨";
+        if (e.contains("joy") || e.contains("happy")) emoji = "Ã°Å¸ËœÅ ";
+        else if (e.contains("angry") || e.contains("rage")) emoji = "Ã°Å¸ËœÂ¡";
+        else if (e.contains("sad")) emoji = "Ã°Å¸ËœÂ¢";
+        else if (e.contains("surprise")) emoji = "Ã°Å¸ËœÂ²";
+        else if (e.contains("fear")) emoji = "Ã°Å¸ËœÂ¨";
+
+        String visualIcon = sentimentVisualIcon(result.sentiment, result.primaryEmotion);
+        int confidence = 0;
+        try {
+            confidence = Math.max(0, Math.min(100, Integer.parseInt(result.confidence.replace("%", "").trim())));
+        } catch (Exception ignored) {
+            confidence = 0;
+        }
 
         panel.getChildren().clear();
+        panel.setPadding(new Insets(18));
         panel.setStyle(
-            "-fx-background-color: linear-gradient(to right, " + tm.toRgba(baseColor, 0.08) + ", rgba(255,255,255,0.03));" +
-            "-fx-background-radius: 20px;" +
-            "-fx-border-color: linear-gradient(to right, " + tm.toRgba(baseColor, 0.4) + ", rgba(255,255,255,0.1));" +
-            "-fx-border-radius: 20px;" +
-            "-fx-border-width: 1.5px;"
+            "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, " + tm.toRgba(baseColor, 0.18) + ", rgba(255,255,255,0.035) 48%, rgba(255,107,215,0.08));" +
+            "-fx-background-radius: 24px;" +
+            "-fx-border-color: rgba(255,255,255,0.12), " + tm.toRgba(baseColor, 0.50) + ";" +
+            "-fx-border-radius: 24px;" +
+            "-fx-border-width: 1px, 1.5px;" +
+            "-fx-effect: dropshadow(gaussian, " + tm.toRgba(baseColor, 0.18) + ", 26, 0.32, 0, 10);"
         );
 
-        HBox layout = new HBox(24);
-        layout.setPadding(new Insets(10));
+        HBox layout = new HBox(18);
+        layout.setPadding(new Insets(4));
         layout.setAlignment(Pos.CENTER_LEFT);
 
         // Left Side: Big Emotion Indicator
         StackPane iconStack = new StackPane();
-        Circle glow = new Circle(34);
+        iconStack.setMinSize(88, 88);
+        iconStack.setPrefSize(88, 88);
+        Circle glow = new Circle(42);
         glow.setFill(Color.web(baseColor));
-        glow.setOpacity(0.12);
+        glow.setOpacity(0.16);
+        Circle ring = new Circle(31);
+        ring.setFill(Color.web(tm.toRgba(baseColor, 0.14)));
+        ring.setStroke(Color.web(tm.toRgba(baseColor, 0.55)));
+        ring.setStrokeWidth(1.4);
         
-        Label emoLabel = new Label(emoji);
-        emoLabel.setStyle("-fx-font-size: 38px;");
+        Label emoLabel = new Label(visualIcon);
+        emoLabel.setStyle("-fx-font-size: 32px; -fx-text-fill: white; -fx-font-weight: 900;");
         
-        iconStack.getChildren().addAll(glow, emoLabel);
+        iconStack.getChildren().addAll(glow, ring, emoLabel);
 
         // Right Side: Details
         VBox details = new VBox(12);
         HBox.setHgrow(details, Priority.ALWAYS);
 
-        HBox header = new HBox(12);
-        header.setAlignment(Pos.BOTTOM_LEFT);
+        HBox eyebrow = new HBox(8);
+        eyebrow.setAlignment(Pos.CENTER_LEFT);
+        Label aiChip = sentimentChip("AI FEELING", tm.getAccentHex(), "rgba(255,255,255,0.08)");
+        Label emotionChip = sentimentChip(result.primaryEmotion.toUpperCase(), baseColor, tm.toRgba(baseColor, 0.13));
+        eyebrow.getChildren().addAll(aiChip, emotionChip);
+
+        HBox header = new HBox(14);
+        header.setAlignment(Pos.CENTER_LEFT);
         
         Label sentimentLabel = new Label(result.sentiment.toUpperCase());
-        sentimentLabel.setStyle("-fx-font-size: 26px; -fx-font-weight: 900; -fx-text-fill: white; -fx-letter-spacing: -0.5px;");
+        sentimentLabel.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 26));
+        sentimentLabel.setTextFill(Color.WHITE);
         
-        Label confidenceBadge = new Label(result.confidence + "% CONFIDENCE");
-        confidenceBadge.setStyle("-fx-background-color: " + tm.toRgba(baseColor, 0.2) + "; -fx-text-fill: " + baseColor + "; -fx-font-size: 9px; -fx-font-weight: 900; -fx-padding: 3 8; -fx-background-radius: 6px;");
+        Region headerSpacer = new Region();
+        HBox.setHgrow(headerSpacer, Priority.ALWAYS);
+        Label confidenceBadge = sentimentChip(confidence + "% CONFIDENCE", baseColor, tm.toRgba(baseColor, 0.18));
         
-        header.getChildren().addAll(sentimentLabel, confidenceBadge);
+        header.getChildren().addAll(sentimentLabel, headerSpacer, confidenceBadge);
 
-        Label emotionMeta = new Label("Primary Emotion: " + result.primaryEmotion);
-        emotionMeta.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: " + baseColor + "; -fx-opacity: 0.8;");
+        StackPane meter = new StackPane();
+        meter.setMinHeight(10);
+        meter.setPrefHeight(10);
+        meter.setMaxHeight(10);
+        Rectangle track = new Rectangle();
+        track.setHeight(10);
+        track.setArcWidth(10);
+        track.setArcHeight(10);
+        track.setFill(Color.web("rgba(255,255,255,0.10)"));
+        track.widthProperty().bind(meter.widthProperty());
+
+        Rectangle fill = new Rectangle();
+        fill.setHeight(10);
+        fill.setArcWidth(10);
+        fill.setArcHeight(10);
+        fill.setFill(Color.web(baseColor));
+        fill.widthProperty().bind(meter.widthProperty().multiply(confidence / 100.0));
+        StackPane.setAlignment(fill, Pos.CENTER_LEFT);
+        meter.getChildren().addAll(track, fill);
 
         Text explanation = new Text(result.explanation);
         explanation.setFill(Color.web("rgba(255,255,255,0.75)"));
-        explanation.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 14));
-        explanation.setWrappingWidth(panel.getWidth() > 0 ? panel.getWidth() - 140 : 600);
+        explanation.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), 13));
+        explanation.setWrappingWidth(panel.getWidth() > 0 ? panel.getWidth() - 160 : 560);
         explanation.setLineSpacing(3);
 
-        details.getChildren().addAll(header, emotionMeta, explanation);
+        HBox foot = new HBox(8);
+        foot.setAlignment(Pos.CENTER_LEFT);
+        foot.getChildren().addAll(
+            sentimentChip("SIGNAL " + confidence + "/100", "rgba(255,255,255,0.78)", "rgba(255,255,255,0.055)"),
+            sentimentChip("MOOD " + result.primaryEmotion, baseColor, tm.toRgba(baseColor, 0.10))
+        );
+
+        details.getChildren().addAll(eyebrow, header, meter, explanation, foot);
         
         layout.getChildren().addAll(iconStack, details);
         panel.getChildren().add(layout);
@@ -2266,14 +2463,45 @@ public class ForumPageView implements ViewInterface {
         // Entrance Animation
         layout.setOpacity(0);
         layout.setTranslateY(10);
+        layout.setScaleX(0.985);
+        layout.setScaleY(0.985);
         
-        FadeTransition ft = new FadeTransition(Duration.millis(600), layout);
+        FadeTransition ft = new FadeTransition(Duration.millis(360), layout);
         ft.setToValue(1);
-        TranslateTransition tt = new TranslateTransition(Duration.millis(600), layout);
+        TranslateTransition tt = new TranslateTransition(Duration.millis(360), layout);
         tt.setToY(0);
+        ScaleTransition st = new ScaleTransition(Duration.millis(360), layout);
+        st.setToX(1);
+        st.setToY(1);
         
         ft.play();
         tt.play();
+        st.play();
+    }
+
+    private String sentimentVisualIcon(String sentiment, String emotion) {
+        String combined = ((sentiment == null ? "" : sentiment) + " " + (emotion == null ? "" : emotion)).toLowerCase();
+        if (combined.contains("joy") || combined.contains("happy") || combined.contains("pos")) return "\u2726";
+        if (combined.contains("angry") || combined.contains("rage") || combined.contains("neg")) return "\u26A0";
+        if (combined.contains("sad")) return "\u25D2";
+        if (combined.contains("surprise")) return "\u2737";
+        if (combined.contains("fear")) return "\u25C7";
+        return "\u25D0";
+    }
+
+    private Label sentimentChip(String text, String color, String background) {
+        Label chip = new Label(text);
+        chip.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 10));
+        chip.setTextFill(Color.web(color));
+        chip.setPadding(new Insets(5, 9, 5, 9));
+        chip.setStyle(
+            "-fx-background-color: " + background + ";" +
+            "-fx-background-radius: 999px;" +
+            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-radius: 999px;" +
+            "-fx-border-width: 1px;"
+        );
+        return chip;
     }
 
 
@@ -2528,28 +2756,59 @@ public class ForumPageView implements ViewInterface {
 
     private Button primaryButton(String text, Runnable action) {
         Button b = new Button(text);
-        b.setStyle(
-                "-fx-background-color: " + tm.getAccentHex() + ";" +
-                        "-fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10 20 10 20; -fx-cursor: hand;");
+        b.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-padding: 10 20 10 20;");
         b.setOnAction(e -> action.run());
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
+    }
+
+    private String forumListItemStyle(boolean hover, boolean active) {
+        if (active) {
+            return "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
+                "-fx-background-radius: 16px;" +
+                "-fx-border-color: " + tm.getAccentHex() + ";" +
+                "-fx-border-width: 1px;" +
+                "-fx-border-radius: 16px;";
+        }
+        return "-fx-background-color: " + (hover ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)") + ";" +
+            "-fx-background-radius: 16px;" +
+            "-fx-border-color: " + (hover ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)") + ";" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 16px;";
+    }
+
+    private String forumCommentCardStyle(boolean hover) {
+        return "-fx-background-color: " + (hover
+                ? "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.055), rgba(255,107,107,0.055))"
+                : "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.028), rgba(255,255,255,0.012))") + ";" +
+                "-fx-background-radius: 16px;" +
+                "-fx-border-color: " + (hover ? "rgba(255,107,107,0.34)" : "rgba(255,255,255,0.075)") + ";" +
+                "-fx-border-width: 1px;" +
+                "-fx-border-radius: 16px;" +
+                "-fx-effect: " + (hover
+                        ? "dropshadow(gaussian, rgba(255,107,107,0.12), 18, 0.26, 0, 6)"
+                        : "none") + ";";
     }
 
     private Button ghostButton(String text, Runnable action) {
         Button b = new Button(text);
-        b.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05);" +
-                        "-fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 10 20 10 20; -fx-cursor: hand; -fx-border-color: rgba(255,255,255,0.2); -fx-border-radius: 10px;");
+        b.setStyle("-fx-background-color: rgba(255,255,255,0.05);" +
+                "-fx-border-color: rgba(255,255,255,0.10);" +
+                "-fx-border-width: 1px;" +
+                "-fx-background-radius: 12px;" +
+                "-fx-border-radius: 12px;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-weight: 700;" +
+                "-fx-padding: 10 20 10 20;" +
+                "-fx-cursor: hand;");
         b.setOnAction(e -> action.run());
+        HorizonDesignSystem.installButtonMotion(b);
         return b;
     }
 
     private void styleReactionButton(Button b) {
-        b.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.05);" +
-                        "-fx-border-color: rgba(255,255,255,0.12);" +
-                        "-fx-text-fill: rgba(255,255,255,0.7);" +
-                        "-fx-font-size: 12px; -fx-font-weight: 600; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 8 16 8 16; -fx-cursor: hand;");
+        b.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-size: 12px; -fx-padding: 8 16 8 16;");
+        HorizonDesignSystem.installButtonMotion(b);
     }
 
     private HBox reactionCountWrap(Button b, Label l) {
@@ -2614,7 +2873,7 @@ public class ForumPageView implements ViewInterface {
     private HBox buildAttachmentZone(Runnable add, Runnable clear, Label status) {
         HBox zone = new HBox(10);
         zone.setAlignment(Pos.CENTER_LEFT);
-        Button addBtn = ghostButton("📎 Add Image", add);
+        Button addBtn = ghostButton("Ã°Å¸â€œÅ½ Add Image", add);
         Button clearBtn = ghostButton("Clear", clear);
         zone.getChildren().addAll(addBtn, clearBtn, status);
         return zone;
@@ -2623,7 +2882,7 @@ public class ForumPageView implements ViewInterface {
     private HBox buildMultiImageAttachmentZone(Runnable add, Label status, FlowPane previews, List<File> files) {
         HBox zone = new HBox(10);
         zone.setAlignment(Pos.CENTER_LEFT);
-        Button addBtn = ghostButton("📎 Attach Images", add);
+        Button addBtn = ghostButton("Ã°Å¸â€œÅ½ Attach Images", add);
         Button clearBtn = ghostButton("Clear All", () -> {
             files.clear();
             previews.getChildren().clear();
@@ -2665,3 +2924,4 @@ public class ForumPageView implements ViewInterface {
         return circle;
     }
 }
+

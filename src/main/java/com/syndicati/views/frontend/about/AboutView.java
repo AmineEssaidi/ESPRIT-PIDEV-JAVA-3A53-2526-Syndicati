@@ -13,6 +13,7 @@ import javafx.scene.effect.BlurType;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.navigation.NavigationManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 
 /**
  * About View - Main about page with sub-menu options
@@ -27,25 +28,36 @@ public class AboutView implements ViewInterface {
     }
     
     private void setupLayout() {
-        root.setSpacing(40);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(80, 40, 80, 40));
+        root.setSpacing(34);
+        root.setAlignment(Pos.TOP_CENTER);
+        root.setPadding(new Insets(118, 48, 80, 48));
         
         // Apply theme styling
         applyThemeStyling();
         
-        // Title
-        Text title = new Text("About Us");
-        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 48));
-        title.setFill(Color.web(ThemeManager.getInstance().getTextColor()));
-        
-        // Subtitle
-        Text subtitle = new Text("Learn more about our company and team");
-        subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 18));
-        subtitle.setFill(Color.web(ThemeManager.getInstance().getSecondaryTextColor()));        // About options grid
+        ThemeManager tm = ThemeManager.getInstance();
+
+        VBox hero = new VBox(16);
+        hero.setAlignment(Pos.CENTER);
+        hero.setMaxWidth(1050);
+
+        Text title = new Text("Discover our incredible team");
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.EXTRA_BOLD, 68));
+        title.setFill(tm.getAccentGradientPaint());
+        title.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        title.setWrappingWidth(1000);
+
+        Text subtitle = new Text("The people, values, and contact paths behind the Syndicati experience.");
+        subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 19));
+        subtitle.setFill(Color.web(tm.getSecondaryTextColor()));
+        subtitle.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        subtitle.setWrappingWidth(780);
+        hero.getChildren().addAll(title, subtitle);
+
         HBox aboutGrid = new HBox();
-        aboutGrid.setSpacing(30);
+        aboutGrid.setSpacing(24);
         aboutGrid.setAlignment(Pos.CENTER);
+        aboutGrid.setMaxWidth(1100);
         
         // Option 1: Our Story
         VBox option1 = createAboutCard("ST", "Our Story", "Learn about our journey and mission");
@@ -70,48 +82,42 @@ public class AboutView implements ViewInterface {
         
         aboutGrid.getChildren().addAll(option1, option2, option3);
         
-        root.getChildren().addAll(title, subtitle, aboutGrid);
+        root.getChildren().addAll(hero, buildStatsStrip(), aboutGrid, buildValuesGrid());
     }
     
     private VBox createAboutCard(String icon, String title, String description) {
         VBox card = new VBox();
         card.setSpacing(15);
         card.setAlignment(Pos.CENTER);
-        card.setPadding(new Insets(30, 25, 30, 25));
-        card.setMinWidth(200);
-        card.setMaxWidth(250);
+        card.setPadding(new Insets(34, 30, 34, 30));
+        card.setMinWidth(260);
+        card.setPrefWidth(320);
+        card.setMaxWidth(360);
         
         // Apply card styling
         ThemeManager themeManager = ThemeManager.getInstance();
         card.setStyle(cardStyle(themeManager, false));
         
         // Add shadow effect
-        DropShadow cardShadow = new DropShadow();
-        cardShadow.setBlurType(BlurType.GAUSSIAN);
-        if (themeManager.isDarkMode()) {
-            cardShadow.setColor(Color.color(0, 0, 0, 0.3));
-        } else {
-            cardShadow.setColor(Color.color(0, 0, 0, 0.1));
-        }
-        cardShadow.setRadius(10);
-        cardShadow.setOffsetX(0);
-        cardShadow.setOffsetY(4);
-        card.setEffect(cardShadow);
+        HorizonDesignSystem.installWebLift(card);
         
         // Icon
         Text iconText = new Text(icon);
-        iconText.setFont(Font.font(48));
+        iconText.setFont(Font.font(52));
+        iconText.setFill(Color.web(themeManager.getAccentHex()));
         
         // Title
         Text titleText = new Text(title);
-        titleText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 20));
+        titleText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 24));
         titleText.setFill(Color.web(themeManager.getTextColor()));
         
         // Description
         Text descText = new Text(description);
         descText.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 14));
         descText.setFill(Color.web(themeManager.getSecondaryTextColor()));
-        descText.setWrappingWidth(200);        card.getChildren().addAll(iconText, titleText, descText);
+        descText.setWrappingWidth(250);
+        descText.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        card.getChildren().addAll(iconText, titleText, descText);
         
         // Add hover effect
         card.setOnMouseEntered(e -> {
@@ -126,23 +132,64 @@ public class AboutView implements ViewInterface {
     }
 
     private String cardStyle(ThemeManager tm, boolean hover) {
-        if (tm.isDarkMode()) {
-            String accentSoft = tm.toRgba(tm.getAccentHex(), hover ? 0.22 : 0.16);
-            String accentGlow = tm.toRgba(tm.getAccentHex(), hover ? 0.10 : 0.06);
-            String border = tm.toRgba(tm.getAccentHex(), hover ? 0.52 : 0.34);
-            return "-fx-background-color: radial-gradient(focus-angle 32deg, focus-distance 25%, center 16% 12%, radius 125%, " + accentSoft + " 0%, rgba(0,0,0,0.88) 62%, rgba(0,0,0,0.96) 100%), " +
-                   "linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.015) 46%, " + accentGlow + " 100%);" +
-                   "-fx-background-radius: 20px;" +
-                   "-fx-border-color: " + border + ";" +
-                   "-fx-border-width: 1px;" +
-                   "-fx-border-radius: 20px;";
+        return HorizonDesignSystem.webServiceCard(28, hover);
+    }
+
+    private HBox buildStatsStrip() {
+        HBox stats = new HBox(28);
+        stats.setAlignment(Pos.CENTER);
+        stats.setMaxWidth(960);
+        stats.setPadding(new Insets(28, 36, 28, 36));
+        stats.setStyle(HorizonDesignSystem.webSectionCard(36, false));
+        HorizonDesignSystem.installWebLift(stats);
+        String[][] rows = {
+            {"12+", "MEMBERS"},
+            {"8", "COUNTRIES"},
+            {"50+", "PROJECTS"},
+            {"99%", "SATISFACTION"}
+        };
+        for (String[] row : rows) {
+            VBox item = new VBox(6);
+            item.setAlignment(Pos.CENTER);
+            HBox.setHgrow(item, Priority.ALWAYS);
+            Text number = new Text(row[0]);
+            number.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.EXTRA_BOLD, 38));
+            number.setFill(ThemeManager.getInstance().getAccentGradientPaint());
+            Text label = new Text(row[1]);
+            label.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 11));
+            label.setFill(Color.web(ThemeManager.getInstance().getSecondaryTextColor()));
+            item.getChildren().addAll(number, label);
+            stats.getChildren().add(item);
         }
-        String border = tm.toRgba(tm.getAccentHex(), hover ? 0.34 : 0.24);
-        return "-fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.96), rgba(255,255,255,0.86) 54%, rgba(243,247,255,0.92) 100%);" +
-               "-fx-background-radius: 20px;" +
-               "-fx-border-color: " + border + ";" +
-               "-fx-border-width: 1px;" +
-               "-fx-border-radius: 20px;";
+        return stats;
+    }
+
+    private GridPane buildValuesGrid() {
+        GridPane grid = new GridPane();
+        grid.setHgap(18);
+        grid.setVgap(18);
+        grid.setMaxWidth(980);
+        String[][] values = {
+            {"IN", "Innovation", "We keep improving the resident experience with smoother tools."},
+            {"CO", "Collaboration", "Community workflows are designed to feel connected and clear."},
+            {"QL", "Quality", "Every interaction should feel polished, fast, and dependable."},
+            {"GR", "Growth", "The platform evolves with the people using it every day."}
+        };
+        for (int i = 0; i < values.length; i++) {
+            VBox card = createAboutCard(values[i][0], values[i][1], values[i][2]);
+            card.setMinWidth(0);
+            card.setPrefWidth(Region.USE_COMPUTED_SIZE);
+            card.setMaxWidth(Double.MAX_VALUE);
+            GridPane.setHgrow(card, Priority.ALWAYS);
+            grid.add(card, i % 2, i / 2);
+        }
+        for (int i = 0; i < 2; i++) {
+            ColumnConstraints col = new ColumnConstraints();
+            col.setHgrow(Priority.ALWAYS);
+            col.setFillWidth(true);
+            grid.getColumnConstraints().add(col);
+        }
+        return grid;
     }
     
     private void applyThemeStyling() {

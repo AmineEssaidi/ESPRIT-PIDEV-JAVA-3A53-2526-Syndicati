@@ -33,6 +33,7 @@ import javafx.scene.input.MouseEvent;
 import java.io.ByteArrayOutputStream;
 import com.syndicati.interfaces.ViewInterface;
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.components.shared.ImageBackground;
 import com.syndicati.components.shared.ConnectionStatusPill;
 import com.syndicati.services.security.NativeCaptchaService;
@@ -170,16 +171,19 @@ public class LoginView implements ViewInterface {
         root.getChildren().add(loginContainer);
         loginContainer.setVisible(true);
         loginContainer.setManaged(true);
+        StackPane.setMargin(loginContainer, new Insets(34, 0, 0, 0));
         
         // Add sign up container to root (initially hidden)
         root.getChildren().add(signUpContainer);
         signUpContainer.setVisible(false);
         signUpContainer.setManaged(false);
+        StackPane.setMargin(signUpContainer, new Insets(34, 0, 0, 0));
         
         // Add forgot password container to root (initially hidden)
         root.getChildren().add(forgotPasswordContainer);
         forgotPasswordContainer.setVisible(false);
         forgotPasswordContainer.setManaged(false);
+        StackPane.setMargin(forgotPasswordContainer, new Insets(34, 0, 0, 0));
         
         // Create window bar (like landing page)
         HBox windowBar = createWindowBar();
@@ -322,48 +326,50 @@ public class LoginView implements ViewInterface {
         VBox container = new VBox();
         container.setSpacing(0);
         container.setAlignment(Pos.CENTER);
-        container.setPadding(new Insets(20, 18, 18, 18));
-        container.setPrefWidth(560);
-        container.setMaxWidth(560);
-        container.setMaxHeight(520);
+        container.setPadding(new Insets(0, 0, 0, 0));
+        container.setPrefWidth(800);
+        container.setMaxWidth(800);
+        container.setMinHeight(Region.USE_PREF_SIZE);
+        container.setMaxHeight(Region.USE_PREF_SIZE);
         
         ThemeManager themeManager = ThemeManager.getInstance();
         container.setStyle(authSurfaceStyle(themeManager));
+        container.setOpacity(0.98);
         container.setOnMouseEntered(e -> {
-            container.setOpacity(0.98);
-            container.setScaleX(1.01);
-            container.setScaleY(1.01);
+            container.setStyle(authSurfaceHoverStyle(themeManager));
+            container.setScaleX(1.004);
+            container.setScaleY(1.004);
         });
         container.setOnMouseExited(e -> {
-            container.setOpacity(0.95);
+            container.setStyle(authSurfaceStyle(themeManager));
             container.setScaleX(1.0);
             container.setScaleY(1.0);
         });
         
         // Add glassmorphism shadow (Optimized for performance)
         DropShadow glassShadow = new DropShadow();
-        glassShadow.setBlurType(javafx.scene.effect.BlurType.ONE_PASS_BOX);
-        glassShadow.setColor(Color.color(0, 0, 0, 0.2));
-        glassShadow.setRadius(15);
+        glassShadow.setBlurType(javafx.scene.effect.BlurType.GAUSSIAN);
+        glassShadow.setColor(Color.web(themeManager.toRgba(themeManager.getAccentHex(), 0.24)));
+        glassShadow.setRadius(34);
         glassShadow.setOffsetX(0);
-        glassShadow.setOffsetY(5);
+        glassShadow.setOffsetY(0);
         container.setEffect(glassShadow);
         container.setCache(true);
         container.setCacheHint(javafx.scene.CacheHint.SPEED);
         
         // App title
         Text title = new Text("Welcome Back");
-        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 36));
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 32));
         title.setFill(createAccentGradientPaint());
         title.setTextAlignment(TextAlignment.CENTER);
         
         // Subtitle
         Text subtitle = new Text("Sign in to continue");
-        subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 16));
+        subtitle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 15));
         subtitle.setFill(themeManager.isDarkMode() ? Color.web("#b3b8e0") : Color.web("#475569"));
         subtitle.setTextAlignment(TextAlignment.CENTER);
         
-        VBox headerWrap = new VBox(6, title, subtitle);
+        VBox headerWrap = new VBox(4, title, subtitle);
         headerWrap.setAlignment(Pos.CENTER);
 
         // Username/email + password row (website-like split form)
@@ -377,9 +383,6 @@ public class LoginView implements ViewInterface {
 
         HBox row = createFormRow(usernameContainer, passwordContainer);
         
-        // Create button container for side-by-side buttons
-        HBox buttonContainer = createButtonContainer();
-
         VBox captchaContainer = createCaptchaContainer();
         
         // Forgot password link
@@ -389,28 +392,31 @@ public class LoginView implements ViewInterface {
         forgotPassword.setBorder(Border.EMPTY);
         forgotPassword.setOnAction(e -> switchToForgotPassword());
 
+        HBox authActionsGrid = createLoginActionsBlock(captchaContainer, forgotPassword);
+
         // Website-like auth methods block (visual only for now)
         HBox socialDivider = createAuthSocialDivider();
         VBox authMethodsBlock = createAuthMethodsBlock();
+        HBox signUpFooter = createSignUpFooter(themeManager);
         
         loginFormColumn = new VBox(12,
             headerWrap,
             row,
-            buttonContainer,
-            captchaContainer,
-            forgotPassword,
+            authActionsGrid,
             socialDivider,
-            authMethodsBlock
+            authMethodsBlock,
+            signUpFooter
         );
         loginFormColumn.setAlignment(Pos.TOP_CENTER);
-        loginFormColumn.setPadding(new Insets(22, 16, 10, 16));
+        loginFormColumn.setPadding(new Insets(30, 34, 30, 34));
+        loginFormColumn.setPrefWidth(800);
         loginFormColumn.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(loginFormColumn, Priority.ALWAYS);
 
         loginAuthFlexContainer = new HBox(0, captchaPanel, loginFormColumn, faceIdPanel);
         loginAuthFlexContainer.setAlignment(Pos.CENTER);
         loginAuthFlexContainer.setMaxWidth(Double.MAX_VALUE);
-        VBox.setVgrow(loginAuthFlexContainer, Priority.ALWAYS);
+        VBox.setVgrow(loginAuthFlexContainer, Priority.NEVER);
         loginAuthFlexContainer.setStyle("-fx-background-radius: 24px;");
 
         container.getChildren().add(loginAuthFlexContainer);
@@ -420,8 +426,19 @@ public class LoginView implements ViewInterface {
 
     private VBox createCaptchaContainer() {
         VBox wrap = new VBox(8);
-        wrap.setAlignment(Pos.CENTER);
-        wrap.setMaxWidth(Double.MAX_VALUE);
+        wrap.setAlignment(Pos.CENTER_LEFT);
+        wrap.setPrefWidth(340);
+        wrap.setMinWidth(340);
+        wrap.setMaxWidth(340);
+        wrap.setMinHeight(118);
+        wrap.setPadding(new Insets(12, 14, 12, 14));
+        wrap.setStyle(
+            "-fx-background-color: rgba(255,255,255,0.02);" +
+            "-fx-background-radius: 20px;" +
+            "-fx-border-color: rgba(255,255,255,0.06);" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 20px;"
+        );
 
         ThemeManager themeManager = ThemeManager.getInstance();
 
@@ -429,8 +446,8 @@ public class LoginView implements ViewInterface {
         header.setAlignment(Pos.CENTER_LEFT);
 
         Label title = new Label("Security Verification");
-        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-        title.setTextFill(Color.web(themeManager.getTextColor()));
+        title.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 11));
+        title.setTextFill(Color.web(themeManager.isDarkMode() ? "rgba(255,255,255,0.35)" : "rgba(15,23,42,0.48)"));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -439,10 +456,10 @@ public class LoginView implements ViewInterface {
         challengeRefreshButton.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 11));
         challengeRefreshButton.setStyle(
             "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-background-radius: 10px;" +
+            "-fx-background-radius: 999px;" +
             "-fx-border-color: rgba(255,255,255,0.12);" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 10px;" +
+            "-fx-border-radius: 999px;" +
             "-fx-text-fill: " + themeManager.getTextColor() + ";" +
             "-fx-cursor: hand;"
         );
@@ -467,9 +484,9 @@ public class LoginView implements ViewInterface {
                 closeCaptchaPanel();
             });
 
-            captchaPanel.getChildren().setAll(hcaptchaComponent.getContainer());
-            captchaPanel.setPadding(new Insets(20));
-            captchaPanel.setAlignment(Pos.CENTER);
+            challengeRefreshButton.setVisible(false);
+            challengeRefreshButton.setManaged(false);
+            wrap.getChildren().addAll(header, hcaptchaComponent.getContainer());
 
             System.out.println("[LoginView] Initialized hCaptcha (primary)");
         } else {
@@ -518,16 +535,7 @@ public class LoginView implements ViewInterface {
         challengeAnswerField.setPromptText("Answer");
         challengeAnswerField.setAlignment(Pos.CENTER);
         challengeAnswerField.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
-        challengeAnswerField.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.05);" +
-            "-fx-border-color: rgba(255,255,255,0.16);" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 10px;" +
-            "-fx-background-radius: 10px;" +
-            "-fx-text-fill: " + themeManager.getTextColor() + ";" +
-            "-fx-prompt-text-fill: rgba(255,255,255,0.45);" +
-            "-fx-padding: 10px 12px;"
-        );
+        challengeAnswerField.setStyle(HorizonDesignSystem.input() + "-fx-border-radius: 10px;-fx-background-radius: 10px;-fx-padding: 10px 12px;");
         challengeAnswerField.setPrefWidth(360);
         attachNativeTelemetry("challenge", challengeAnswerField);
         challengeAnswerField.setOnAction(e -> handleLogin());
@@ -547,20 +555,11 @@ public class LoginView implements ViewInterface {
         VBox challengeBody = new VBox(10, badgeRow, captchaImageView, challengeQuestionLabel, challengeAnswerField, challengeProgressBar, challengeStatusLabel);
         challengeBody.setAlignment(Pos.CENTER_LEFT);
         challengeBody.setPadding(new Insets(16, 16, 16, 16));
-        challengeBody.setStyle(
-            "-fx-background-color: linear-gradient(to bottom right, rgba(255,255,255,0.08), rgba(255,255,255,0.03));" +
-            "-fx-background-radius: 18px;" +
-            "-fx-border-color: rgba(255,255,255,0.12);" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 18px;"
-        );
+        challengeBody.setStyle(HorizonDesignSystem.webSectionCard(18, false) + "-fx-padding: 16;");
 
         challengeCard = new StackPane(challengeBody);
         challengeCard.setMaxWidth(Double.MAX_VALUE);
-        challengeCard.setStyle(
-            "-fx-background-radius: 20px;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.22), 22, 0.15, 0, 6);"
-        );
+        challengeCard.setStyle(HorizonDesignSystem.webSectionCard(20, false));
 
         wrap.getChildren().addAll(header, challengeCard);
         refreshNativeChallenge();
@@ -577,7 +576,7 @@ public class LoginView implements ViewInterface {
     private void refreshNativeChallenge() {
         nativeCaptchaChallenge = nativeCaptchaService.beginChallenge();
         captchaVerified = false;
-        if (loginButton != null) loginButton.setDisable(true);
+        if (loginButton != null) loginButton.setOpacity(1.0);
 
         if (challengeQuestionLabel != null) {
             challengeQuestionLabel.setText(nativeCaptchaChallenge.prompt());
@@ -659,14 +658,14 @@ public class LoginView implements ViewInterface {
         if (isCorrect) {
             captchaVerified = true;
             if (loginButton != null) {
-                loginButton.setDisable(false);
+                loginButton.setOpacity(1.0);
             }
             setNativeChallengeStatus("Code verified! Ready to sign in.", true);
             pulseChallengeCard(true);
         } else {
             captchaVerified = false;
             if (loginButton != null) {
-                loginButton.setDisable(true);
+                loginButton.setOpacity(1.0);
             }
             // Only show error message if they've typed something
             if (!submitted.isEmpty()) {
@@ -735,29 +734,98 @@ public class LoginView implements ViewInterface {
     
     private HBox createButtonContainer() {
         HBox buttonContainer = new HBox();
-        buttonContainer.setSpacing(8);
+        buttonContainer.setSpacing(12);
         buttonContainer.setAlignment(Pos.CENTER);
+        buttonContainer.setMaxWidth(Double.MAX_VALUE);
         
         // Create sign in button
         loginButton = createLoginButton();
-        loginButton.setPrefWidth(146); // Half of original 300px width minus spacing
-        loginButton.setMaxWidth(146);
-        loginButton.setMinWidth(146);
+        HBox.setHgrow(loginButton, Priority.ALWAYS);
+        loginButton.setMaxWidth(Double.MAX_VALUE);
+        loginButton.setMinWidth(190);
         
         // Create sign up button
         signUpButton = createSignUpButton();
-        signUpButton.setPrefWidth(112);
-        signUpButton.setMaxWidth(112);
-        signUpButton.setMinWidth(112);
+        HBox.setHgrow(signUpButton, Priority.ALWAYS);
+        signUpButton.setMaxWidth(Double.MAX_VALUE);
+        signUpButton.setMinWidth(120);
 
         // Create OTP button (email-only login flow)
         otpLoginButton = createOtpLoginButton();
-        otpLoginButton.setPrefWidth(112);
-        otpLoginButton.setMaxWidth(112);
-        otpLoginButton.setMinWidth(112);
+        HBox.setHgrow(otpLoginButton, Priority.ALWAYS);
+        otpLoginButton.setMaxWidth(Double.MAX_VALUE);
+        otpLoginButton.setMinWidth(120);
         
         buttonContainer.getChildren().addAll(loginButton, signUpButton, otpLoginButton);
         return buttonContainer;
+    }
+
+    private HBox createLoginActionsBlock(VBox captchaContainer, Hyperlink forgotPassword) {
+        HBox wrap = new HBox(18);
+        wrap.setAlignment(Pos.CENTER_LEFT);
+        wrap.setMaxWidth(Double.MAX_VALUE);
+
+        VBox actionsColumn = new VBox(10);
+        actionsColumn.setAlignment(Pos.CENTER);
+        actionsColumn.setPrefWidth(0);
+        HBox.setHgrow(actionsColumn, Priority.ALWAYS);
+
+        loginButton = createLoginButton();
+        loginButton.setMaxWidth(Double.MAX_VALUE);
+        loginButton.setMinHeight(44);
+
+        otpLoginButton = createOtpLoginButton();
+        otpLoginButton.setMaxWidth(Double.MAX_VALUE);
+        otpLoginButton.setMinHeight(44);
+
+        forgotPassword.setMaxWidth(Double.MAX_VALUE);
+        forgotPassword.setAlignment(Pos.CENTER);
+        forgotPassword.setContentDisplay(ContentDisplay.CENTER);
+        forgotPassword.setPadding(new Insets(0));
+        forgotPassword.setStyle(
+            "-fx-text-fill: " + ThemeManager.getInstance().getAccentHex() + ";" +
+            "-fx-font-size: 13px;" +
+            "-fx-font-weight: 600;" +
+            "-fx-underline: false;"
+        );
+
+        actionsColumn.getChildren().addAll(loginButton, otpLoginButton, forgotPassword);
+
+        Region divider = new Region();
+        divider.setPrefWidth(1);
+        divider.setMinWidth(1);
+        divider.setMaxWidth(1);
+        divider.setPrefHeight(112);
+        divider.setStyle("-fx-background-color: linear-gradient(to bottom, transparent, rgba(255,255,255,0.12), transparent);");
+
+        VBox captchaColumn = new VBox(captchaContainer);
+        captchaColumn.setAlignment(Pos.TOP_CENTER);
+        captchaColumn.setPrefWidth(340);
+        captchaColumn.setMinWidth(340);
+        captchaColumn.setMaxWidth(340);
+
+        wrap.getChildren().addAll(actionsColumn, divider, captchaColumn);
+        return wrap;
+    }
+
+    private HBox createSignUpFooter(ThemeManager themeManager) {
+        HBox footer = new HBox(6);
+        footer.setAlignment(Pos.CENTER);
+        footer.setMaxWidth(Double.MAX_VALUE);
+
+        Label copy = new Label("Don't have an account?");
+        copy.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
+        copy.setTextFill(Color.web(themeManager.isDarkMode() ? "rgba(255,255,255,0.62)" : "rgba(15,23,42,0.62)"));
+
+        Hyperlink signUpLink = new Hyperlink("Sign Up");
+        signUpLink.setBorder(Border.EMPTY);
+        signUpLink.setPadding(Insets.EMPTY);
+        signUpLink.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.SEMI_BOLD, 12));
+        signUpLink.setTextFill(Color.web(themeManager.getAccentHex()));
+        signUpLink.setOnAction(e -> switchToSignUp());
+
+        footer.getChildren().addAll(copy, signUpLink);
+        return footer;
     }
 
     private HBox createAuthSocialDivider() {
@@ -799,16 +867,16 @@ public class LoginView implements ViewInterface {
         google.setMaxWidth(Double.MAX_VALUE);
         google.setOnAction(e -> handleGoogleLogin());
 
-        Button toggle = new Button("➕");
+        Button toggle = new Button("v");
         toggle.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
-        toggle.setPrefWidth(42);
-        toggle.setPrefHeight(42);
+        toggle.setPrefWidth(44);
+        toggle.setPrefHeight(44);
         toggle.setStyle(
             "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-background-radius: 12px;" +
+            "-fx-background-radius: 14px;" +
             "-fx-border-color: rgba(255,255,255,0.18);" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 12px;" +
+            "-fx-border-radius: 14px;" +
             "-fx-text-fill: " + ThemeManager.getInstance().getTextColor() + ";" +
             "-fx-cursor: hand;"
         );
@@ -894,12 +962,7 @@ public class LoginView implements ViewInterface {
         panel.setPrefWidth(0);
         panel.setMaxWidth(0);
         VBox.setVgrow(panel, Priority.ALWAYS);
-        panel.setStyle(
-            "-fx-background-color: rgba(15,15,15,0.70);" +
-            "-fx-background-radius: 0 24px 24px 0;" +
-            "-fx-border-color: rgba(255,255,255,0.10);" +
-            "-fx-border-width: 0 1px 0 0;"
-        );
+        panel.setStyle(HorizonDesignSystem.webSectionCard(24, false) + "-fx-background-radius: 0 24px 24px 0;-fx-border-width: 0 1px 0 0;");
         return panel;
     }
 
@@ -911,27 +974,27 @@ public class LoginView implements ViewInterface {
         captchaPanel.setVisible(true);
 
         loginFormColumn.setStyle(
-            "-fx-border-color: rgba(255,255,255,0.10);" +
+            "-fx-border-color: " + HorizonDesignSystem.borderStrong() + ";" +
             "-fx-border-width: 0 1px 0 1px;" +
-            "-fx-background-color: rgba(15,15,15,0.40);"
+            "-fx-background-color: " + HorizonDesignSystem.surfaceSoft() + ";"
         );
 
         javafx.animation.Timeline tl = new javafx.animation.Timeline(
-            new javafx.animation.KeyFrame(javafx.util.Duration.ZERO,
-                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 560),
-                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 560),
-                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 520),
-                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 520),
+                new javafx.animation.KeyFrame(javafx.util.Duration.ZERO,
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 760),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 760),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 620),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 620),
                 new javafx.animation.KeyValue(captchaPanel.maxWidthProperty(), 0),
                 new javafx.animation.KeyValue(captchaPanel.prefWidthProperty(), 0),
                 new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 0),
                 new javafx.animation.KeyValue(captchaPanel.translateXProperty(), -24)
             ),
             new javafx.animation.KeyFrame(javafx.util.Duration.millis(450),
-                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 1080, javafx.animation.Interpolator.EASE_BOTH),
-                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 1080, javafx.animation.Interpolator.EASE_BOTH),
-                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 720, javafx.animation.Interpolator.EASE_BOTH),
-                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 720, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 1180, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 1180, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 700, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 700, javafx.animation.Interpolator.EASE_BOTH),
                 new javafx.animation.KeyValue(captchaPanel.maxWidthProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
                 new javafx.animation.KeyValue(captchaPanel.prefWidthProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
                 new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 1, javafx.animation.Interpolator.EASE_BOTH),
@@ -947,18 +1010,18 @@ public class LoginView implements ViewInterface {
 
         javafx.animation.Timeline tl = new javafx.animation.Timeline(
             new javafx.animation.KeyFrame(javafx.util.Duration.ZERO,
-                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 1080),
-                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 1080),
-                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 720),
-                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 720),
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 1180),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 1180),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 700),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 700),
                 new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 1),
                 new javafx.animation.KeyValue(captchaPanel.translateXProperty(), 0)
             ),
             new javafx.animation.KeyFrame(javafx.util.Duration.millis(400),
-                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 560, javafx.animation.Interpolator.EASE_BOTH),
-                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 560, javafx.animation.Interpolator.EASE_BOTH),
-                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
-                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 520, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.prefWidthProperty(), 760, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxWidthProperty(), 760, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.prefHeightProperty(), 620, javafx.animation.Interpolator.EASE_BOTH),
+                new javafx.animation.KeyValue(loginContainer.maxHeightProperty(), 620, javafx.animation.Interpolator.EASE_BOTH),
                 new javafx.animation.KeyValue(captchaPanel.maxWidthProperty(), 0, javafx.animation.Interpolator.EASE_BOTH),
                 new javafx.animation.KeyValue(captchaPanel.prefWidthProperty(), 0, javafx.animation.Interpolator.EASE_BOTH),
                 new javafx.animation.KeyValue(captchaPanel.opacityProperty(), 0, javafx.animation.Interpolator.EASE_BOTH),
@@ -969,8 +1032,21 @@ public class LoginView implements ViewInterface {
             captchaPanel.setManaged(false);
             captchaPanel.setVisible(false);
             loginFormColumn.setStyle("-fx-background-color: transparent; -fx-border-width: 0;");
+            loginContainer.setPrefWidth(760);
+            loginContainer.setMaxWidth(760);
+            loginContainer.setMaxHeight(Region.USE_PREF_SIZE);
         });
         tl.play();
+    }
+
+    public void showCaptchaPanelContent(Node content) {
+        if (captchaPanel == null || content == null) {
+            return;
+        }
+        captchaPanel.getChildren().setAll(content);
+        captchaPanel.setPadding(new Insets(18));
+        captchaPanel.setAlignment(Pos.CENTER);
+        openCaptchaPanel();
     }
 
     private VBox createFaceIdPanel() {
@@ -985,12 +1061,7 @@ public class LoginView implements ViewInterface {
         panel.setPrefWidth(0);
         panel.setMaxWidth(0);
         panel.setMinWidth(0);
-        panel.setStyle(
-            "-fx-background-color: " + (tm.isDarkMode() ? "rgba(8,8,8,0.65)" : "rgba(245,245,245,0.78)") + ";" +
-            "-fx-border-color: rgba(255,255,255,0.10);" +
-            "-fx-border-width: 0 0 0 1px;" +
-            "-fx-background-radius: 18px;"
-        );
+        panel.setStyle(HorizonDesignSystem.webSectionCard(18, false) + "-fx-border-width: 0 0 0 1px;");
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -1003,15 +1074,8 @@ public class LoginView implements ViewInterface {
 
         Button close = new Button("x");
         close.setPrefSize(30, 30);
-        close.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.08);" +
-            "-fx-border-color: rgba(255,255,255,0.14);" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 10px;" +
-            "-fx-background-radius: 10px;" +
-            "-fx-text-fill: " + tm.getTextColor() + ";" +
-            "-fx-cursor: hand;"
-        );
+        close.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-border-radius: 10px;-fx-background-radius: 10px;");
+        HorizonDesignSystem.installButtonMotion(close);
         close.setOnAction(e -> closeFaceIdPanel());
         header.getChildren().addAll(title, spacer, close);
 
@@ -1068,28 +1132,14 @@ public class LoginView implements ViewInterface {
         faceIdPinInput = new PasswordField();
         faceIdPinInput.setPromptText("Enter PIN");
         faceIdPinInput.setAlignment(Pos.CENTER);
-        faceIdPinInput.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.05);" +
-            "-fx-border-color: rgba(255,255,255,0.16);" +
-            "-fx-border-width: 1px;" +
-            "-fx-border-radius: 10px;" +
-            "-fx-background-radius: 10px;" +
-            "-fx-text-fill: " + tm.getTextColor() + ";" +
-            "-fx-prompt-text-fill: rgba(255,255,255,0.45);" +
-            "-fx-padding: 10px 12px;"
-        );
+        faceIdPinInput.setStyle(HorizonDesignSystem.input() + "-fx-border-radius: 10px;-fx-background-radius: 10px;-fx-padding: 10px 12px;");
 
         faceIdVerifyButton = new Button("Verify");
         faceIdVerifyButton.setMaxWidth(Double.MAX_VALUE);
         faceIdVerifyButton.setPrefHeight(42);
         faceIdVerifyButton.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 13));
-        faceIdVerifyButton.setStyle(
-            "-fx-background-color: " + tm.getEffectiveAccentGradient() + ";" +
-            "-fx-background-radius: 12px;" +
-            "-fx-text-fill: white;" +
-            "-fx-cursor: hand;" +
-            "-fx-letter-spacing: 0.5px;"
-        );
+        faceIdVerifyButton.setStyle(HorizonDesignSystem.buttonPrimary() + "-fx-background-radius: 12px;-fx-border-radius: 12px;");
+        HorizonDesignSystem.installButtonMotion(faceIdVerifyButton);
         faceIdVerifyButton.setOnAction(e -> handleFaceIDLogin());
 
         panel.getChildren().addAll(header, videoWrap, faceIdStatusLabel, pinLabel, faceIdPinInput, faceIdVerifyButton);
@@ -1181,38 +1231,38 @@ public class LoginView implements ViewInterface {
     private Button createAuthMethodButton(String icon, String text, boolean primary) {
         Button b = new Button(icon + "  " + text);
         b.setFont(Font.font(com.syndicati.MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 13));
-        b.setPrefHeight(42);
+        b.setPrefHeight(44);
         b.setMaxWidth(Double.MAX_VALUE);
         String normal = primary ?
             "-fx-background-color: rgba(255,255,255,0.10);" +
-            "-fx-background-radius: 12px;" +
+            "-fx-background-radius: 14px;" +
             "-fx-border-color: rgba(255,255,255,0.20);" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 12px;" +
+            "-fx-border-radius: 14px;" +
             "-fx-text-fill: " + ThemeManager.getInstance().getTextColor() + ";" +
             "-fx-cursor: hand;"
             :
             "-fx-background-color: rgba(255,255,255,0.06);" +
-            "-fx-background-radius: 12px;" +
+            "-fx-background-radius: 14px;" +
             "-fx-border-color: rgba(255,255,255,0.14);" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 12px;" +
+            "-fx-border-radius: 14px;" +
             "-fx-text-fill: " + ThemeManager.getInstance().getTextColor() + ";" +
             "-fx-cursor: hand;";
         String hover = primary ?
             "-fx-background-color: rgba(255,255,255,0.16);" +
-            "-fx-background-radius: 12px;" +
+            "-fx-background-radius: 14px;" +
             "-fx-border-color: " + ThemeManager.getInstance().toRgba(ThemeManager.getInstance().getAccentHex(), 0.45) + ";" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 12px;" +
+            "-fx-border-radius: 14px;" +
             "-fx-text-fill: " + ThemeManager.getInstance().getTextColor() + ";" +
             "-fx-cursor: hand;"
             :
             "-fx-background-color: rgba(255,255,255,0.11);" +
-            "-fx-background-radius: 12px;" +
+            "-fx-background-radius: 14px;" +
             "-fx-border-color: " + ThemeManager.getInstance().toRgba(ThemeManager.getInstance().getAccentHex(), 0.36) + ";" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 12px;" +
+            "-fx-border-radius: 14px;" +
             "-fx-text-fill: " + ThemeManager.getInstance().getTextColor() + ";" +
             "-fx-cursor: hand;";
         b.setStyle(normal);
@@ -1233,8 +1283,8 @@ public class LoginView implements ViewInterface {
         VBox container = new VBox();
         container.setSpacing(10);
         container.setAlignment(Pos.CENTER);
-        container.setPadding(new Insets(24, 34, 24, 34));
-        container.setMaxWidth(700);
+        container.setPadding(new Insets(30, 40, 30, 40));
+        container.setMaxWidth(760);
         
         ThemeManager themeManager = ThemeManager.getInstance();
         container.setStyle(authSurfaceStyle(themeManager));
@@ -1511,9 +1561,9 @@ public class LoginView implements ViewInterface {
         VBox container = new VBox();
         container.setSpacing(16);
         container.setAlignment(Pos.CENTER);
-        container.setPadding(new Insets(34, 34, 30, 34));
-        container.setMaxWidth(560);
-        container.setMaxHeight(480);
+        container.setPadding(new Insets(36, 40, 32, 40));
+        container.setMaxWidth(620);
+        container.setMaxHeight(520);
         
         ThemeManager themeManager = ThemeManager.getInstance();
         container.setStyle(authSurfaceStyle(themeManager));
@@ -1608,27 +1658,11 @@ public class LoginView implements ViewInterface {
     }
 
     private String authSurfaceStyle(ThemeManager tm) {
-        String bg = tm.isDarkMode()
-            ? "rgba(12,12,12,0.86)"
-            : "rgba(245,245,245,0.88)";
-        return "-fx-background-color: " + bg + ";" +
-               "-fx-background-radius: 28px;" +
-               "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.30 : 0.24) + ";" +
-               "-fx-border-width: 1.5px;" +
-               "-fx-border-radius: 28px;" +
-               "-fx-background-insets: 0, 0, 0, 0;";
+        return HorizonDesignSystem.webAuthCard(false);
     }
 
     private String authSurfaceHoverStyle(ThemeManager tm) {
-        String bg = tm.isDarkMode()
-            ? "rgba(16,16,16,0.90)"
-            : "rgba(245,245,245,0.94)";
-        return "-fx-background-color: " + bg + ";" +
-               "-fx-background-radius: 28px;" +
-               "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.36 : 0.28) + ";" +
-               "-fx-border-width: 1.5px;" +
-               "-fx-border-radius: 28px;" +
-               "-fx-background-insets: 0, 0, 0, 0;";
+        return HorizonDesignSystem.webAuthCard(true);
     }
     
     private VBox createInputField(String icon, String placeholder) {
@@ -1788,9 +1822,13 @@ public class LoginView implements ViewInterface {
     
     private Button createLoginButton() {
         Button button = new Button("Sign In");
-        button.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 16));
-        button.setPrefHeight(50);
-        button.setDisable(true);
+        button.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 15));
+        button.setPrefHeight(44);
+        button.setAlignment(Pos.CENTER);
+        button.setContentDisplay(ContentDisplay.CENTER);
+        button.setMnemonicParsing(false);
+        button.setWrapText(false);
+        button.setOpacity(1.0);
         
         // Apply liquid glass styling
         ThemeManager themeManager = ThemeManager.getInstance();
@@ -1810,9 +1848,9 @@ public class LoginView implements ViewInterface {
             button.setStyle(primaryButtonHoverStyle(themeManager));
             javafx.animation.Timeline timeline = new javafx.animation.Timeline(
                 new javafx.animation.KeyFrame(javafx.util.Duration.millis(200),
-                    new javafx.animation.KeyValue(button.scaleXProperty(), 1.05, javafx.animation.Interpolator.EASE_OUT),
-                    new javafx.animation.KeyValue(button.scaleYProperty(), 1.05, javafx.animation.Interpolator.EASE_OUT),
-                    new javafx.animation.KeyValue(buttonShadow.radiusProperty(), 25, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(button.scaleXProperty(), 1.02, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(button.scaleYProperty(), 1.02, javafx.animation.Interpolator.EASE_OUT),
+                    new javafx.animation.KeyValue(buttonShadow.radiusProperty(), 20, javafx.animation.Interpolator.EASE_OUT),
                     new javafx.animation.KeyValue(buttonShadow.colorProperty(), Color.web(themeManager.getAccentHex()), javafx.animation.Interpolator.EASE_OUT)
                 )
             );
@@ -1892,7 +1930,12 @@ public class LoginView implements ViewInterface {
     private Button createOtpLoginButton() {
         Button button = new Button("OTP");
         button.setFont(Font.font(com.syndicati.MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 14));
-        button.setPrefHeight(50);
+        button.setPrefHeight(44);
+        button.setAlignment(Pos.CENTER);
+        button.setContentDisplay(ContentDisplay.CENTER);
+        button.setMnemonicParsing(false);
+        button.setWrapText(false);
+        button.setOpacity(1.0);
 
         ThemeManager themeManager = ThemeManager.getInstance();
         button.setStyle(secondaryButtonStyle(themeManager));
@@ -1907,8 +1950,8 @@ public class LoginView implements ViewInterface {
 
         button.setOnMouseEntered(e -> {
             button.setStyle(secondaryButtonHoverStyle(themeManager));
-            button.setScaleX(1.03);
-            button.setScaleY(1.03);
+            button.setScaleX(1.02);
+            button.setScaleY(1.02);
         });
 
         button.setOnMouseExited(e -> {
@@ -2013,12 +2056,12 @@ public class LoginView implements ViewInterface {
 
     private void applyAuthInputStyle(TextField inputField, boolean focused) {
         ThemeManager tm = ThemeManager.getInstance();
-        String inputBg = tm.isDarkMode() ? "rgba(20,20,20,0.92)" : "rgba(255,255,255,0.88)";
-        String border = focused ? tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.86 : 0.65) : tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.26 : 0.30);
+        String inputBg = tm.isDarkMode() ? "rgba(30,30,50,0.92)" : "rgba(255,255,255,0.92)";
+        String border = focused ? tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.82 : 0.70) : tm.toRgba(tm.getAccentHex(), 0.30);
         String promptTextColor = tm.isDarkMode() ? "rgba(255,255,255,0.75)" : "rgba(51,65,85,0.68)";
         String effect = focused
-            ? "-fx-effect:dropshadow(gaussian," + tm.toRgba(tm.getAccentHex(), 0.45) + ",18,0.25,0,0);"
-            : "-fx-effect:dropshadow(gaussian," + tm.toRgba(tm.getAccentHex(), 0.16) + ",10,0.20,0,1);";
+            ? "-fx-effect:dropshadow(gaussian," + tm.toRgba(tm.getAccentHex(), 0.34) + ",18,0.24,0,0);"
+            : "-fx-effect:dropshadow(gaussian," + tm.toRgba(tm.getAccentHex(), 0.12) + ",12,0.18,0,1);";
         inputField.setStyle(
             "-fx-background-color:" + inputBg + ";" +
             "-fx-background-radius:14px;" +
@@ -2027,7 +2070,8 @@ public class LoginView implements ViewInterface {
             "-fx-border-radius:14px;" +
             "-fx-text-fill:" + tm.getTextColor() + ";" +
             "-fx-prompt-text-fill:" + promptTextColor + ";" +
-            "-fx-padding:12px 16px;" +
+            "-fx-font-size:14px;" +
+            "-fx-padding:14px 16px;" +
             effect
         );
     }
@@ -2046,49 +2090,23 @@ public class LoginView implements ViewInterface {
     }
 
     private String primaryButtonStyle(ThemeManager tm) {
-        return "-fx-background-color:" + tm.getEffectiveAccentGradient() + ";" +
-               "-fx-background-radius:999px;" +
-               "-fx-border-radius:999px;" +
-               "-fx-border-color:transparent;" +
-               "-fx-text-fill:#ffffff;" +
-               "-fx-cursor:hand;" +
-               "-fx-padding:12px 20px;";
+        return HorizonDesignSystem.buttonPrimary() + "-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding:15px 24px;-fx-font-size:14px;-fx-font-weight:800;";
     }
 
     private String primaryButtonHoverStyle(ThemeManager tm) {
-        return "-fx-background-color:" + tm.getEffectiveAccentGradient() + ";" +
-               "-fx-background-radius:999px;" +
-               "-fx-border-radius:999px;" +
-               "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
-               "-fx-border-width:1px;" +
-               "-fx-text-fill:#ffffff;" +
-               "-fx-cursor:hand;" +
-               "-fx-padding:12px 20px;";
+        return HorizonDesignSystem.buttonPrimary() + "-fx-background-radius:999px;-fx-border-radius:999px;-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.52) + ";-fx-padding:15px 24px;-fx-font-size:14px;-fx-font-weight:800;";
     }
 
     private String secondaryButtonStyle(ThemeManager tm) {
-        return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(24,24,24,0.85)" : "rgba(255,255,255,0.90)") + ";" +
-               "-fx-background-radius:999px;" +
-               "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.30) + ";" +
-               "-fx-border-width:1.2px;" +
-               "-fx-border-radius:999px;" +
-               "-fx-text-fill:" + tm.getTextColor() + ";" +
-               "-fx-cursor:hand;" +
-               "-fx-padding:12px 20px;";
+        return HorizonDesignSystem.buttonGhost() + "-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding:15px 24px;-fx-font-size:14px;-fx-font-weight:800;";
     }
 
     private String secondaryButtonHoverStyle(ThemeManager tm) {
-        return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(30,30,30,0.92)" : "rgba(255,255,255,0.98)") + ";" +
-               "-fx-background-radius:999px;" +
-               "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.44) + ";" +
-               "-fx-border-width:1.2px;" +
-               "-fx-border-radius:999px;" +
-               "-fx-text-fill:" + tm.getTextColor() + ";" +
-               "-fx-cursor:hand;" +
-               "-fx-padding:12px 20px;";
+        return HorizonDesignSystem.buttonGhost() + "-fx-background-color:" + tm.toRgba(tm.getAccentHex(), tm.isDarkMode() ? 0.16 : 0.10) + ";-fx-background-radius:999px;-fx-border-radius:999px;-fx-padding:15px 24px;-fx-font-size:14px;-fx-font-weight:800;";
     }
     
     private void switchToSignUp() {
+        resetLoginViewState();
         resetFaceIdPanelState();
         loginContainer.setVisible(false);
         loginContainer.setManaged(false);
@@ -2106,11 +2124,13 @@ public class LoginView implements ViewInterface {
         forgotPasswordContainer.setManaged(false);
         loginContainer.setVisible(true);
         loginContainer.setManaged(true);
+        resetLoginViewState();
         resetFaceIdPanelState();
         loginContainer.toFront();
     }
     
     private void switchToForgotPassword() {
+        resetLoginViewState();
         resetFaceIdPanelState();
         loginContainer.setVisible(false);
         loginContainer.setManaged(false);
@@ -2119,6 +2139,51 @@ public class LoginView implements ViewInterface {
         forgotPasswordContainer.setVisible(true);
         forgotPasswordContainer.setManaged(true);
         forgotPasswordContainer.toFront();
+    }
+
+    private void resetLoginViewState() {
+        captchaPanelOpen = false;
+        captchaVerified = false;
+        if (loginContainer != null) {
+            loginContainer.setPrefWidth(800);
+            loginContainer.setMaxWidth(800);
+            loginContainer.setMinHeight(Region.USE_PREF_SIZE);
+            loginContainer.setMaxHeight(Region.USE_PREF_SIZE);
+            loginContainer.setScaleX(1.0);
+            loginContainer.setScaleY(1.0);
+        }
+        if (loginFormColumn != null) {
+            loginFormColumn.setStyle("");
+            loginFormColumn.setPadding(new Insets(30, 34, 30, 34));
+            loginFormColumn.setPrefWidth(800);
+            loginFormColumn.setTranslateX(0);
+        }
+        if (captchaPanel != null) {
+            captchaPanel.setVisible(false);
+            captchaPanel.setManaged(false);
+            captchaPanel.setOpacity(0);
+            captchaPanel.setTranslateX(-24);
+            captchaPanel.setPrefWidth(0);
+            captchaPanel.setMaxWidth(0);
+        }
+        if (loginButton != null) {
+            loginButton.setText("Sign In");
+            loginButton.setOpacity(1.0);
+            loginButton.setScaleX(1.0);
+            loginButton.setScaleY(1.0);
+        }
+        if (otpLoginButton != null) {
+            otpLoginButton.setText("OTP");
+            otpLoginButton.setOpacity(1.0);
+            otpLoginButton.setScaleX(1.0);
+            otpLoginButton.setScaleY(1.0);
+        }
+        if (hcaptchaComponent != null && useHCaptcha) {
+            hcaptchaComponent.resetInlineState();
+        }
+        if (!useHCaptcha) {
+            refreshNativeChallenge();
+        }
     }
 
     private void resetFaceIdPanelState() {
@@ -2769,7 +2834,7 @@ public class LoginView implements ViewInterface {
             final String[] finalRedirectUri = new String[1];
 
             String redirectUri = googleOAuthService.startCallbackServer(code -> {
-                // We are on a virtual thread here — safe to do network calls.
+                // We are on a virtual thread here â€” safe to do network calls.
                 final String authCode = code;
                 Thread.startVirtualThread(() -> {
                     try {
@@ -2832,7 +2897,7 @@ public class LoginView implements ViewInterface {
                             return;
                         }
 
-                        // ── Only UI work touches Platform.runLater ──
+                        // â”€â”€ Only UI work touches Platform.runLater â”€â”€
                         javafx.application.Platform.runLater(() -> {
                             SessionManager.getInstance().setCurrentUser(finalUser);
                             loginSuccessFired = true;

@@ -1,8 +1,12 @@
 package com.syndicati.utils.notifications;
 
 import com.syndicati.utils.theme.ThemeManager;
+import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.FadeTransition;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
 import javafx.animation.PauseTransition;
+import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
@@ -179,14 +183,19 @@ public final class GlobalNotificationPillManager {
 
         currentPopup.show(anchor, x, y);
 
-        FadeTransition fadeIn = new FadeTransition(Duration.millis(160), content);
-        fadeIn.setFromValue(0);
-        fadeIn.setToValue(1);
-        TranslateTransition slideIn = new TranslateTransition(Duration.millis(160), content);
-        slideIn.setFromY(12);
-        slideIn.setToY(0);
-        fadeIn.play();
-        slideIn.play();
+        content.setOpacity(0);
+        content.setScaleX(0.90);
+        content.setScaleY(0.90);
+        content.setTranslateY(16);
+        Timeline reveal = new Timeline(
+            new KeyFrame(Duration.millis(340),
+                new KeyValue(content.opacityProperty(), 1, HorizonDesignSystem.WEB_EASE),
+                new KeyValue(content.scaleXProperty(), 1, HorizonDesignSystem.WEB_POP),
+                new KeyValue(content.scaleYProperty(), 1, HorizonDesignSystem.WEB_POP),
+                new KeyValue(content.translateYProperty(), 0, HorizonDesignSystem.WEB_POP)
+            )
+        );
+        reveal.play();
 
         if (hideDelay != null) {
             hideDelay.stop();
@@ -204,16 +213,21 @@ public final class GlobalNotificationPillManager {
         }
 
         javafx.scene.Node content = popup.getContent().get(0);
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(180), content);
-        fadeOut.setFromValue(content.getOpacity());
-        fadeOut.setToValue(0);
-        fadeOut.setOnFinished(e -> {
+        Timeline hide = new Timeline(
+            new KeyFrame(Duration.millis(180),
+                new KeyValue(content.opacityProperty(), 0, HorizonDesignSystem.WEB_EASE),
+                new KeyValue(content.scaleXProperty(), 0.96, HorizonDesignSystem.WEB_EASE),
+                new KeyValue(content.scaleYProperty(), 0.96, HorizonDesignSystem.WEB_EASE),
+                new KeyValue(content.translateYProperty(), 12, HorizonDesignSystem.WEB_EASE)
+            )
+        );
+        hide.setOnFinished(e -> {
             popup.hide();
             popup.getContent().clear();
             showing = false;
             showNext();
         });
-        fadeOut.play();
+        hide.play();
     }
 
     private static Popup ensurePopup() {
@@ -269,6 +283,7 @@ public final class GlobalNotificationPillManager {
             "-fx-padding: 4 8 4 8;" +
             "-fx-cursor: hand;"
         );
+        HorizonDesignSystem.installButtonMotion(close);
 
         HBox header = new HBox(12, icon, textBlock, close);
         HBox.setHgrow(textBlock, javafx.scene.layout.Priority.ALWAYS);
@@ -296,6 +311,7 @@ public final class GlobalNotificationPillManager {
         wrapper.setStyle("-fx-text-background-color: #f8fafc;");
         wrapper.setMaxWidth(request.expanded ? 560 : 500);
         wrapper.setOpacity(0);
+        HorizonDesignSystem.installIslandMotion(wrapper);
         return wrapper;
     }
 
