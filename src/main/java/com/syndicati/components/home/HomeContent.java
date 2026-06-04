@@ -2,6 +2,9 @@ package com.syndicati.components.home;
 
 import com.syndicati.MainApplication;
 import com.syndicati.services.DatabaseService;
+import com.syndicati.utils.concurrent.FxAsync;
+import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.utils.navigation.NavigationManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.ui.HorizonDesignSystem;
 import javafx.animation.Animation;
@@ -22,6 +25,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -41,16 +47,25 @@ public class HomeContent {
 
     private final VBox root;
     private final ThemeManager theme = ThemeManager.getInstance();
-    private final HomeData homeData;
+    private HomeData homeData;
 
     public HomeContent() {
-        homeData = loadHomeData();
+        homeData = fallbackHomeData();
         root = new VBox(42);
         root.setAlignment(Pos.TOP_CENTER);
         root.setPadding(new Insets(24, 22, 56, 22));
         root.setMaxWidth(Double.MAX_VALUE);
 
-        root.getChildren().addAll(
+        renderSections();
+        hydrateHomeDataAsync();
+    }
+
+    public VBox getRoot() {
+        return root;
+    }
+
+    private void renderSections() {
+        root.getChildren().setAll(
             buildHero(),
             buildComplexHeader(),
             buildResidencesSection(),
@@ -62,8 +77,16 @@ public class HomeContent {
         );
     }
 
-    public VBox getRoot() {
-        return root;
+    private void hydrateHomeDataAsync() {
+        FxAsync.supplyIo(this::loadHomeData)
+            .thenAccept(data -> FxAsync.onFx(() -> {
+                homeData = data;
+                renderSections();
+            }))
+            .exceptionally(error -> {
+                System.out.println("HomeContent async load error: " + FxAsync.message(error));
+                return null;
+            });
     }
 
     private StackPane buildHero() {
@@ -82,7 +105,7 @@ public class HomeContent {
         badge.setAlignment(Pos.CENTER_LEFT);
         badge.setPadding(new Insets(10, 20, 10, 20));
         badge.setStyle(HorizonDesignSystem.webAccentBadge());
-        Text badgeText = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("innovation_badge"));
+        Text badgeText = new Text("RESIDENTIAL EXPERIENCE");
         badgeText.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
         badgeText.setFill(Color.WHITE);
         badge.getChildren().add(badgeText);
@@ -98,16 +121,17 @@ public class HomeContent {
         applyGlow(dot, 18, 0.7);
         titleRow.getChildren().addAll(title, dot);
 
-        Text desc = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("hero_description"));
+        Text desc = new Text("A secure, connected living platform for residences, complaints, events, forums, maintenance, and community engagement.");
         desc.setFont(Font.font(lightFont(), FontWeight.NORMAL, 20));
         desc.setFill(Color.web("rgba(255,255,255,0.56)"));
         desc.setWrappingWidth(760);
         desc.setLineSpacing(5);
 
-        HBox actions = new HBox(16,
-            buildPrimaryButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("explore_complex")),
-            buildSecondaryButton(com.syndicati.utils.localization.LocalizationManager.getInstance().get("join_hub"))
-        );
+        Button exploreButton = buildPrimaryButton("Explore the Complex");
+        exploreButton.setOnAction(e -> navigate("residence"));
+        Button hubButton = buildSecondaryButton("Join the Hub");
+        hubButton.setOnAction(e -> navigate("forum"));
+        HBox actions = new HBox(16, exploreButton, hubButton);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         card.getChildren().addAll(badge, titleRow, desc, actions);
@@ -139,7 +163,7 @@ public class HomeContent {
 
         HBox row = new HBox(2);
         row.setAlignment(Pos.CENTER);
-        Text title = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("our_complex"));
+        Text title = new Text("Our Complex");
         title.setFont(Font.font(boldFont(), FontWeight.BOLD, 42));
         title.setFill(Color.web(theme.getTextColor()));
         Text dot = new Text(".");
@@ -148,7 +172,7 @@ public class HomeContent {
         applyGlow(dot, 12, 0.6);
         row.getChildren().addAll(title, dot);
 
-        Text sub = new Text(com.syndicati.utils.localization.LocalizationManager.getInstance().get("our_complex_desc"));
+        Text sub = new Text("Discover our prestige residences and high-end services.");
         sub.setFont(Font.font(lightFont(), FontWeight.NORMAL, 15));
         sub.setFill(Color.web(theme.getSecondaryTextColor()));
         sub.setTextAlignment(TextAlignment.CENTER);
@@ -161,22 +185,22 @@ public class HomeContent {
         GridPane grid = new GridPane();
         grid.setHgap(22);
         grid.setVgap(22);
+        grid.setAlignment(Pos.CENTER);
         grid.setMaxWidth(Double.MAX_VALUE);
 
         List<ResidencePreview> items = homeData.residences;
 
         for (int i = 0; i < items.size(); i++) {
             ResidencePreview item = items.get(i);
-            VBox card = buildResidenceCard(item.name, item.address, "NOUVEAU");
-            GridPane.setFillWidth(card, true);
-            card.setMaxWidth(Double.MAX_VALUE);
-            grid.add(card, i % 3, i / 3);
+            VBox card = buildResidenceCard(item);
+            GridPane.setFillWidth(card, false);
+            grid.add(card, i % 4, i / 4);
         }
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             ColumnConstraints col = new ColumnConstraints();
             col.setMinWidth(0);
-            col.setFillWidth(true);
+            col.setFillWidth(false);
             col.setHgrow(Priority.ALWAYS);
             grid.getColumnConstraints().add(col);
         }
@@ -184,15 +208,22 @@ public class HomeContent {
         return grid;
     }
 
-    private VBox buildResidenceCard(String title, String location, String badge) {
+    private VBox buildResidenceCard(ResidencePreview item) {
         VBox card = new VBox(14);
-        card.setMaxWidth(Double.MAX_VALUE);
+        card.setMinWidth(275);
+        card.setPrefWidth(315);
+        card.setMaxWidth(340);
+        card.setMinHeight(430);
         card.setPadding(new Insets(12));
         card.setStyle(HorizonDesignSystem.webServiceCard(32, false));
 
         StackPane imageWrap = new StackPane();
-        imageWrap.setMinHeight(210);
-        imageWrap.setMaxWidth(Double.MAX_VALUE);
+        imageWrap.setMinWidth(291);
+        imageWrap.setPrefWidth(291);
+        imageWrap.setMaxWidth(291);
+        imageWrap.setMinHeight(200);
+        imageWrap.setPrefHeight(200);
+        imageWrap.setMaxHeight(200);
         imageWrap.setStyle(
             "-fx-background-color: #0a0a0a;" +
             "-fx-background-radius: 24px;" +
@@ -200,37 +231,46 @@ public class HomeContent {
             "-fx-border-width: 1px;" +
             "-fx-border-radius: 24px;"
         );
-        // Decorative diagonal highlight sized as a Region so it never overflows its column
-        Region light = new Region();
-        light.setMaxWidth(Double.MAX_VALUE);
-        light.setMaxHeight(100);
-        light.setStyle(
-            "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.18) + ";" +
-            "-fx-background-radius: 12px;"
-        );
-        light.setRotate(-10);
-        Text icon = new Text("RES");
-        icon.setFont(Font.font(48));
+        installRoundedClip(imageWrap, 24);
+        ImageView cover = buildCoverImage(item.image(), imageWrap, 291, 200);
+        if (cover != null) {
+            imageWrap.getChildren().add(cover);
+        } else {
+            Region light = new Region();
+            light.setMaxWidth(Double.MAX_VALUE);
+            light.setMaxHeight(100);
+            light.setStyle(
+                "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.18) + ";" +
+                "-fx-background-radius: 12px;"
+            );
+            light.setRotate(-10);
+            Text icon = new Text("RES");
+            icon.setFont(Font.font(48));
+            imageWrap.getChildren().addAll(light, icon);
+        }
         StackPane badgeWrap = new StackPane();
         badgeWrap.setPadding(new Insets(8, 12, 8, 12));
         badgeWrap.setStyle(
             "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.9) + ";" +
             "-fx-background-radius: 999px;"
         );
-        Text badgeText = new Text(badge);
+        Text badgeText = new Text("NEW");
         badgeText.setFont(Font.font(boldFont(), FontWeight.BOLD, 10));
         badgeText.setFill(Color.WHITE);
         badgeWrap.getChildren().add(badgeText);
+        lockToContentSize(badgeWrap);
         StackPane.setAlignment(badgeWrap, Pos.TOP_LEFT);
         StackPane.setMargin(badgeWrap, new Insets(14, 0, 0, 14));
-        imageWrap.getChildren().addAll(light, icon, badgeWrap);
+        imageWrap.getChildren().add(badgeWrap);
 
-        Text titleText = new Text(title);
+        Text titleText = new Text(item.name());
         titleText.setFont(Font.font(boldFont(), FontWeight.EXTRA_BOLD, 24));
         titleText.setFill(Color.web(theme.getTextColor()));
-        Text locText = new Text("Location: " + location);
+        titleText.setWrappingWidth(280);
+        Text locText = new Text(item.address());
         locText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13));
         locText.setFill(Color.web(theme.getSecondaryTextColor()));
+        locText.setWrappingWidth(280);
 
         HBox footer = new HBox();
         footer.setAlignment(Pos.CENTER_LEFT);
@@ -247,9 +287,13 @@ public class HomeContent {
         );
         footer.getChildren().addAll(type, spacer, go);
 
+        VBox.setMargin(titleText, new Insets(2, 8, 0, 8));
+        VBox.setMargin(locText, new Insets(0, 8, 0, 8));
+        VBox.setMargin(footer, new Insets(8, 8, 4, 8));
         card.getChildren().addAll(imageWrap, titleText, locText, footer);
         card.setOnMouseEntered(e -> card.setStyle(HorizonDesignSystem.webServiceCard(32, true)));
         card.setOnMouseExited(e -> card.setStyle(HorizonDesignSystem.webServiceCard(32, false)));
+        card.setOnMouseClicked(e -> navigate("residence"));
         addHoverLift(card, -15, 1.02);
         return card;
     }
@@ -263,8 +307,8 @@ public class HomeContent {
         HorizonDesignSystem.installWebLift(row);
 
         String[][] stats = {
-            {String.valueOf(homeData.residenceCount), "BLOCS"},
-            {String.valueOf(homeData.apartmentCount), "APPARTEMENTS"},
+            {String.valueOf(homeData.residenceCount), "RESIDENCES"},
+            {String.valueOf(homeData.apartmentCount), "APARTMENTS"},
             {String.valueOf(homeData.residentCount), "RESIDENTS"},
             {String.valueOf(homeData.eventCount), "EVENTS"}
         };
@@ -291,27 +335,27 @@ public class HomeContent {
         VBox section = new VBox(28);
         section.setAlignment(Pos.TOP_CENTER);
         section.setMaxWidth(Double.MAX_VALUE);
-        section.getChildren().add(sectionHeader("Evenements a venir", "Rejoignez les activites de notre communaute vibrante.", "Tout voir"));
+        section.getChildren().add(sectionHeader("Upcoming Events", "Join the vibrant activities of our community.", "View all", "evenement"));
 
         GridPane grid = new GridPane();
         grid.setHgap(26);
         grid.setVgap(26);
+        grid.setAlignment(Pos.CENTER);
         grid.setMaxWidth(Double.MAX_VALUE);
 
         List<EventPreview> events = homeData.events;
 
         for (int i = 0; i < events.size(); i++) {
             EventPreview event = events.get(i);
-            VBox card = buildEventCard(event.title, event.date, event.place, event.description, event.type);
-            GridPane.setFillWidth(card, true);
-            card.setMaxWidth(Double.MAX_VALUE);
+            VBox card = buildEventCard(event);
+            GridPane.setFillWidth(card, false);
             grid.add(card, i % 3, i / 3);
         }
 
         for (int i = 0; i < 3; i++) {
             ColumnConstraints col = new ColumnConstraints();
             col.setMinWidth(0);
-            col.setFillWidth(true);
+            col.setFillWidth(false);
             col.setHgrow(Priority.ALWAYS);
             grid.getColumnConstraints().add(col);
         }
@@ -320,65 +364,93 @@ public class HomeContent {
         return section;
     }
 
-    private VBox buildEventCard(String title, String date, String place, String desc, String badge) {
+    private VBox buildEventCard(EventPreview event) {
         VBox card = new VBox();
-        card.setMaxWidth(Double.MAX_VALUE);
+        card.setMinWidth(360);
+        card.setPrefWidth(420);
+        card.setMaxWidth(460);
+        card.setMinHeight(520);
         card.setStyle(HorizonDesignSystem.webServiceCard(34, false));
 
         StackPane media = new StackPane();
+        media.setMinWidth(390);
+        media.setPrefWidth(390);
+        media.setMaxWidth(390);
         media.setMinHeight(220);
-        media.setMaxWidth(Double.MAX_VALUE);
+        media.setPrefHeight(220);
+        media.setMaxHeight(220);
         media.setStyle(
             "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.20) + ";" +
             "-fx-background-radius: 28px;"
         );
-        Text icon = new Text("CAL");
-        icon.setFont(Font.font(46));
+        installRoundedClip(media, 28);
+        ImageView cover = buildCoverImage(event.image(), media, 390, 220);
+        if (cover != null) {
+            media.getChildren().add(cover);
+        } else {
+            Text icon = new Text("EVENTS");
+            icon.setFont(Font.font(boldFont(), FontWeight.BOLD, 34));
+            icon.setFill(Color.web(theme.toRgba(theme.getTextColor(), 0.65)));
+            media.getChildren().add(icon);
+        }
+        VBox.setMargin(media, new Insets(15, 15, 0, 15));
         StackPane tag = new StackPane();
         tag.setPadding(new Insets(8, 12, 8, 12));
         tag.setStyle(
             "-fx-background-color: " + theme.toRgba(theme.getAccentHex(), 0.9) + ";" +
             "-fx-background-radius: 999px;"
         );
-        Text tagText = new Text(badge);
+        Text tagText = new Text(safe(event.type(), "Event").toUpperCase());
         tagText.setFont(Font.font(boldFont(), FontWeight.BOLD, 10));
         tagText.setFill(Color.WHITE);
         tag.getChildren().add(tagText);
+        lockToContentSize(tag);
         StackPane.setAlignment(tag, Pos.TOP_RIGHT);
         StackPane.setMargin(tag, new Insets(16, 16, 0, 0));
-        media.getChildren().addAll(icon, tag);
+        media.getChildren().add(tag);
 
         VBox body = new VBox(14);
-        body.setPadding(new Insets(10, 26, 24, 26));
-        Text titleText = new Text(title);
-        titleText.setFont(Font.font(boldFont(), FontWeight.BOLD, 28));
+        body.setPadding(new Insets(26, 30, 18, 30));
+        VBox.setVgrow(body, Priority.ALWAYS);
+        Text titleText = new Text(event.title());
+        titleText.setFont(Font.font(boldFont(), FontWeight.EXTRA_BOLD, 26));
         titleText.setFill(Color.web(theme.getTextColor()));
+        titleText.setWrappingWidth(360);
         HBox meta = new HBox(18);
         meta.setAlignment(Pos.CENTER_LEFT);
-        Text dateText = new Text("Date: " + date);
+        Text dateText = new Text(event.date());
         dateText.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
         dateText.setFill(Color.web(theme.getSecondaryTextColor()));
-        Text placeText = new Text("Place: " + place);
+        Text placeText = new Text(event.place());
         placeText.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
         placeText.setFill(Color.web(theme.getSecondaryTextColor()));
+        placeText.setWrappingWidth(160);
         meta.getChildren().addAll(dateText, placeText);
-        Label descText = new Label(desc);
+        Label descText = new Label(event.description());
         descText.setWrapText(true);
         descText.setMaxWidth(Double.MAX_VALUE);
+        descText.setMinHeight(58);
         descText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13.5));
         descText.setTextFill(Color.web(theme.getSecondaryTextColor()));
         descText.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
         HBox footer = new HBox();
         footer.setAlignment(Pos.CENTER_RIGHT);
-        Text more = new Text("Details de l'evenement ->");
+        footer.setPadding(new Insets(20, 30, 24, 30));
+        footer.setStyle(
+            "-fx-background-color: " + theme.toRgba(theme.getTextColor(), 0.025) + ";" +
+            "-fx-border-color: " + theme.toRgba(theme.getTextColor(), 0.06) + " transparent transparent transparent;" +
+            "-fx-border-width: 1px 0 0 0;"
+        );
+        Text more = new Text("Event details ->");
         more.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
         more.setFill(Color.web(theme.getAccentHex()));
         footer.getChildren().add(more);
-        body.getChildren().addAll(titleText, meta, descText, footer);
+        body.getChildren().addAll(titleText, meta, descText);
 
-        card.getChildren().addAll(media, body);
+        card.getChildren().addAll(media, body, footer);
         card.setOnMouseEntered(e -> card.setStyle(HorizonDesignSystem.webServiceCard(34, true)));
         card.setOnMouseExited(e -> card.setStyle(HorizonDesignSystem.webServiceCard(34, false)));
+        card.setOnMouseClicked(e -> navigate("evenement"));
         addHoverLift(card, -10, 1.02);
         return card;
     }
@@ -387,7 +459,7 @@ public class HomeContent {
         VBox section = new VBox(28);
         section.setAlignment(Pos.TOP_CENTER);
         section.setMaxWidth(Double.MAX_VALUE);
-        section.getChildren().add(sectionHeader("Focus Communaute", "Decouvrez les dernieres discussions de vos voisins.", "L'Espace Forum"));
+        section.getChildren().add(sectionHeader("Community Focus", "Discover the latest discussions from your neighbors.", "Open the Forum", "forum"));
 
         GridPane grid = new GridPane();
         grid.setHgap(26);
@@ -398,7 +470,7 @@ public class HomeContent {
 
         for (int i = 0; i < posts.size(); i++) {
             ForumPreview post = posts.get(i);
-            VBox card = buildCommunityCard(post.author, post.date, post.title, post.description, post.category);
+            VBox card = buildCommunityCard(post);
             GridPane.setFillWidth(card, true);
             card.setMaxWidth(Double.MAX_VALUE);
             grid.add(card, i % 3, i / 3);
@@ -416,7 +488,7 @@ public class HomeContent {
         return section;
     }
 
-    private VBox buildCommunityCard(String user, String date, String title, String desc, String category) {
+    private VBox buildCommunityCard(ForumPreview post) {
         VBox card = new VBox(18);
         card.setPadding(new Insets(28));
         card.setMaxWidth(Double.MAX_VALUE);
@@ -425,29 +497,37 @@ public class HomeContent {
         HBox userRow = new HBox(12);
         userRow.setAlignment(Pos.CENTER_LEFT);
         StackPane avatar = new StackPane();
+        avatar.setMinSize(48, 48);
         avatar.setPrefSize(48, 48);
+        avatar.setMaxSize(48, 48);
         avatar.setStyle(
             "-fx-background-color: " + theme.getEffectiveAccentGradient() + ";" +
             "-fx-background-radius: 16px;"
         );
-        Text initials = new Text(getInitials(user));
-        initials.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
-        initials.setFill(Color.WHITE);
-        avatar.getChildren().add(initials);
+        installRoundedClip(avatar, 16);
+        ImageView avatarImage = buildCoverImage(post.avatar(), avatar, 48, 48);
+        if (avatarImage != null) {
+            avatar.getChildren().add(avatarImage);
+        } else {
+            Text initials = new Text(getInitials(post.author()));
+            initials.setFont(Font.font(boldFont(), FontWeight.BOLD, 12));
+            initials.setFill(Color.WHITE);
+            avatar.getChildren().add(initials);
+        }
         VBox info = new VBox(2);
-        Text userText = new Text(user);
+        Text userText = new Text(post.author());
         userText.setFont(Font.font(boldFont(), FontWeight.BOLD, 15));
         userText.setFill(Color.web(theme.getTextColor()));
-        Text dateText = new Text(date);
+        Text dateText = new Text(post.date());
         dateText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 11));
         dateText.setFill(Color.web(theme.getSecondaryTextColor()));
         info.getChildren().addAll(userText, dateText);
         userRow.getChildren().addAll(avatar, info);
 
-        Text titleText = new Text(title);
+        Text titleText = new Text(post.title());
         titleText.setFont(Font.font(boldFont(), FontWeight.BOLD, 24));
         titleText.setFill(Color.web(theme.getTextColor()));
-        Label descText = new Label(desc);
+        Label descText = new Label(post.description());
         descText.setWrapText(true);
         descText.setMaxWidth(Double.MAX_VALUE);
         descText.setFont(Font.font(lightFont(), FontWeight.NORMAL, 13.5));
@@ -460,7 +540,7 @@ public class HomeContent {
         left.setFill(Color.web(theme.getSecondaryTextColor()));
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Text right = new Text(category);
+        Text right = new Text(post.category());
         right.setFont(Font.font(boldFont(), FontWeight.BOLD, 11));
         right.setFill(Color.web(theme.getAccentHex()));
         footer.getChildren().addAll(left, spacer, right);
@@ -468,6 +548,7 @@ public class HomeContent {
         card.getChildren().addAll(userRow, titleText, descText, footer);
         card.setOnMouseEntered(e -> card.setStyle(HorizonDesignSystem.webServiceCard(28, true)));
         card.setOnMouseExited(e -> card.setStyle(HorizonDesignSystem.webServiceCard(28, false)));
+        card.setOnMouseClicked(e -> navigate("forum"));
         addHoverLift(card, -12, 1.01);
         return card;
     }
@@ -476,7 +557,7 @@ public class HomeContent {
         VBox section = new VBox(28);
         section.setAlignment(Pos.TOP_CENTER);
         section.setMaxWidth(Double.MAX_VALUE);
-        section.getChildren().add(centeredTitle("Nos Services", "Une suite complete de solutions pour votre copropriete."));
+        section.getChildren().add(centeredTitle("Our Services", "A complete set of tools for secure, organized residential living."));
 
         GridPane grid = new GridPane();
         grid.setHgap(22);
@@ -484,10 +565,10 @@ public class HomeContent {
         grid.setMaxWidth(Double.MAX_VALUE);
 
         String[][] services = {
-            {"RES", "Gestion residentielle", "Gerez vos residences, appartements et residents en toute simplicite."},
-            {"FIX", "Maintenance & SAV", "Suivez les reclamations et planifiez les interventions techniques."},
-            {"CHAT", "Communication", "Restez connecte avec vos voisins via notre forum et systeme de messagerie."},
-            {"PAY", "Paiements securises", "Reglez vos frais de syndic en ligne via nos solutions de paiement."}
+            {"RES", "Residential Management", "Manage residences, apartments, and residents with clarity and ease."},
+            {"FIX", "Maintenance & SAV", "Track complaints and schedule technical interventions from one place."},
+            {"CHAT", "Communication", "Stay connected with neighbors through the forum and messaging system."},
+            {"PAY", "Secure Payments", "Pay residence and syndic fees online through secure payment options."}
         };
 
         for (int i = 0; i < services.length; i++) {
@@ -546,7 +627,7 @@ public class HomeContent {
 
         HBox row = new HBox(2);
         row.setAlignment(Pos.CENTER);
-        Text title = new Text("Besoin d'aide ?");
+        Text title = new Text("Need help?");
         title.setFont(Font.font(boldFont(), FontWeight.BOLD, 42));
         title.setFill(Color.web(theme.getTextColor()));
         Text dot = new Text(".");
@@ -555,16 +636,17 @@ public class HomeContent {
         applyGlow(dot, 12, 0.65);
         row.getChildren().addAll(title, dot);
 
-        Text desc = new Text("Des questions sur votre residence ou besoin d'une assistance technique ? Notre equipe est a votre disposition.");
+        Text desc = new Text("Questions about your residence or need technical support? Our team is ready to help.");
         desc.setFont(Font.font(lightFont(), FontWeight.NORMAL, 16));
         desc.setFill(Color.web(theme.getSecondaryTextColor()));
         desc.setTextAlignment(TextAlignment.CENTER);
         desc.setWrappingWidth(560);
 
-        HBox buttons = new HBox(18,
-            buildPrimaryButton("Contacter le Syndic"),
-            buildSecondaryButton("Signaler un probleme")
-        );
+        Button contact = buildPrimaryButton("Contact the Syndic");
+        contact.setOnAction(e -> navigate("syndicat"));
+        Button report = buildSecondaryButton("Report an Issue");
+        report.setOnAction(e -> navigate("syndicat"));
+        HBox buttons = new HBox(18, contact, report);
         buttons.setAlignment(Pos.CENTER);
 
         card.getChildren().addAll(row, desc, buttons);
@@ -573,6 +655,10 @@ public class HomeContent {
     }
 
     private VBox sectionHeader(String title, String subtitle, String action) {
+        return sectionHeader(title, subtitle, action, null);
+    }
+
+    private VBox sectionHeader(String title, String subtitle, String action, String route) {
         VBox box = new VBox(12);
         box.setAlignment(Pos.CENTER);
 
@@ -594,6 +680,9 @@ public class HomeContent {
         sub.setTextAlignment(TextAlignment.CENTER);
 
         Button link = buildGhostLink(action);
+        if (route != null && !route.isBlank()) {
+            link.setOnAction(e -> navigate(route));
+        }
         box.getChildren().addAll(row, sub, link);
         return box;
     }
@@ -734,7 +823,52 @@ public class HomeContent {
         });
     }
 
+    private ImageView buildCoverImage(String imagePath, StackPane container, double width, double height) {
+        if (imagePath == null || imagePath.isBlank()) {
+            return null;
+        }
+        Image image = ImageLoaderUtil.loadImage(imagePath, true);
+        if (image == null) {
+            return null;
+        }
+        ImageView view = new ImageView(image);
+        view.setPreserveRatio(false);
+        view.setSmooth(true);
+        view.setCache(true);
+        view.setFitWidth(width);
+        view.setFitHeight(height);
+        view.setManaged(false);
+        StackPane.setAlignment(view, Pos.CENTER);
+        return view;
+    }
+
+    private void installRoundedClip(StackPane pane, double radius) {
+        Rectangle clip = new Rectangle();
+        clip.widthProperty().bind(pane.widthProperty());
+        clip.heightProperty().bind(pane.heightProperty());
+        clip.setArcWidth(radius);
+        clip.setArcHeight(radius);
+        pane.setClip(clip);
+    }
+
+    private void lockToContentSize(Region region) {
+        region.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        region.setPrefSize(Region.USE_COMPUTED_SIZE, Region.USE_COMPUTED_SIZE);
+        region.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+    }
+
+    private void navigate(String route) {
+        try {
+            NavigationManager.getInstance().navigateTo(route);
+        } catch (Exception e) {
+            System.out.println("HomeContent.navigate error: " + e.getMessage());
+        }
+    }
+
     private String getInitials(String user) {
+        if (user == null || user.isBlank()) {
+            return "U";
+        }
         String[] parts = user.trim().split("\\s+");
         StringBuilder sb = new StringBuilder();
         for (String part : parts) {
@@ -776,6 +910,12 @@ public class HomeContent {
         return MainApplication.getInstance().getLightFontFamily();
     }
 
+    private HomeData fallbackHomeData() {
+        HomeData data = new HomeData();
+        data.ensureFallbacks();
+        return data;
+    }
+
     private HomeData loadHomeData() {
         HomeData data = new HomeData();
         data.residentCount = count("SELECT COUNT(*) FROM user");
@@ -804,13 +944,18 @@ public class HomeContent {
 
     private List<ResidencePreview> loadResidences() {
         List<ResidencePreview> out = new ArrayList<>();
-        String sql = "SELECT nom_r, adresse FROM residence ORDER BY id_residence DESC LIMIT 4";
+        String sql = "SELECT id_residence, nom_r, adresse, image_r FROM residence ORDER BY date_ajout DESC, id_residence DESC LIMIT 4";
         try (Connection conn = DatabaseService.getInstance().getConnection()) {
             if (conn == null) return out;
             try (PreparedStatement ps = conn.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    out.add(new ResidencePreview(safe(rs.getString("nom_r"), "Residence"), safe(rs.getString("adresse"), "Syndicati")));
+                    out.add(new ResidencePreview(
+                        rs.getInt("id_residence"),
+                        safe(rs.getString("nom_r"), "Residence"),
+                        safe(rs.getString("adresse"), "Syndicati"),
+                        rs.getString("image_r")
+                    ));
                 }
             }
         } catch (SQLException e) {
@@ -821,19 +966,22 @@ public class HomeContent {
 
     private List<EventPreview> loadEvents() {
         List<EventPreview> out = new ArrayList<>();
-        String sql = "SELECT titre_event, DATE_FORMAT(date_event, '%d %b %Y') AS event_date, lieu_event, description_event, type_event " +
-            "FROM evenement ORDER BY date_event ASC LIMIT 3";
+        String sql = "SELECT id_event, titre_event, DATE_FORMAT(date_event, '%d %b %Y') AS event_date, lieu_event, description_event, type_event, image_event " +
+            "FROM evenement WHERE date_event >= CURDATE() AND (statut_event IS NULL OR statut_event <> 'annule') " +
+            "ORDER BY date_event ASC, edited_at DESC LIMIT 3";
         try (Connection conn = DatabaseService.getInstance().getConnection()) {
             if (conn == null) return out;
             try (PreparedStatement ps = conn.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new EventPreview(
-                        safe(rs.getString("titre_event"), "Evenement Syndicati"),
-                        safe(rs.getString("event_date"), "A venir"),
+                        rs.getInt("id_event"),
+                        safe(rs.getString("titre_event"), "Syndicati Event"),
+                        safe(rs.getString("event_date"), "Upcoming"),
                         safe(rs.getString("lieu_event"), "Syndicati"),
-                        limit(safe(rs.getString("description_event"), "Rejoignez les activites de notre communaute."), 150),
-                        safe(rs.getString("type_event"), "Event")
+                        limit(safe(rs.getString("description_event"), "Join the activities of our community."), 150),
+                        safe(rs.getString("type_event"), "Event"),
+                        rs.getString("image_event")
                     ));
                 }
             }
@@ -845,19 +993,22 @@ public class HomeContent {
 
     private List<ForumPreview> loadForumPosts() {
         List<ForumPreview> out = new ArrayList<>();
-        String sql = "SELECT p.titre_pub, p.description_pub, p.categorie_pub, DATE_FORMAT(p.date_creation_pub, '%d/%m/%Y') AS pub_date, " +
-            "COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email_user, 'Syndicati Member') AS author " +
-            "FROM publication p LEFT JOIN user u ON u.id_user = p.user_id ORDER BY p.date_creation_pub DESC LIMIT 3";
+        String sql = "SELECT p.id, p.titre_pub, p.description_pub, p.categorie_pub, DATE_FORMAT(p.date_creation_pub, '%d/%m/%Y') AS pub_date, " +
+            "COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email_user, 'Syndicati Member') AS author, pr.avatar " +
+            "FROM publication p LEFT JOIN user u ON u.id_user = p.user_id LEFT JOIN profile pr ON pr.user_id = u.id_user " +
+            "ORDER BY p.date_creation_pub DESC LIMIT 3";
         try (Connection conn = DatabaseService.getInstance().getConnection()) {
             if (conn == null) return out;
             try (PreparedStatement ps = conn.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new ForumPreview(
+                        rs.getInt("id"),
                         safe(rs.getString("author"), "Syndicati Member"),
+                        rs.getString("avatar"),
                         safe(rs.getString("pub_date"), "Recent"),
                         safe(rs.getString("titre_pub"), "Community update"),
-                        limit(safe(rs.getString("description_pub"), "Nouvelle discussion dans votre communaute."), 120),
+                        limit(safe(rs.getString("description_pub"), "A new discussion in your community."), 120),
                         safe(rs.getString("categorie_pub"), "Discussion")
                     ));
                 }
@@ -888,26 +1039,29 @@ public class HomeContent {
 
         void ensureFallbacks() {
             if (residences.isEmpty()) {
-                residences.add(new ResidencePreview("Residence Azure", "Les Berges du Lac"));
-                residences.add(new ResidencePreview("Palm Heights", "La Marsa"));
-                residences.add(new ResidencePreview("Jardin Central", "Mutuelleville"));
+                residences.add(new ResidencePreview(null, "Residence Azure", "Les Berges du Lac", null));
+                residences.add(new ResidencePreview(null, "Palm Heights", "La Marsa", null));
+                residences.add(new ResidencePreview(null, "Jardin Central", "Mutuelleville", null));
+                residences.add(new ResidencePreview(null, "Sana Residence", "Ariana", null));
             }
             if (events.isEmpty()) {
-                events.add(new EventPreview("Assemblee generale", "14 Mar 2026", "Club House", "Reunion annuelle pour discuter des decisions importantes de la copropriete.", "Reunion"));
-                events.add(new EventPreview("Journee de nettoyage", "21 Mar 2026", "Jardin Central", "Mobilisation collective pour entretenir les espaces communs.", "Communaute"));
-                events.add(new EventPreview("Soiree residents", "29 Mar 2026", "Rooftop", "Moment convivial pour renforcer les liens entre voisins.", "Social"));
+                events.add(new EventPreview(null, "General Assembly", "14 Mar 2026", "Club House", "Annual meeting to discuss important residence decisions.", "Meeting", null));
+                events.add(new EventPreview(null, "Clean Community Day", "21 Mar 2026", "Central Garden", "A shared moment to care for common spaces.", "Community", null));
+                events.add(new EventPreview(null, "Residents Night", "29 Mar 2026", "Rooftop", "A friendly evening to bring neighbors closer.", "Social", null));
             }
             if (forumPosts.isEmpty()) {
-                forumPosts.add(new ForumPreview("Amina Trabelsi", "12/03/2026", "Amelioration du jardin interieur", "Que pensez-vous de l'ajout d'un nouvel espace detente pres de l'entree principale ?", "Idees"));
-                forumPosts.add(new ForumPreview("Youssef Ben Ali", "11/03/2026", "Maintenance ascenseur bloc B", "Les travaux demarrent vendredi. Merci de signaler tout besoin specifique avant demain.", "Maintenance"));
-                forumPosts.add(new ForumPreview("Sarra Gharbi", "10/03/2026", "Organisation soiree ramadan", "Proposition d'une soiree conviviale dans l'espace commun ce week-end.", "Communaute"));
+                forumPosts.add(new ForumPreview(null, "Amina Trabelsi", null, "12/03/2026", "Interior garden improvement", "What do you think about adding a new relaxation area near the main entrance?", "Ideas"));
+                forumPosts.add(new ForumPreview(null, "Youssef Ben Ali", null, "11/03/2026", "Block B elevator maintenance", "Work starts Friday. Please share any specific needs before tomorrow.", "Maintenance"));
+                forumPosts.add(new ForumPreview(null, "Sarra Gharbi", null, "10/03/2026", "Community evening", "Proposal for a friendly gathering in the common area this weekend.", "Community"));
             }
         }
     }
 
-    private record ResidencePreview(String name, String address) {}
-    private record EventPreview(String title, String date, String place, String description, String type) {}
-    private record ForumPreview(String author, String date, String title, String description, String category) {}
+    private record ResidencePreview(Integer id, String name, String address, String image) {}
+    private record EventPreview(Integer id, String title, String date, String place, String description, String type, String image) {}
+    private record ForumPreview(Integer id, String author, String avatar, String date, String title, String description, String category) {}
 }
+
+
 
 

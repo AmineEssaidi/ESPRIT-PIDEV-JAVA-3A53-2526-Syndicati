@@ -666,7 +666,7 @@ public class ResidencePageView implements ViewInterface {
                 genBtn.setDisable(true);
                 genBtn.setText("Generating...");
                 
-                new Thread(() -> {
+                db.runAsync(() -> {
                     String rec = maintenanceController.generateMistralRecommendation(apt, finalMaint);
                     javafx.application.Platform.runLater(() -> {
                         if (maintenanceController.maintenanceUpdate(finalMaint.getIdMaintenance(), 
@@ -680,7 +680,7 @@ public class ResidencePageView implements ViewInterface {
                             aiText.setText(rec);
                         }
                     });
-                }).start();
+                });
             });
             
             aiSection.getChildren().addAll(aiTitle, aiText, genBtn);

@@ -100,7 +100,7 @@ public class ForumPageView implements ViewInterface {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm");
     private static final DateTimeFormatter SHORT_DATE_FMT = DateTimeFormatter.ofPattern("MMM dd");
     private static final List<String> CATEGORIES = List.of(
-            "Announcement", "Suggestion", "Jeux Video", "Informatique", "NouveautÃƒÂ©", "Discussion General", "Culture",
+            "Announcement", "Suggestion", "Jeux Video", "Informatique", "Nouveaute", "Discussion General", "Culture",
             "Sport");
     private static final List<String> MODERATOR_ROLES = List.of("OWNER", "ADMIN", "SUPERADMIN", "SYNDIC");
     private static final List<String> EMOJIS = List.of(
@@ -271,11 +271,12 @@ public class ForumPageView implements ViewInterface {
     private javafx.animation.Timeline commentRenderTimeline;
 
     public ForumPageView() {
-        mainLayout.setPadding(new Insets(0));
+        mainLayout.setPadding(new Insets(48, 48, 58, 48));
         mainLayout.setStyle("-fx-background-color: transparent;");
         mainLayout.setAlignment(Pos.TOP_CENTER);
         mainLayout.setFillWidth(true);
         mainLayout.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        mainLayout.setSpacing(34);
 
         notificationBox.setPickOnBounds(false);
         notificationBox.setAlignment(Pos.TOP_RIGHT);
@@ -284,13 +285,17 @@ public class ForumPageView implements ViewInterface {
         notificationBox.setPrefWidth(400);
         notificationBox.setMaxWidth(Region.USE_PREF_SIZE);
 
+        StackPane forumHero = buildForumHero();
+        forumHero.prefWidthProperty().bind(root.widthProperty().subtract(96));
+        forumHero.maxWidthProperty().bind(root.widthProperty().subtract(96));
+
         Node forumShell = buildSplit();
         if (forumShell instanceof Region region) {
             region.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
-            region.prefWidthProperty().bind(root.widthProperty());
+            region.prefWidthProperty().bind(root.widthProperty().subtract(96));
         }
         VBox.setVgrow(forumShell, Priority.ALWAYS);
-        mainLayout.getChildren().add(forumShell);
+        mainLayout.getChildren().addAll(forumHero, forumShell);
         root.getChildren().addAll(mainLayout, notificationBox);
 
         showFace(readFace);
@@ -303,6 +308,61 @@ public class ForumPageView implements ViewInterface {
                 refreshPublicationDetail();
             }
         }));
+    }
+
+    private StackPane buildForumHero() {
+        StackPane hero = new StackPane();
+        hero.setMinHeight(360);
+        hero.setPrefHeight(440);
+        hero.setMaxHeight(520);
+        hero.setStyle(
+                "-fx-background-color: #020303;" +
+                        "-fx-background-radius: 32px;" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-border-radius: 32px;" +
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.58), 58, 0.22, 0, 18);");
+
+        Region ambient = new Region();
+        ambient.setStyle(
+                "-fx-background-color: linear-gradient(from 48% 0% to 100% 100%, rgba(16,185,129,0.11), rgba(0,0,0,0.0) 48%, rgba(255,107,107,0.04));");
+        ambient.prefWidthProperty().bind(hero.widthProperty());
+        ambient.prefHeightProperty().bind(hero.heightProperty());
+
+        Label badge = new Label("COMMUNITY HUB");
+        badge.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.035);" +
+                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-background-radius: 999px;" +
+                        "-fx-border-radius: 999px;" +
+                        "-fx-text-fill: rgba(255,255,255,0.90);" +
+                        "-fx-font-size: 13px;" +
+                        "-fx-font-weight: 900;" +
+                        "-fx-padding: 12 22 12 22;");
+
+        Text title = new Text("Voices of\nSyndicati.");
+        title.setFill(Color.WHITE);
+        title.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 66));
+        title.setLineSpacing(-8);
+
+        Text subtitle = new Text("Join the conversation. Connect with neighbors, share ideas, and help shape our community together.");
+        subtitle.setFill(Color.web("rgba(255,255,255,0.56)"));
+        subtitle.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.BOLD, 20));
+        subtitle.setWrappingWidth(760);
+
+        VBox copy = new VBox(28, badge, title, subtitle);
+        copy.setAlignment(Pos.CENTER_LEFT);
+        copy.setMaxWidth(820);
+
+        HBox layout = new HBox(copy);
+        layout.setAlignment(Pos.CENTER_LEFT);
+        layout.setPadding(new Insets(0, 0, 0, 108));
+        layout.prefWidthProperty().bind(hero.widthProperty());
+        layout.prefHeightProperty().bind(hero.heightProperty());
+
+        hero.getChildren().addAll(ambient, layout);
+        return hero;
     }
 
     @Override
@@ -359,21 +419,21 @@ public class ForumPageView implements ViewInterface {
         HBox split = new HBox();
         split.setMinWidth(0);
         split.setMaxWidth(Double.MAX_VALUE);
-        split.setMinHeight(700);
-        split.setPrefHeight(780);
+        split.setMinHeight(720);
+        split.setPrefHeight(820);
         split.setStyle(
-                "-fx-background-color: #0a0a0c;" +
+                "-fx-background-color: #030405;" +
                         "-fx-background-radius: 32px;" +
-                        "-fx-border-color: rgba(255,255,255,0.08);" +
+                        "-fx-border-color: rgba(16,185,129,0.18);" +
                         "-fx-border-width: 1px;" +
                         "-fx-border-radius: 32px;" +
-                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.60), 60, 0.25, 0, 20);");
+                        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.62), 62, 0.24, 0, 20);");
 
         VBox main = buildMainPanel();
         VBox side = buildSidePanel();
-        side.setPrefWidth(350);
-        side.setMaxWidth(350);
-        side.setMinWidth(300);
+        side.setPrefWidth(390);
+        side.setMaxWidth(410);
+        side.setMinWidth(360);
 
         main.setMinWidth(0);
         main.prefWidthProperty().bind(
@@ -413,14 +473,14 @@ public class ForumPageView implements ViewInterface {
         readFace.setMaxWidth(Double.MAX_VALUE);
         readFace.setPrefWidth(Region.USE_COMPUTED_SIZE);
 
-        detailHero.setPrefHeight(400);
-        detailHero.setMinHeight(400);
-        detailHero.setMaxHeight(400);
+        detailHero.setPrefHeight(340);
+        detailHero.setMinHeight(300);
+        detailHero.setMaxHeight(360);
         detailHero.setMinWidth(0);
         detailHero.setMaxWidth(Double.MAX_VALUE);
         detailHero.setClip(detailHeroClip);
         detailHero.setStyle(
-                "-fx-background-color: #14141e;" +
+                "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #151827, #0b0d14 55%, #020303);" +
                         "-fx-border-color: rgba(255,255,255,0.08);" +
                         "-fx-border-width: 0 0 1px 0;");
 
@@ -435,7 +495,7 @@ public class ForumPageView implements ViewInterface {
         detailHeroImage.fitHeightProperty().bind(detailHero.heightProperty());
 
         heroTitle.setFill(Color.WHITE);
-        heroTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 38));
+        heroTitle.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 34));
         heroMeta.setFill(Color.web("rgba(255,255,255,0.72)"));
         heroMeta.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.NORMAL, 12));
         heroCategory.setFill(Color.web("rgba(255,255,255,0.95)"));
@@ -471,7 +531,7 @@ public class ForumPageView implements ViewInterface {
 
         Region heroFade = new Region();
         heroFade.setStyle(
-                "-fx-background-color: linear-gradient(to top, #14141e 5%, rgba(20,20,30,0.0) 100%);");
+                "-fx-background-color: linear-gradient(to top, rgba(3,4,5,0.96) 0%, rgba(3,4,5,0.34) 62%, rgba(3,4,5,0.08) 100%);");
         heroFade.prefWidthProperty().bind(detailHero.widthProperty());
         heroFade.prefHeightProperty().bind(detailHero.heightProperty());
 
@@ -519,7 +579,7 @@ public class ForumPageView implements ViewInterface {
         postReportButton.setMinWidth(Region.USE_PREF_SIZE);
         postReportButton.setMaxWidth(Region.USE_PREF_SIZE);
 
-        HBox rightActions = new HBox(8, ownerActions, feelingButton, postReportButton);
+        HBox rightActions = new HBox(8, feelingButton, ownerActions, postReportButton);
         rightActions.setAlignment(Pos.CENTER_RIGHT);
         rightActions.setMinWidth(Region.USE_PREF_SIZE);
         rightActions.setMaxWidth(Region.USE_PREF_SIZE);
@@ -591,6 +651,12 @@ public class ForumPageView implements ViewInterface {
         styleForumEmojiButton(postEmojiButton, false, false);
         styleReactionButton(postBookmarkButton);
         styleReactionButton(postReportButton);
+
+        postLikeButton.setText("Like");
+        postDislikeButton.setText("Dislike");
+        postEmojiButton.setText("React");
+        postBookmarkButton.setText("Bookmark");
+        postReportButton.setText("Report");
 
         postLikeButton.setOnAction(e -> togglePublicationReaction("Like"));
         postDislikeButton.setOnAction(e -> togglePublicationReaction("Dislike"));
@@ -959,10 +1025,11 @@ public class ForumPageView implements ViewInterface {
         VBox side = new VBox(0);
         side.setPadding(new Insets(0));
         side.setStyle(
-                "-fx-background-color: rgba(0,0,0,0.20);");
-        side.setPrefWidth(350);
-        side.setMinWidth(300);
-        side.setMaxWidth(350);
+                "-fx-background-color: rgba(0,0,0,0.36);" +
+                        "-fx-background-radius: 0 32px 32px 0;");
+        side.setPrefWidth(390);
+        side.setMinWidth(360);
+        side.setMaxWidth(410);
 
         Text title = new Text("Discussions");
         title.setFill(Color.WHITE);
@@ -989,19 +1056,19 @@ public class ForumPageView implements ViewInterface {
             loadCategory("Announcement");
         });
 
-        Button createSwitcher = ghostButton("+ New Post", () -> openCreateFace(false));
+        Button createSwitcher = primaryButton("+ New Post", () -> openCreateFace(false));
         createSwitcher.setMaxWidth(Double.MAX_VALUE);
-        createSwitcher.setMinHeight(42);
+        createSwitcher.setMinHeight(44);
 
-        VBox commandDeck = new VBox(16, title, topActions, createSwitcher);
-        commandDeck.setPadding(new Insets(16));
+        VBox commandDeck = new VBox(18, title, createSwitcher, topActions);
+        commandDeck.setPadding(new Insets(18));
         commandDeck.setStyle(
                 "-fx-background-color: transparent;" +
                         "-fx-border-color: rgba(255,255,255,0.10);" +
                         "-fx-border-width: 0 0 1px 0;");
 
-        listBox.setPadding(new Insets(16));
-        listBox.setSpacing(12);
+        listBox.setPadding(new Insets(18));
+        listBox.setSpacing(14);
         ScrollPane scroll = new ScrollPane(listBox);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollBarPolicy.NEVER);
@@ -1014,9 +1081,12 @@ public class ForumPageView implements ViewInterface {
 
     private void styleFilterButton(Button btn, boolean active) {
         btn.setStyle(
-                "-fx-background-color: " + (active ? tm.getAccentHex() : "rgba(255,255,255,0.05)") + ";" +
-                        "-fx-text-fill: " + (active ? "white" : "rgba(255,255,255,0.6)") + ";" +
-                        "-fx-font-size: 11px; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-padding: 8 14 8 14;");
+                "-fx-background-color: " + (active ? tm.toRgba(tm.getAccentHex(), 0.20) : "rgba(255,255,255,0.055)") + ";" +
+                        "-fx-border-color: " + (active ? tm.toRgba(tm.getAccentHex(), 0.45) : "rgba(255,255,255,0.08)") + ";" +
+                        "-fx-border-width: 1px;" +
+                        "-fx-border-radius: 12px;" +
+                        "-fx-text-fill: " + (active ? "white" : "rgba(255,255,255,0.70)") + ";" +
+                        "-fx-font-size: 12px; -fx-font-weight: 800; -fx-background-radius: 12px; -fx-padding: 10 16 10 16;");
     }
 
     private void loadCategory(String category) {
@@ -1122,9 +1192,9 @@ public class ForumPageView implements ViewInterface {
         String authorName = (p.getUser() != null)
                 ? (p.getUser().getFirstName() + " " + p.getUser().getLastName())
                 : "Anonymous";
-        Label meta = new Label("by " + authorName + " Ã¢â‚¬Â¢ " + p.getDatePublication().format(SHORT_DATE_FMT));
+        Label meta = new Label("by " + authorName + " - " + p.getDatePublication().format(SHORT_DATE_FMT));
         meta.setTextFill(Color.web("rgba(255,255,255,0.5)"));
-        meta.setStyle("-fx-font-size: 11px;");
+        meta.setStyle("-fx-font-size: 11px; -fx-font-weight: 600;");
 
         Label snippet = new Label(compactText(p.getDescPublication(), 86));
         snippet.setWrapText(true);
@@ -1292,15 +1362,18 @@ public class ForumPageView implements ViewInterface {
     private void updateReactionButtonStyle(Button btn, boolean active, String colorHex) {
         if (active) {
             btn.setStyle(
-                    "-fx-background-color: " + tm.toRgba(colorHex, 0.2) + ";" +
+                    "-fx-background-color: " + tm.toRgba(colorHex, 0.18) + ";" +
                             "-fx-border-color: " + colorHex + ";" +
-                            "-fx-text-fill: " + colorHex + ";" +
+                            "-fx-border-width: 1px;" +
+                            "-fx-text-fill: #ffffff;" +
+                            "-fx-effect: dropshadow(gaussian, " + tm.toRgba(colorHex, 0.24) + ", 16, 0.25, 0, 5);" +
                             "-fx-font-size: 12px; -fx-font-weight: 800; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 8 16 8 16;");
         } else {
             btn.setStyle(
-                    "-fx-background-color: rgba(255,255,255,0.05);" +
-                            "-fx-border-color: rgba(255,255,255,0.12);" +
-                            "-fx-text-fill: rgba(255,255,255,0.7);" +
+                    "-fx-background-color: rgba(255,255,255,0.055);" +
+                            "-fx-border-color: rgba(255,255,255,0.16);" +
+                            "-fx-border-width: 1px;" +
+                            "-fx-text-fill: rgba(255,255,255,0.82);" +
                             "-fx-font-size: 12px; -fx-font-weight: 600; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-padding: 8 16 8 16;");
         }
     }
@@ -1337,7 +1410,7 @@ public class ForumPageView implements ViewInterface {
         for (String emoji : EMOJIS) {
             String hex = Integer.toHexString(emoji.codePointAt(0));
             // Special case for heart
-            if (emoji.equals("Ã¢ÂÂ¤Ã¯Â¸Â")) hex = "2764";
+            if (emoji.equals("\u2764")) hex = "2764";
             
             String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
             
@@ -1961,19 +2034,25 @@ public class ForumPageView implements ViewInterface {
         Button btn = new Button(text);
         if (active) {
             btn.setStyle(
-                    "-fx-background-color: transparent; -fx-text-fill: " + colorHex
-                            + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+                    "-fx-background-color: " + tm.toRgba(colorHex, 0.16) + "; -fx-border-color: " + tm.toRgba(colorHex, 0.55)
+                            + "; -fx-border-width: 1px; -fx-border-radius: 11px; -fx-background-radius: 11px; -fx-text-fill: #ffffff"
+                            + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-cursor: hand;");
         } else {
             btn.setStyle(
-                    "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.4); -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+                    "-fx-background-color: rgba(255,255,255,0.055); -fx-border-color: rgba(255,255,255,0.14);"
+                            + " -fx-border-width: 1px; -fx-border-radius: 11px; -fx-background-radius: 11px;"
+                            + " -fx-text-fill: rgba(255,255,255,0.72); -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-cursor: hand;");
         }
         btn.setOnMouseEntered(e -> btn.setStyle(
-                "-fx-background-color: transparent; -fx-text-fill: " + colorHex
-                        + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;"));
+                "-fx-background-color: " + tm.toRgba(colorHex, 0.16) + "; -fx-border-color: " + tm.toRgba(colorHex, 0.55)
+                        + "; -fx-border-width: 1px; -fx-border-radius: 11px; -fx-background-radius: 11px; -fx-text-fill: #ffffff"
+                        + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-cursor: hand;"));
         btn.setOnMouseExited(e -> {
             if (!active)
                 btn.setStyle(
-                        "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.4); -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0; -fx-cursor: hand;");
+                        "-fx-background-color: rgba(255,255,255,0.055); -fx-border-color: rgba(255,255,255,0.14);"
+                                + " -fx-border-width: 1px; -fx-border-radius: 11px; -fx-background-radius: 11px;"
+                                + " -fx-text-fill: rgba(255,255,255,0.72); -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-cursor: hand;");
         });
         return btn;
     }
@@ -2043,7 +2122,7 @@ public class ForumPageView implements ViewInterface {
         FlowPane emojis = new FlowPane(12, 12);
         for (String emoji : EMOJIS) {
             String hex = Integer.toHexString(emoji.codePointAt(0));
-            if (emoji.equals("Ã¢ÂÂ¤Ã¯Â¸Â")) hex = "2764";
+            if (emoji.equals("\u2764")) hex = "2764";
             String url = "https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/" + hex + ".png";
             
             ImageView iv = new ImageView(new Image(url, true));
@@ -2191,7 +2270,7 @@ public class ForumPageView implements ViewInterface {
         if (id != null && id > 0) {
             // Discord announcement
             if ("Announcement".equalsIgnoreCase(cat)) {
-                discordService.sendAnnouncement("Ã°Å¸â€œÂ¢ **NEW ANNOUNCEMENT**\n\n**" + title + "**\n" + desc, createImage);
+                discordService.sendAnnouncement("NEW ANNOUNCEMENT\n\n**" + title + "**\n" + desc, createImage);
             } else if ("Jeux Video".equalsIgnoreCase(cat)) {
                 String author = (session.getCurrentUser() != null)
                         ? (session.getCurrentUser().getFirstName() + " " + session.getCurrentUser().getLastName())
@@ -2340,24 +2419,24 @@ public class ForumPageView implements ViewInterface {
 
     private void fillSentimentPanel(VBox panel, SentimentResult result) {
         String baseColor = "#fbbf24"; // Neutral
-        String emoji = "Ã°Å¸ËœÂ";
+        String emoji = "\uD83D\uDE10";
         
         String s = result.sentiment.toLowerCase();
         if (s.contains("pos") || s.contains("happy") || s.contains("joy")) {
             baseColor = "#22c55e";
-            emoji = "Ã¢Å“Â¨";
+            emoji = "\u2728";
         } else if (s.contains("neg") || s.contains("angry") || s.contains("sad")) {
             baseColor = "#ef4444";
-            emoji = "Ã°Å¸â€™Â¢";
+            emoji = "\uD83D\uDCA2";
         }
         
         // Match specific emotions if possible
         String e = result.primaryEmotion.toLowerCase();
-        if (e.contains("joy") || e.contains("happy")) emoji = "Ã°Å¸ËœÅ ";
-        else if (e.contains("angry") || e.contains("rage")) emoji = "Ã°Å¸ËœÂ¡";
-        else if (e.contains("sad")) emoji = "Ã°Å¸ËœÂ¢";
-        else if (e.contains("surprise")) emoji = "Ã°Å¸ËœÂ²";
-        else if (e.contains("fear")) emoji = "Ã°Å¸ËœÂ¨";
+        if (e.contains("joy") || e.contains("happy")) emoji = "\uD83D\uDE0A";
+        else if (e.contains("angry") || e.contains("rage")) emoji = "\uD83D\uDE21";
+        else if (e.contains("sad")) emoji = "\uD83D\uDE22";
+        else if (e.contains("surprise")) emoji = "\uD83D\uDE32";
+        else if (e.contains("fear")) emoji = "\uD83D\uDE28";
 
         String visualIcon = sentimentVisualIcon(result.sentiment, result.primaryEmotion);
         int confidence = 0;
@@ -2764,17 +2843,18 @@ public class ForumPageView implements ViewInterface {
 
     private String forumListItemStyle(boolean hover, boolean active) {
         if (active) {
-            return "-fx-background-color: " + tm.toRgba(tm.getAccentHex(), 0.15) + ";" +
-                "-fx-background-radius: 16px;" +
-                "-fx-border-color: " + tm.getAccentHex() + ";" +
+            return "-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, " + tm.toRgba(tm.getAccentHex(), 0.18) + ", rgba(255,255,255,0.035));" +
+                "-fx-background-radius: 18px;" +
+                "-fx-border-color: " + tm.toRgba(tm.getAccentHex(), 0.48) + ";" +
                 "-fx-border-width: 1px;" +
-                "-fx-border-radius: 16px;";
+                "-fx-border-radius: 18px;" +
+                "-fx-effect: dropshadow(gaussian, " + tm.toRgba(tm.getAccentHex(), 0.16) + ", 20, 0.22, 0, 8);";
         }
-        return "-fx-background-color: " + (hover ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)") + ";" +
-            "-fx-background-radius: 16px;" +
-            "-fx-border-color: " + (hover ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)") + ";" +
+        return "-fx-background-color: " + (hover ? "rgba(255,255,255,0.075)" : "rgba(255,255,255,0.035)") + ";" +
+            "-fx-background-radius: 18px;" +
+            "-fx-border-color: " + (hover ? tm.toRgba(tm.getAccentHex(), 0.26) : "rgba(255,255,255,0.07)") + ";" +
             "-fx-border-width: 1px;" +
-            "-fx-border-radius: 16px;";
+            "-fx-border-radius: 18px;";
     }
 
     private String forumCommentCardStyle(boolean hover) {
@@ -2792,14 +2872,14 @@ public class ForumPageView implements ViewInterface {
 
     private Button ghostButton(String text, Runnable action) {
         Button b = new Button(text);
-        b.setStyle("-fx-background-color: rgba(255,255,255,0.05);" +
-                "-fx-border-color: rgba(255,255,255,0.10);" +
+        b.setStyle("-fx-background-color: rgba(255,255,255,0.065);" +
+                "-fx-border-color: rgba(255,255,255,0.16);" +
                 "-fx-border-width: 1px;" +
-                "-fx-background-radius: 12px;" +
-                "-fx-border-radius: 12px;" +
+                "-fx-background-radius: 14px;" +
+                "-fx-border-radius: 14px;" +
                 "-fx-text-fill: white;" +
                 "-fx-font-weight: 700;" +
-                "-fx-padding: 10 20 10 20;" +
+                "-fx-padding: 10 18 10 18;" +
                 "-fx-cursor: hand;");
         b.setOnAction(e -> action.run());
         HorizonDesignSystem.installButtonMotion(b);
@@ -2807,7 +2887,16 @@ public class ForumPageView implements ViewInterface {
     }
 
     private void styleReactionButton(Button b) {
-        b.setStyle(HorizonDesignSystem.buttonGhost() + "-fx-font-size: 12px; -fx-padding: 8 16 8 16;");
+        b.setMinHeight(38);
+        b.setStyle(
+                "-fx-background-color: rgba(255,255,255,0.055);" +
+                "-fx-border-color: rgba(255,255,255,0.16);" +
+                "-fx-border-width: 1px;" +
+                "-fx-background-radius: 12px;" +
+                "-fx-border-radius: 12px;" +
+                "-fx-text-fill: rgba(255,255,255,0.86);" +
+                "-fx-font-size: 12px; -fx-font-weight: 800;" +
+                "-fx-padding: 8 16 8 16;");
         HorizonDesignSystem.installButtonMotion(b);
     }
 
@@ -2873,7 +2962,7 @@ public class ForumPageView implements ViewInterface {
     private HBox buildAttachmentZone(Runnable add, Runnable clear, Label status) {
         HBox zone = new HBox(10);
         zone.setAlignment(Pos.CENTER_LEFT);
-        Button addBtn = ghostButton("Ã°Å¸â€œÅ½ Add Image", add);
+        Button addBtn = ghostButton("Add Image", add);
         Button clearBtn = ghostButton("Clear", clear);
         zone.getChildren().addAll(addBtn, clearBtn, status);
         return zone;
@@ -2882,7 +2971,7 @@ public class ForumPageView implements ViewInterface {
     private HBox buildMultiImageAttachmentZone(Runnable add, Label status, FlowPane previews, List<File> files) {
         HBox zone = new HBox(10);
         zone.setAlignment(Pos.CENTER_LEFT);
-        Button addBtn = ghostButton("Ã°Å¸â€œÅ½ Attach Images", add);
+        Button addBtn = ghostButton("Attach Images", add);
         Button clearBtn = ghostButton("Clear All", () -> {
             files.clear();
             previews.getChildren().clear();

@@ -8,6 +8,7 @@ import com.syndicati.models.forum.Commentaire;
 import com.syndicati.models.forum.Publication;
 import com.syndicati.models.forum.Reaction;
 import com.syndicati.services.forum.ReactionService;
+import com.syndicati.services.DatabaseService;
 import com.syndicati.models.user.Profile;
 import com.syndicati.models.user.User;
 import com.syndicati.utils.image.ImageLoaderUtil;
@@ -1495,7 +1496,7 @@ public class ProfileForumSectionEnhanced {
     }
 
     private void asyncRefresh() {
-        new Thread(this::refreshDataAndRender).start();
+        DatabaseService.getInstance().runAsync(this::refreshDataAndRender);
     }
 
     private void showEditPublicationModal(Publication pub) {

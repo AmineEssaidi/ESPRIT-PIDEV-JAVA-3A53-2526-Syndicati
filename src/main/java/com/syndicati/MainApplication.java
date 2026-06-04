@@ -70,7 +70,7 @@ public class MainApplication extends Application {
         primaryStage.setTitle("Syndicati");
         primaryStage.initStyle(StageStyle.TRANSPARENT);
         primaryStage.setResizable(true);
-        primaryStage.getIcons().add(new javafx.scene.image.Image(getClass().getResourceAsStream("/app_logo/syndicati.png"), 256, 256, true, true));
+        primaryStage.getIcons().add(new javafx.scene.image.Image(getClass().getResourceAsStream("/app_logo/syndicati-logo-notext-light.png"), 256, 256, true, true));
         applyStageMinSizeForScreen(primaryStage);
 
         // 3. Initialize Views
@@ -264,6 +264,7 @@ public class MainApplication extends Application {
             com.syndicati.services.mail.AsyncMailerService.shutdown();
             com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
             com.syndicati.services.DatabaseService.getInstance().shutdown();
+            com.syndicati.utils.concurrent.FxAsync.shutdown();
             langfuseRuntimeService.stop();
             anomalyScoringScheduler.stop();
             DiscordRPCService.getInstance().shutdown();
@@ -291,6 +292,8 @@ public class MainApplication extends Application {
                 com.syndicati.services.mail.AsyncMailerService.shutdown();
                 
                 com.syndicati.utils.database.ConnectionManager.getInstance().shutdown();
+                com.syndicati.services.DatabaseService.getInstance().shutdown();
+                com.syndicati.utils.concurrent.FxAsync.shutdown();
                 langfuseRuntimeService.stop();
                 anomalyScoringScheduler.stop();
                 DiscordRPCService.getInstance().shutdown();

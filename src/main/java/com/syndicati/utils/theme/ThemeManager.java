@@ -46,14 +46,14 @@ public class ThemeManager {
         this.isDarkMode = "dark".equals(savedTheme);
         this.isDarkModeProperty.set(isDarkMode);
 
-        String savedAccent = AppPreferences.get(AppPreferences.KEY_ACCENT_COLOR, AppPreferences.DEFAULT_ACCENT_COLOR);
+        String savedAccent = normalizeLegacyAccent(AppPreferences.get(AppPreferences.KEY_ACCENT_COLOR, AppPreferences.DEFAULT_ACCENT_COLOR));
         this.accentColor = savedAccent;
         this.accentColorProperty.set(accentColor);
 
-        String savedGradient = AppPreferences.get(
+        String savedGradient = normalizeLegacyGradient(AppPreferences.get(
             AppPreferences.KEY_ACCENT_GRADIENT,
             buildGradientFromAccent(savedAccent)
-        );
+        ));
         this.accentGradient = savedGradient;
 
         this.animatedAccents = AppPreferences.getBoolean(AppPreferences.KEY_ANIM_ACCENTS, AppPreferences.DEFAULT_ANIM_ACCENTS);
@@ -65,14 +65,14 @@ public class ThemeManager {
         this.isDarkMode = "dark".equals(savedTheme);
         this.isDarkModeProperty.set(isDarkMode);
 
-        String savedAccent = AppPreferences.get(AppPreferences.KEY_ACCENT_COLOR, AppPreferences.DEFAULT_ACCENT_COLOR);
+        String savedAccent = normalizeLegacyAccent(AppPreferences.get(AppPreferences.KEY_ACCENT_COLOR, AppPreferences.DEFAULT_ACCENT_COLOR));
         this.accentColor = savedAccent;
         this.accentColorProperty.set(accentColor);
 
-        String savedGradient = AppPreferences.get(
+        String savedGradient = normalizeLegacyGradient(AppPreferences.get(
             AppPreferences.KEY_ACCENT_GRADIENT,
             buildGradientFromAccent(savedAccent)
-        );
+        ));
         this.accentGradient = savedGradient;
 
         this.animatedAccents = AppPreferences.getBoolean(AppPreferences.KEY_ANIM_ACCENTS, AppPreferences.DEFAULT_ANIM_ACCENTS);
@@ -466,6 +466,27 @@ public class ThemeManager {
         } catch (Exception e) {
             return AppPreferences.DEFAULT_ACCENT_GRADIENT;
         }
+    }
+
+    private String normalizeLegacyAccent(String hex) {
+        if (hex == null) return AppPreferences.DEFAULT_ACCENT_COLOR;
+        String lower = hex.toLowerCase(Locale.ROOT);
+        if ("#16a34a".equals(lower)) {
+            AppPreferences.setLocalOnly(AppPreferences.KEY_ACCENT_COLOR, AppPreferences.DEFAULT_ACCENT_COLOR);
+            AppPreferences.setLocalOnly(AppPreferences.KEY_ACCENT_NAME, AppPreferences.DEFAULT_ACCENT_NAME);
+            return AppPreferences.DEFAULT_ACCENT_COLOR;
+        }
+        return hex;
+    }
+
+    private String normalizeLegacyGradient(String gradient) {
+        if (gradient == null) return AppPreferences.DEFAULT_ACCENT_GRADIENT;
+        String lower = gradient.toLowerCase(Locale.ROOT);
+        if (lower.contains("#064e3b") || lower.contains("#16a34a")) {
+            AppPreferences.setLocalOnly(AppPreferences.KEY_ACCENT_GRADIENT, AppPreferences.DEFAULT_ACCENT_GRADIENT);
+            return AppPreferences.DEFAULT_ACCENT_GRADIENT;
+        }
+        return gradient;
     }
 
     private String toHex(Color color) {

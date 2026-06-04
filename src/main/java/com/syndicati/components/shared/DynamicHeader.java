@@ -21,13 +21,16 @@ import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
+import javafx.scene.control.OverrunStyle;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.ImagePattern;
 import javafx.scene.shape.Circle;
@@ -46,6 +49,8 @@ import java.nio.file.Paths;
 import com.syndicati.utils.localization.LocalizationManager;
 
 public class DynamicHeader {
+    private static final String LOGO_FOR_DARK_THEME = "/app_logo/syndicati-logo-light.png";
+    private static final String LOGO_FOR_LIGHT_THEME = "/app_logo/syndicati-logo-dark.png";
 
     private final StackPane root;
     private final ThemeManager themeManager;
@@ -145,13 +150,23 @@ public class DynamicHeader {
         HBox left = new HBox();
         left.setAlignment(Pos.CENTER_LEFT);
 
-        Button logo = new Button(lm.get("app_name").toUpperCase());
-        logo.setMinWidth(95);
-        logo.setPrefWidth(95);
+        ImageView logoImage = new ImageView(loadThemedLogoImage());
+        logoImage.setFitWidth(205);
+        logoImage.setFitHeight(78);
+        logoImage.setPreserveRatio(true);
+        logoImage.setSmooth(true);
+
+        Button logo = new Button();
+        logo.setGraphic(logoImage);
+        logo.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+        logo.setMinWidth(232);
+        logo.setPrefWidth(232);
+        logo.setMinHeight(76);
+        logo.setPrefHeight(76);
         logo.setAlignment(Pos.CENTER);
-        logo.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
-        logo.setPadding(new Insets(8, 10, 8, 10));
+        logo.setPadding(new Insets(3, 12, 3, 12));
         styleGhostPill(logo);
+        themeManager.isDarkModeProperty().addListener((obs, wasDark, isDark) -> logoImage.setImage(loadThemedLogoImage()));
         logo.setOnAction(e -> {
             activeTab = "home";
             updateTabsState();
@@ -161,6 +176,15 @@ public class DynamicHeader {
 
         left.getChildren().add(logo);
         return left;
+    }
+
+    private Image loadThemedLogoImage() {
+        String resource = themeManager.isDarkMode() ? LOGO_FOR_DARK_THEME : LOGO_FOR_LIGHT_THEME;
+        java.io.InputStream stream = getClass().getResourceAsStream(resource);
+        if (stream == null) {
+            stream = getClass().getResourceAsStream("/app_logo/syndicati.png");
+        }
+        return new Image(stream, 180, 82, true, true);
     }
 
     private HBox buildCenterSection() {
@@ -375,6 +399,9 @@ public class DynamicHeader {
         HBox container = new HBox(0);
         container.setAlignment(Pos.CENTER);
         container.setPadding(new Insets(2));
+        container.setMinWidth(118);
+        container.setPrefWidth(118);
+        container.setMaxWidth(118);
         container.setStyle(
             "-fx-background-color: " + (themeManager.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.05)") + ";" +
             "-fx-background-radius: 20px;" +
@@ -387,6 +414,10 @@ public class DynamicHeader {
             Button btn = new Button(lang);
             btn.setFont(Font.font(MainApplication.getInstance().getLightFontFamily(), FontWeight.BOLD, 9));
             btn.setPadding(new Insets(4, 8, 4, 8));
+            btn.setMinWidth(36);
+            btn.setPrefWidth(36);
+            btn.setMaxWidth(36);
+            btn.setTextOverrun(OverrunStyle.CLIP);
             styleLangButton(btn, lang.equalsIgnoreCase(lm.getCurrentLanguage()));
             btn.setOnAction(e -> {
                 if (!lang.equalsIgnoreCase(lm.getCurrentLanguage())) {
@@ -461,9 +492,13 @@ public class DynamicHeader {
         wrap.setAlignment(Pos.CENTER);
         notificationAnchor = wrap;
 
-        Button bellButton = new Button("\ud83d\udd14");
-        bellButton.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BOLD, 12));
+        Button bellButton = new Button("!");
+        bellButton.setFont(Font.font(MainApplication.getInstance().getBoldFontFamily(), FontWeight.BLACK, 14));
         bellButton.setPadding(new Insets(8, 12, 8, 12));
+        bellButton.setMinSize(42, 42);
+        bellButton.setPrefSize(42, 42);
+        bellButton.setMaxSize(42, 42);
+        bellButton.setTextOverrun(OverrunStyle.CLIP);
         styleGhostPill(bellButton);
 
         Circle badge = new Circle(4.5, Color.web("#ff3b30"));

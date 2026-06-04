@@ -60,7 +60,7 @@
     &quot;com.codeium.enabled&quot;: &quot;true&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultAutoModeForALLUsers.v1&quot;: &quot;true&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;User&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Integration&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
@@ -224,7 +224,10 @@
       <workItem from="1778581146919" duration="2045000" />
       <workItem from="1778586490365" duration="8002000" />
       <workItem from="1778656247108" duration="3654000" />
-      <workItem from="1778693936496" duration="19959000" />
+      <workItem from="1778693936496" duration="26568000" />
+      <workItem from="1779530566084" duration="1814000" />
+      <workItem from="1779545644337" duration="1937000" />
+      <workItem from="1780527082418" duration="2422000" />
     </task>
     <servers />
   </component>

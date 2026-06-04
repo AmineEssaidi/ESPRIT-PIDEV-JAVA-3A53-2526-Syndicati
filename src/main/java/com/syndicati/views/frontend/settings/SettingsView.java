@@ -41,6 +41,7 @@ public class SettingsView implements ViewInterface {
     private VBox sectionsContainer;
 
     private static final String[][] ACCENT_SWATCHES = {
+        {"#10b981", "Syndicati", "linear-gradient(from 0% 0% to 100% 100%, #04130f 0%, #0a4f35 24%, #10b981 48%, #25f2a3 68%, #d6fff1 82%, #063b2d 100%)"},
         {"#6c5ce7", "Violet", "linear-gradient(from 0% 0% to 100% 100%, #6c5ce7 0%, #8b5cf6 50%, #06b6d4 100%)"},
         {"#ff1493", "Rose", "linear-gradient(from 0% 0% to 100% 100%, #ff1493 0%, #8b5cf6 50%, #06b6d4 100%)"},
         {"#06b6d4", "Cyan", "linear-gradient(from 0% 0% to 100% 100%, #06b6d4 0%, #6c5ce7 50%, #ff1493 100%)"},
@@ -51,6 +52,9 @@ public class SettingsView implements ViewInterface {
         {"#f39c12", "Amber", "linear-gradient(from 0% 0% to 100% 100%, #f39c12 0%, #e74c3c 45%, #e67e22 100%)"},
         {"#a29bfe", "Lavender", "linear-gradient(from 0% 0% to 100% 100%, #a29bfe 0%, #6c5ce7 50%, #fd79a8 100%)"},
         {"#3b82f6", "Sky High", "linear-gradient(from 0% 0% to 100% 100%, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%)"},
+        {"#f5f5f5", "Clear Glass", "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.05) 38%, rgba(255,255,255,0.18) 66%, rgba(255,255,255,0.03) 100%)"},
+        {"#e5e7eb", "Smoked Glass", "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.18) 0%, rgba(8,12,18,0.05) 30%, rgba(255,255,255,0.26) 54%, rgba(0,0,0,0.10) 100%)"},
+        {"#ffffff", "Crystal", "linear-gradient(from 0% 0% to 100% 100%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.02) 28%, rgba(255,255,255,0.32) 52%, rgba(255,255,255,0.08) 100%)"},
     };
 
     private static final String[][] LANGUAGES = {
@@ -113,11 +117,14 @@ public class SettingsView implements ViewInterface {
                          "Choose your preferred display language.",
                          buildLanguageContent()),
             buildSection("\u2728", "Animations",
-                         "Enable animated glowing borders throughout the UI.",
-                         buildAnimationsContent()),
+                          "Enable animated glowing borders throughout the UI.",
+                          buildAnimationsContent()),
+            buildSection("\u267F", "Accessibility",
+                         "Make Syndicati easier to read, navigate, hear, and control.",
+                         buildAccessibilityContent()),
             buildSection("\uD83D\uDD14", "Notifications",
-                         "Manage how and when you receive notifications.",
-                         buildNotificationsContent()),
+                          "Manage how and when you receive notifications.",
+                          buildNotificationsContent()),
             buildSection("\uD83D\uDD12", "Privacy",
                          "Control your privacy and data preferences.",
                          buildPrivacyContent()),
@@ -449,6 +456,82 @@ public class SettingsView implements ViewInterface {
         return col;
     }
 
+    private VBox buildAccessibilityContent() {
+        VBox col = new VBox(15);
+        FlowPane grid = new FlowPane(16, 16);
+        grid.setAlignment(Pos.CENTER_LEFT);
+        grid.getChildren().addAll(
+            accessibilityToggle("Reduce Motion", "Minimize animated transitions and scrolling effects.",
+                AppPreferences.getBoolean("access-reduce-motion", false), v -> AppPreferences.setBoolean("access-reduce-motion", v)),
+            accessibilityToggle("High Contrast", "Boost contrast for text, panels, and focus states.",
+                AppPreferences.getBoolean("access-high-contrast", false), v -> AppPreferences.setBoolean("access-high-contrast", v)),
+            accessibilityToggle("Dyslexia-Friendly Font", "Use a wider, simpler font with more spacing.",
+                AppPreferences.getBoolean("access-dyslexia-font", false), v -> AppPreferences.setBoolean("access-dyslexia-font", v)),
+            accessibilityToggle("Comfortable Controls", "Use larger tap targets for buttons, links, and fields.",
+                AppPreferences.getBoolean("access-comfortable-targets", false), v -> AppPreferences.setBoolean("access-comfortable-targets", v)),
+            accessibilityToggle("Voice Input", "Enable dictation controls for forms, comments, and complaints.",
+                AppPreferences.getBoolean("access-voice-input", true), v -> AppPreferences.setBoolean("access-voice-input", v)),
+            accessibilityToggle("Color-Blind Safe Status", "Add symbols beside status colors so meaning is not color-only.",
+                AppPreferences.getBoolean("access-colorblind-safe", true), v -> AppPreferences.setBoolean("access-colorblind-safe", v)),
+            accessibilityToggle("Agent Captions", "Show captions/transcripts for spoken AI responses.",
+                AppPreferences.getBoolean("access-agent-captions", true), v -> AppPreferences.setBoolean("access-agent-captions", v))
+        );
+
+        HBox scaleRow = new HBox(18);
+        scaleRow.setAlignment(Pos.CENTER_LEFT);
+        scaleRow.setPadding(new Insets(16));
+        scaleRow.setStyle(accessibilityCardStyle());
+        VBox scaleText = new VBox(3);
+        Text scaleTitle = new Text("Text and UI Scale");
+        scaleTitle.setFont(Font.font(bold(), FontWeight.BOLD, 16));
+        scaleTitle.setFill(Color.web(tm.getTextColor()));
+        Text scaleDesc = new Text("Adjust the app size for easier reading.");
+        scaleDesc.setFont(Font.font(light(), FontWeight.NORMAL, 13));
+        scaleDesc.setFill(Color.web(tm.getSecondaryTextColor()));
+        scaleText.getChildren().addAll(scaleTitle, scaleDesc);
+        Slider slider = new Slider(0.9, 1.25, safeScale(AppPreferences.get("access-ui-scale", "1")));
+        slider.setShowTickMarks(true);
+        slider.setShowTickLabels(true);
+        slider.setMajorTickUnit(0.1);
+        slider.setBlockIncrement(0.05);
+        slider.setPrefWidth(320);
+        Label value = new Label(Math.round(slider.getValue() * 100) + "%");
+        value.setStyle("-fx-text-fill:" + tm.getTextColor() + ";-fx-font-weight:800;");
+        slider.valueProperty().addListener((obs, oldVal, newVal) -> value.setText(Math.round(newVal.doubleValue() * 100) + "%"));
+        slider.setOnMouseReleased(e -> AppPreferences.set("access-ui-scale", String.format(java.util.Locale.ROOT, "%.2f", slider.getValue())));
+        HBox.setHgrow(scaleText, Priority.ALWAYS);
+        scaleRow.getChildren().addAll(scaleText, slider, value);
+
+        col.getChildren().addAll(grid, scaleRow);
+        return col;
+    }
+
+    private HBox accessibilityToggle(String title, String desc, boolean init, BoolConsumer onChange) {
+        HBox row = toggle(title, desc, init, onChange);
+        row.setPrefWidth(360);
+        row.setMinWidth(300);
+        row.setPadding(new Insets(16));
+        row.setStyle(accessibilityCardStyle());
+        return row;
+    }
+
+    private String accessibilityCardStyle() {
+        return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.05)") + ";" +
+            "-fx-background-radius:18px;" +
+            "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
+            "-fx-border-width:1px;" +
+            "-fx-border-radius:18px;";
+    }
+
+    private double safeScale(String raw) {
+        try {
+            double value = Double.parseDouble(raw);
+            return Math.max(0.9, Math.min(1.25, value));
+        } catch (Exception e) {
+            return 1.0;
+        }
+    }
+
     private VBox buildNotificationsContent() {
         VBox col = new VBox(15);
         col.getChildren().addAll(
@@ -570,7 +653,7 @@ public class SettingsView implements ViewInterface {
         n.setEffect(new DropShadow(BlurType.ONE_PASS_BOX, Color.color(0,0,0,op), r, 0,0,5));
     }
     private Color safeColor(String hex) {
-        try { return Color.web(hex); } catch (Exception e) { return Color.web("#6c5ce7"); }
+        try { return Color.web(hex); } catch (Exception e) { return Color.web("#10b981"); }
     }
     private String toHex(Color c) {
         return String.format("#%02x%02x%02x", (int)(c.getRed()*255), (int)(c.getGreen()*255), (int)(c.getBlue()*255));

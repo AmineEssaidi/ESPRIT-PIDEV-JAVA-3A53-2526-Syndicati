@@ -51,6 +51,7 @@ import com.syndicati.utils.session.SessionManager;
 import com.syndicati.utils.theme.ThemeManager;
 import com.syndicati.utils.ui.HorizonDesignSystem;
 import com.syndicati.utils.image.ImageLoaderUtil;
+import com.syndicati.services.DatabaseService;
 import com.syndicati.services.dashboard.DashboardAdminService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -2296,7 +2297,7 @@ public class DashboardView implements ViewInterface {
                     if (selected != null) {
                         uploadBtn.setText("...");
                         uploadBtn.setDisable(true);
-                        new Thread(() -> {
+                        DatabaseService.getInstance().runAsync(() -> {
                             try {
                                 ImageKitConfig cfg = ImageKitConfig.fromEnv();
                                 ImageKitStorageService svc = new ImageKitStorageService(cfg);
@@ -2318,7 +2319,7 @@ public class DashboardView implements ViewInterface {
                                     liveHint.setTextFill(Color.web("#ff3b30"));
                                 });
                             }
-                        }).start();
+                        });
                     }
                 });
                 
@@ -2559,7 +2560,7 @@ public class DashboardView implements ViewInterface {
                     }
                     
                     final Integer finalAptId = apartmentId;
-                    new Thread(() -> {
+                    DatabaseService.getInstance().runAsync(() -> {
                         try {
                             ResidenceController resCtrl = new ResidenceController();
                             MaintenanceController maintCtrl = new MaintenanceController();
@@ -2585,7 +2586,7 @@ public class DashboardView implements ViewInterface {
                                 liveHint.setTextFill(Color.web("#ff3b30"));
                             });
                         }
-                    }).start();
+                    });
                 });
                 
                 HBox hBox = new HBox(8, field, genBtn);

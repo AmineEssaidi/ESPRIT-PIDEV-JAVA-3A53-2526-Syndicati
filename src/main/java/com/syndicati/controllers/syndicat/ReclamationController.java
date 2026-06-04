@@ -10,6 +10,7 @@ import com.syndicati.services.mail.AsyncMailerService;
 import com.syndicati.services.mail.SyndicatiEmailComposer;
 import com.syndicati.services.google.GoogleDriveService;
 import com.syndicati.services.pdf.PdfExportService;
+import com.syndicati.services.DatabaseService;
 import com.syndicati.utils.notifications.GlobalNotificationPillManager;
 import com.syndicati.utils.security.AccessControlService;
 import com.syndicati.utils.session.SessionManager;
@@ -267,7 +268,7 @@ public class ReclamationController {
     private void uploadReclamationPdfToDrive(Reclamation rec) {
         if (rec == null || rec.getUser() == null) return;
         
-        new Thread(() -> {
+        DatabaseService.getInstance().runAsync(() -> {
             try {
                 List<Reponse> responses = reponseService.listByReclamation(rec);
                 java.io.File pdfFile = PdfExportService.generateReclamationPdf(rec, responses);
@@ -277,6 +278,6 @@ public class ReclamationController {
                 System.err.println("[GoogleDrive] Failed to generate/upload PDF: " + e.getMessage());
                 e.printStackTrace();
             }
-        }).start();
+        });
     }
 }
