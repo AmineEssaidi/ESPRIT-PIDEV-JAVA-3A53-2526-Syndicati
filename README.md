@@ -261,6 +261,9 @@ Conserver :
 
 Installation :
 
+Exécuter:
+verify_and_install_prereqs.bat
+
 ```bat
 tools\maven\bin\mvn.cmd clean install -DskipTests
 ```
