@@ -7,7 +7,6 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="syndicati" />
-        <module name="wolfs_pidev_3a6" />
       </profile>
     </annotationProcessing>
   </component>

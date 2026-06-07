@@ -336,16 +336,15 @@ public class IntroCinematicView {
         taglineFade.setDelay(Duration.millis(1200));
 
         PauseTransition hold = new PauseTransition(Duration.seconds(3.5));
-        FadeTransition rootFadeOut = new FadeTransition(Duration.seconds(1.5), root);
-        rootFadeOut.setToValue(0.0);
-        rootFadeOut.setOnFinished(e -> {
+        PauseTransition finish = new PauseTransition(Duration.millis(1));
+        finish.setOnFinished(e -> {
             if (videoPlayer != null) videoPlayer.stop();
             if (audioPlayer != null) audioPlayer.stop();
             if (networkTimeline != null) networkTimeline.stop();
             if (onFinished != null) onFinished.run();
         });
 
-        mainSequence.getChildren().addAll(reveal, lettersAnim, taglineFade, hold, rootFadeOut);
+        mainSequence.getChildren().addAll(reveal, lettersAnim, taglineFade, hold, finish);
         mainSequence.play();
     }
 

@@ -75,6 +75,7 @@ public class SettingsView implements ViewInterface {
 
     private void buildAll() {
         root.getChildren().clear();
+        applyAccessibilityPreferences();
 
         sectionsContainer = new VBox(48);
         sectionsContainer.setAlignment(Pos.TOP_CENTER);
@@ -202,6 +203,14 @@ public class SettingsView implements ViewInterface {
     }
 
     private String sectionStyle(boolean hover) {
+        if (AppPreferences.getBoolean("access-high-contrast", false)) {
+            return "-fx-background-color: rgba(0,0,0,0.94);" +
+                "-fx-background-radius:40px;" +
+                "-fx-border-color:" + tm.getAccentHex() + ";" +
+                "-fx-border-width:2px;" +
+                "-fx-border-radius:40px;" +
+                "-fx-effect:dropshadow(gaussian, rgba(0,0,0,0.82), 36, 0.20, 0, 14);";
+        }
         String bg = tm.isDarkMode()
             ? (hover
                 ? "linear-gradient(to bottom right, rgba(255,255,255,0.065), rgba(255,255,255,0.025) 48%, " + tm.toRgba(tm.getAccentHex(), 0.14) + " 100%)"
@@ -458,28 +467,45 @@ public class SettingsView implements ViewInterface {
 
     private VBox buildAccessibilityContent() {
         VBox col = new VBox(15);
-        FlowPane grid = new FlowPane(16, 16);
+        GridPane grid = new GridPane();
+        grid.setHgap(18);
+        grid.setVgap(18);
         grid.setAlignment(Pos.CENTER_LEFT);
-        grid.getChildren().addAll(
+        ColumnConstraints leftCol = new ColumnConstraints();
+        leftCol.setPrefWidth(390);
+        leftCol.setMinWidth(390);
+        leftCol.setMaxWidth(390);
+        ColumnConstraints rightCol = new ColumnConstraints();
+        rightCol.setPrefWidth(390);
+        rightCol.setMinWidth(390);
+        rightCol.setMaxWidth(390);
+        grid.getColumnConstraints().addAll(leftCol, rightCol);
+
+        javafx.scene.Node[] toggles = new javafx.scene.Node[] {
             accessibilityToggle("Reduce Motion", "Minimize animated transitions and scrolling effects.",
-                AppPreferences.getBoolean("access-reduce-motion", false), v -> AppPreferences.setBoolean("access-reduce-motion", v)),
+                AppPreferences.getBoolean("access-reduce-motion", false), v -> setAccessibilityBoolean("access-reduce-motion", v)),
             accessibilityToggle("High Contrast", "Boost contrast for text, panels, and focus states.",
-                AppPreferences.getBoolean("access-high-contrast", false), v -> AppPreferences.setBoolean("access-high-contrast", v)),
+                AppPreferences.getBoolean("access-high-contrast", false), v -> setAccessibilityBoolean("access-high-contrast", v)),
             accessibilityToggle("Dyslexia-Friendly Font", "Use a wider, simpler font with more spacing.",
-                AppPreferences.getBoolean("access-dyslexia-font", false), v -> AppPreferences.setBoolean("access-dyslexia-font", v)),
+                AppPreferences.getBoolean("access-dyslexia-font", false), v -> setAccessibilityBoolean("access-dyslexia-font", v)),
             accessibilityToggle("Comfortable Controls", "Use larger tap targets for buttons, links, and fields.",
-                AppPreferences.getBoolean("access-comfortable-targets", false), v -> AppPreferences.setBoolean("access-comfortable-targets", v)),
+                AppPreferences.getBoolean("access-comfortable-targets", false), v -> setAccessibilityBoolean("access-comfortable-targets", v)),
             accessibilityToggle("Voice Input", "Enable dictation controls for forms, comments, and complaints.",
-                AppPreferences.getBoolean("access-voice-input", true), v -> AppPreferences.setBoolean("access-voice-input", v)),
+                AppPreferences.getBoolean("access-voice-input", true), v -> setAccessibilityBoolean("access-voice-input", v)),
             accessibilityToggle("Color-Blind Safe Status", "Add symbols beside status colors so meaning is not color-only.",
-                AppPreferences.getBoolean("access-colorblind-safe", true), v -> AppPreferences.setBoolean("access-colorblind-safe", v)),
+                AppPreferences.getBoolean("access-colorblind-safe", true), v -> setAccessibilityBoolean("access-colorblind-safe", v)),
             accessibilityToggle("Agent Captions", "Show captions/transcripts for spoken AI responses.",
-                AppPreferences.getBoolean("access-agent-captions", true), v -> AppPreferences.setBoolean("access-agent-captions", v))
-        );
+                AppPreferences.getBoolean("access-agent-captions", true), v -> setAccessibilityBoolean("access-agent-captions", v))
+        };
+        for (int i = 0; i < toggles.length; i++) {
+            grid.add(toggles[i], i % 2, i / 2);
+        }
 
         HBox scaleRow = new HBox(18);
         scaleRow.setAlignment(Pos.CENTER_LEFT);
         scaleRow.setPadding(new Insets(16));
+        scaleRow.setMinHeight(76);
+        scaleRow.setMaxWidth(798);
         scaleRow.setStyle(accessibilityCardStyle());
         VBox scaleText = new VBox(3);
         Text scaleTitle = new Text("Text and UI Scale");
@@ -494,13 +520,39 @@ public class SettingsView implements ViewInterface {
         slider.setShowTickLabels(true);
         slider.setMajorTickUnit(0.1);
         slider.setBlockIncrement(0.05);
-        slider.setPrefWidth(320);
+        slider.setPrefWidth(260);
+        slider.setMinWidth(220);
+        slider.setMaxWidth(280);
         Label value = new Label(Math.round(slider.getValue() * 100) + "%");
+        value.setMinWidth(52);
+        value.setAlignment(Pos.CENTER_RIGHT);
         value.setStyle("-fx-text-fill:" + tm.getTextColor() + ";-fx-font-weight:800;");
-        slider.valueProperty().addListener((obs, oldVal, newVal) -> value.setText(Math.round(newVal.doubleValue() * 100) + "%"));
-        slider.setOnMouseReleased(e -> AppPreferences.set("access-ui-scale", String.format(java.util.Locale.ROOT, "%.2f", slider.getValue())));
+        Button reset = new Button("Reset");
+        reset.setMinHeight(36);
+        reset.setMinWidth(76);
+        reset.setCursor(Cursor.HAND);
+        reset.setStyle("-fx-background-color:" + (tm.isDarkMode() ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.07)") + ";" +
+            "-fx-background-radius:999px;" +
+            "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.34) + ";" +
+            "-fx-border-width:1px;" +
+            "-fx-border-radius:999px;" +
+            "-fx-text-fill:" + tm.getTextColor() + ";" +
+            "-fx-font-weight:800;" +
+            "-fx-padding:7 16 7 16;");
+        slider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            double scaled = newVal.doubleValue();
+            value.setText(Math.round(scaled * 100) + "%");
+            AppPreferences.set("access-ui-scale", String.format(java.util.Locale.ROOT, "%.2f", scaled));
+            applyAccessibilityPreferences();
+        });
+        reset.setOnAction(e -> {
+            slider.setValue(1.0);
+            AppPreferences.set("access-ui-scale", "1.00");
+            value.setText("100%");
+            applyAccessibilityPreferences();
+        });
         HBox.setHgrow(scaleText, Priority.ALWAYS);
-        scaleRow.getChildren().addAll(scaleText, slider, value);
+        scaleRow.getChildren().addAll(scaleText, slider, value, reset);
 
         col.getChildren().addAll(grid, scaleRow);
         return col;
@@ -508,14 +560,23 @@ public class SettingsView implements ViewInterface {
 
     private HBox accessibilityToggle(String title, String desc, boolean init, BoolConsumer onChange) {
         HBox row = toggle(title, desc, init, onChange);
-        row.setPrefWidth(360);
-        row.setMinWidth(300);
+        row.setPrefWidth(390);
+        row.setMinWidth(390);
+        row.setMaxWidth(390);
+        row.setMinHeight(76);
         row.setPadding(new Insets(16));
         row.setStyle(accessibilityCardStyle());
         return row;
     }
 
     private String accessibilityCardStyle() {
+        if (AppPreferences.getBoolean("access-high-contrast", false)) {
+            return "-fx-background-color: rgba(0,0,0,0.78);" +
+                "-fx-background-radius:18px;" +
+                "-fx-border-color:" + tm.getAccentHex() + ";" +
+                "-fx-border-width:1.5px;" +
+                "-fx-border-radius:18px;";
+        }
         return "-fx-background-color:" + (tm.isDarkMode() ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.05)") + ";" +
             "-fx-background-radius:18px;" +
             "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.18) + ";" +
@@ -574,32 +635,56 @@ public class SettingsView implements ViewInterface {
     @FunctionalInterface interface BoolConsumer { void accept(boolean v); }
 
     private HBox toggle(String title, String desc, boolean init, BoolConsumer onChange) {
-        HBox row = new HBox(24); row.setAlignment(Pos.CENTER_LEFT);
-        VBox textCol = new VBox(3); HBox.setHgrow(textCol, Priority.ALWAYS);
-        Text t = new Text(title); t.setFont(Font.font(bold(), FontWeight.BOLD, 16)); t.setFill(Color.web(tm.getTextColor()));
-        Text d = new Text(desc);  d.setFont(Font.font(light(), FontWeight.NORMAL, 13)); d.setFill(Color.web(tm.getSecondaryTextColor()));
+        HBox row = new HBox(18);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setFillHeight(false);
+        VBox textCol = new VBox(4);
+        textCol.setAlignment(Pos.CENTER_LEFT);
+        textCol.setMinWidth(0);
+        HBox.setHgrow(textCol, Priority.ALWAYS);
+
+        Label t = new Label(title);
+        t.setFont(Font.font(bold(), FontWeight.BOLD, 16));
+        t.setTextFill(Color.web(tm.getTextColor()));
+        t.setWrapText(true);
+        t.setMaxWidth(Double.MAX_VALUE);
+
+        Label d = new Label(desc);
+        d.setFont(Font.font(light(), FontWeight.NORMAL, 13));
+        d.setTextFill(Color.web(tm.getSecondaryTextColor()));
+        d.setWrapText(true);
+        d.setMaxWidth(Double.MAX_VALUE);
         textCol.getChildren().addAll(t, d);
 
         final boolean[] st = {init};
-        StackPane track = new StackPane();
-        track.setPrefSize(52, 28); track.setMinSize(52, 28); track.setMaxSize(52, 28);
+        HBox track = new HBox();
+        track.setAlignment(st[0] ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+        track.setPadding(new Insets(4));
+        track.setPrefSize(56, 30); track.setMinSize(56, 30); track.setMaxSize(56, 30);
         track.setCursor(Cursor.HAND);
+        track.setFocusTraversable(true);
+        HBox.setHgrow(track, Priority.NEVER);
 
         StackPane thumb = new StackPane();
-        thumb.setPrefSize(20, 20); thumb.setMinSize(20, 20); thumb.setMaxSize(20, 20);
-        thumb.setStyle("-fx-background-color: white; -fx-background-radius: 10px;");
+        thumb.setPrefSize(22, 22); thumb.setMinSize(22, 22); thumb.setMaxSize(22, 22);
+        thumb.setStyle("-fx-background-color: white; -fx-background-radius: 11px;");
         thumb.setEffect(new DropShadow(BlurType.ONE_PASS_BOX, Color.color(0,0,0,0.3), 4, 0, 0, 1));
 
-        StackPane.setAlignment(thumb, Pos.CENTER_LEFT);
-        StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 28 : 4));
         track.setStyle(trackStyle(st[0]));
         track.getChildren().add(thumb);
 
-        track.setOnMouseClicked(e -> {
+        Runnable flip = () -> {
             st[0] = !st[0];
             track.setStyle(trackStyle(st[0]));
-            StackPane.setMargin(thumb, new Insets(0, 0, 0, st[0] ? 28 : 4));
+            track.setAlignment(st[0] ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
             onChange.accept(st[0]);
+        };
+        track.setOnMouseClicked(e -> flip.run());
+        track.setOnKeyPressed(e -> {
+            if (e.getCode() == javafx.scene.input.KeyCode.SPACE || e.getCode() == javafx.scene.input.KeyCode.ENTER) {
+                flip.run();
+                e.consume();
+            }
         });
 
         row.getChildren().addAll(textCol, track);
@@ -617,6 +702,34 @@ public class SettingsView implements ViewInterface {
                    "-fx-border-color:" + tm.toRgba(tm.getAccentHex(), 0.35) + ";" +
                    "-fx-border-width:1px;-fx-border-radius:34px;";
         }
+    }
+
+    private void setAccessibilityBoolean(String key, boolean value) {
+        AppPreferences.setBoolean(key, value);
+        applyAccessibilityPreferences();
+        if ("access-high-contrast".equals(key) ||
+            "access-dyslexia-font".equals(key) ||
+            "access-comfortable-targets".equals(key)) {
+            rebuildSections();
+        }
+    }
+
+    private void applyAccessibilityPreferences() {
+        double scale = safeScale(AppPreferences.get("access-ui-scale", "1"));
+        root.setStyle("-fx-background-color: transparent;" +
+            "-fx-font-size:" + Math.round(14 * scale) + "px;" +
+            "-fx-focus-color:" + tm.getAccentHex() + ";" +
+            "-fx-faint-focus-color:" + tm.toRgba(tm.getAccentHex(), 0.22) + ";");
+        root.setUserData(java.util.Map.of(
+            "reduceMotion", AppPreferences.getBoolean("access-reduce-motion", false),
+            "highContrast", AppPreferences.getBoolean("access-high-contrast", false),
+            "dyslexiaFont", AppPreferences.getBoolean("access-dyslexia-font", false),
+            "comfortableTargets", AppPreferences.getBoolean("access-comfortable-targets", false),
+            "voiceInput", AppPreferences.getBoolean("access-voice-input", true),
+            "colorblindSafe", AppPreferences.getBoolean("access-colorblind-safe", true),
+            "agentCaptions", AppPreferences.getBoolean("access-agent-captions", true),
+            "uiScale", scale
+        ));
     }
 
     private VBox labeledCombo(String title, String desc, String[] opts, String cur,
@@ -658,8 +771,8 @@ public class SettingsView implements ViewInterface {
     private String toHex(Color c) {
         return String.format("#%02x%02x%02x", (int)(c.getRed()*255), (int)(c.getGreen()*255), (int)(c.getBlue()*255));
     }
-    private String bold()  { return MainApplication.getInstance().getBoldFontFamily(); }
-    private String light() { return MainApplication.getInstance().getLightFontFamily(); }
+    private String bold()  { return AppPreferences.getBoolean("access-dyslexia-font", false) ? "Verdana" : MainApplication.getInstance().getBoldFontFamily(); }
+    private String light() { return AppPreferences.getBoolean("access-dyslexia-font", false) ? "Verdana" : MainApplication.getInstance().getLightFontFamily(); }
 
     @Override public VBox getRoot() { return root; }
     @Override public void cleanup() { tm.removeAccentChangeListener(accentListener); }

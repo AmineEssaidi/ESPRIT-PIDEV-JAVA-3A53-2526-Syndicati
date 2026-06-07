@@ -5,3 +5,32 @@ installer-output/
 
 # Local bundled JDK (can be re-downloaded/reinstalled on each machine)
 tools/jdk-25/
+
+# IDE and local machine files
+.idea/
+.vscode/
+*.iml
+
+# Runtime/cache output
+cache/
+__pycache__/
+*.pyc
+*.pyo
+certs/
+scratch/
+sentiment_analysis_api/
+
+# Logs and generated build reports
+*.log
+maven-build.txt
+inno-build.txt
+dependency-reduced-pom.xml
+
+# Generated installers/executables
+*.exe
+
+# Local secret/config overrides
+.env.local
+.env.*.local
+config/application.*.local.properties
+src/main/resources/google_drive_credentials.json

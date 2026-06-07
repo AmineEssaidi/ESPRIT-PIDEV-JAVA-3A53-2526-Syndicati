@@ -9,6 +9,7 @@ import com.syndicati.models.log.enums.EventType;
 import com.syndicati.models.user.User;
 import com.syndicati.services.observability.LangfuseRuntimeService;
 import com.syndicati.services.observability.LangfuseTracer;
+import com.syndicati.utils.config.EnvConfig;
 import com.syndicati.utils.session.SessionManager;
 import java.math.BigDecimal;
 import java.net.InetAddress;
@@ -327,7 +328,7 @@ public class UserActivityLogger {
     }
 
     private String defaultEnvironment() {
-        String env = System.getenv("APP_ENV");
+        String env = EnvConfig.get("APP_ENV");
         return env == null || env.isBlank() ? "desktop" : env;
     }
 

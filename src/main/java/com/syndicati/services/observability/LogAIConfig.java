@@ -1,5 +1,7 @@
 package com.syndicati.services.observability;
 
+import com.syndicati.utils.config.EnvConfig;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -62,7 +64,7 @@ public class LogAIConfig {
     }
 
     private boolean getBooleanProperty(Properties props, String key, boolean defaultValue) {
-        String env = System.getenv(toEnvKey(key));
+        String env = EnvConfig.get(toEnvKey(key));
         if (env != null) {
             return Boolean.parseBoolean(env);
         }
@@ -74,7 +76,7 @@ public class LogAIConfig {
     }
 
     private String getStringProperty(Properties props, String key, String defaultValue) {
-        String env = System.getenv(toEnvKey(key));
+        String env = EnvConfig.get(toEnvKey(key));
         if (env != null && !env.isBlank()) {
             return env;
         }
@@ -86,7 +88,7 @@ public class LogAIConfig {
     }
 
     private int getIntProperty(Properties props, String key, int defaultValue) {
-        String env = System.getenv(toEnvKey(key));
+        String env = EnvConfig.get(toEnvKey(key));
         if (env != null && !env.isBlank()) {
             try {
                 return Integer.parseInt(env);
@@ -104,7 +106,7 @@ public class LogAIConfig {
     }
 
     private double getDoubleProperty(Properties props, String key, double defaultValue) {
-        String env = System.getenv(toEnvKey(key));
+        String env = EnvConfig.get(toEnvKey(key));
         if (env != null && !env.isBlank()) {
             try {
                 return Double.parseDouble(env);

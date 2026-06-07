@@ -16,11 +16,15 @@ import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
 import com.syndicati.models.syndicat.Reclamation;
+import com.syndicati.utils.config.EnvConfig;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
@@ -44,11 +48,7 @@ public class GoogleDriveService {
     }
 
     public static com.google.api.client.http.HttpRequestInitializer authorize() throws IOException {
-        try (InputStream in = GoogleDriveService.class.getResourceAsStream("/google_drive_credentials.json")) {
-            if (in == null) {
-                throw new IOException("Resource not found: google_drive_credentials.json");
-            }
-
+        try (InputStream in = openClientSecretsStream()) {
             GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
 
             GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
@@ -67,6 +67,25 @@ public class GoogleDriveService {
             credential = new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize("user");
             return credential;
         }
+    }
+
+    private static InputStream openClientSecretsStream() throws IOException {
+        String json = EnvConfig.get("GOOGLE_DRIVE_CREDENTIALS_JSON");
+        if (json != null && !json.isBlank()) {
+            return new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8));
+        }
+
+        String base64 = EnvConfig.get("GOOGLE_DRIVE_CREDENTIALS_BASE64");
+        if (base64 != null && !base64.isBlank()) {
+            return new ByteArrayInputStream(Base64.getDecoder().decode(base64));
+        }
+
+        InputStream fallback = GoogleDriveService.class.getResourceAsStream("/google_drive_credentials.json");
+        if (fallback != null) {
+            return fallback;
+        }
+
+        throw new IOException("Google Drive credentials are not configured. Set GOOGLE_DRIVE_CREDENTIALS_JSON or GOOGLE_DRIVE_CREDENTIALS_BASE64 in Infisical.");
     }
 
     public static Drive getDriveService() throws IOException {

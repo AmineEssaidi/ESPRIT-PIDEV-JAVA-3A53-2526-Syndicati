@@ -1,5 +1,7 @@
 package com.syndicati.services.observability;
 
+import com.syndicati.utils.config.EnvConfig;
+
 import java.io.*;
 import java.util.Properties;
 
@@ -78,7 +80,7 @@ public class OpenObserveConfig {
     }
 
     private boolean getBooleanProperty(Properties props, String key, boolean defaultValue) {
-        String env = System.getenv(envKey(key));
+        String env = EnvConfig.get(envKey(key));
         if (env != null) {
             return Boolean.parseBoolean(env);
         }
@@ -90,7 +92,7 @@ public class OpenObserveConfig {
     }
 
     private String getStringProperty(Properties props, String key, String defaultValue) {
-        String env = System.getenv(envKey(key));
+        String env = EnvConfig.get(envKey(key));
         if (env != null && !env.isEmpty()) {
             return env;
         }
@@ -102,7 +104,7 @@ public class OpenObserveConfig {
     }
 
     private int getIntProperty(Properties props, String key, int defaultValue) {
-        String env = System.getenv(envKey(key));
+        String env = EnvConfig.get(envKey(key));
         if (env != null && !env.isEmpty()) {
             try {
                 return Integer.parseInt(env);
@@ -122,7 +124,7 @@ public class OpenObserveConfig {
     }
 
     private long getLongProperty(Properties props, String key, long defaultValue) {
-        String env = System.getenv(envKey(key));
+        String env = EnvConfig.get(envKey(key));
         if (env != null && !env.isEmpty()) {
             try {
                 return Long.parseLong(env);

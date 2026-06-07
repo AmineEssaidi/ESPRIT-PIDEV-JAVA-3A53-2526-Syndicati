@@ -94,8 +94,8 @@ public class MainApplication extends Application {
 
         // 6. Show and Play Intro
         primaryStage.setScene(scene);
+        positionStageOnScreen(primaryStage, introWh[0], introWh[1]);
         primaryStage.show();
-        centerStageOnScreen(primaryStage);
         clampStageToVisualBounds(primaryStage);
         applyRoundedShape(scene);
         addResizeHandlers(primaryStage, scene);
@@ -135,18 +135,6 @@ public class MainApplication extends Application {
                                     boolean max = primaryStage.isMaximized();
                                     
                                     showLandingPage(w, h, x, y, max, false);
-                                    
-                                    // 2. Fade in new view
-                                    Node newRoot = primaryStage.getScene().getRoot();
-                                    newRoot.setOpacity(0);
-                                    newRoot.setScaleX(1.05); newRoot.setScaleY(1.05);
-                                    
-                                    FadeTransition fadeIn = new FadeTransition(Duration.millis(1000), newRoot);
-                                    fadeIn.setToValue(1.0);
-                                    ScaleTransition scaleIn = new ScaleTransition(Duration.millis(1000), newRoot);
-                                    scaleIn.setToX(1.0); scaleIn.setToY(1.0);
-                                    
-                                    new ParallelTransition(fadeIn, scaleIn).play();
                                     recoveryView.cleanup();
                                 });
                                 pt.play();
@@ -170,25 +158,13 @@ public class MainApplication extends Application {
                                     boolean max = primaryStage.isMaximized();
                                     
                                     showLandingPage(w, h, x, y, max, true);
-                                    
-                                    // 2. Fade in new view
-                                    Node newRoot = primaryStage.getScene().getRoot();
-                                    newRoot.setOpacity(0);
-                                    newRoot.setScaleX(1.05); newRoot.setScaleY(1.05);
-                                    
-                                    FadeTransition fadeIn = new FadeTransition(Duration.millis(1000), newRoot);
-                                    fadeIn.setToValue(1.0);
-                                    ScaleTransition scaleIn = new ScaleTransition(Duration.millis(1000), newRoot);
-                                    scaleIn.setToX(1.0); scaleIn.setToY(1.0);
-                                    
-                                    new ParallelTransition(fadeIn, scaleIn).play();
                                     recoveryView.cleanup();
                                 });
                                 pt.play();
                             });
                         });
 
-                        primaryStage.getScene().setRoot(recoveryView.getRoot());
+                        swapRoot(recoveryView.getRoot());
                         
                         Thread.startVirtualThread(() -> {
                             try {
@@ -214,11 +190,11 @@ public class MainApplication extends Application {
 
                                 recoveryView.setProgress(1.0, com.syndicati.utils.localization.LocalizationManager.getInstance().get("ready_to_enter"));
                             } catch (Exception e) {
-                                javafx.application.Platform.runLater(() -> primaryStage.getScene().setRoot(loginView.getRoot()));
+                                javafx.application.Platform.runLater(() -> swapRoot(loginView.getRoot()));
                             }
                         });
                     } else {
-                        primaryStage.getScene().setRoot(loginView.getRoot());
+                        swapRoot(loginView.getRoot());
                     }
                 });
             });
@@ -281,7 +257,7 @@ public class MainApplication extends Application {
             ));
 
             com.syndicati.views.frontend.auth.ShutdownCinematicView shutdownView = new com.syndicati.views.frontend.auth.ShutdownCinematicView();
-            primaryStage.getScene().setRoot(shutdownView.getRoot());
+            swapRoot(shutdownView.getRoot());
             
             shutdownView.setOnFinished(() -> {
                 System.out.println("[SHUTDOWN] Finalizing service cleanup...");
@@ -421,7 +397,7 @@ public class MainApplication extends Application {
                 });
             });
 
-            primaryStage.getScene().setRoot(recoveryView.getRoot());
+            swapRoot(recoveryView.getRoot());
             
             // Lightweight background sync. Heavy view construction is deferred until after entry.
             Thread.startVirtualThread(() -> {
@@ -451,7 +427,6 @@ public class MainApplication extends Application {
         System.out.println("[OK] Successfully initiated navigation to landing page.");
     }
 
-
     private void showLandingPage(
         double currentWidth,
         double currentHeight,
@@ -465,12 +440,6 @@ public class MainApplication extends Application {
             loginView = null;
         }
 
-        if (landingPageView != null) {
-            landingPageView.cleanup();
-            landingPageView = null;
-        }
-
-        // If already warm, we just use the instance, otherwise create it
         if (landingPageView == null) {
             landingPageView = new com.syndicati.views.frontend.home.LandingPageView();
         }
@@ -479,11 +448,20 @@ public class MainApplication extends Application {
         navigationManager.setViews(landingPageView);
 
         StackPane globalRoot = new StackPane(landingPageView.getRoot());
-        Scene scene = new Scene(globalRoot);
         com.syndicati.components.shared.FloatingActionButtons.attachTo(globalRoot);
-        
-        scene.setFill(Color.BLACK); // Keep non-transparent app background
-        scene.getStylesheets().clear(); // Clear any inherited styles
+
+        Scene scene = primaryStage.getScene();
+        if (scene == null) {
+            scene = new Scene(globalRoot, currentWidth, currentHeight);
+            primaryStage.setScene(scene);
+        } else {
+            globalRoot.setOpacity(1.0);
+            globalRoot.setScaleX(1.0);
+            globalRoot.setScaleY(1.0);
+            scene.setRoot(globalRoot);
+        }
+
+        scene.setFill(Color.BLACK);
         applyGlobalStyles(scene);
         if (landingPageView.getRoot() != null) {
             appendRootStyle(landingPageView.getRoot(), "-fx-font-family: '" + lightFontFamily + "';");
@@ -492,7 +470,6 @@ public class MainApplication extends Application {
         applyStageMinSizeForScreen(primaryStage);
 
         ThemeManager.getInstance().setScene(scene);
-        primaryStage.setScene(scene);
 
         if (wasMaximized) {
             primaryStage.setMaximized(true);
@@ -514,7 +491,9 @@ public class MainApplication extends Application {
 
         addResizeHandlers(primaryStage, scene);
         applyRoundedShape(scene);
-        primaryStage.show();
+        if (!primaryStage.isShowing()) {
+            primaryStage.show();
+        }
 
         // NOTE: Disabled aggressive live DB polling by default.
         // It can introduce stutter by starving the DB connection pool and triggering UI rebuilds.
@@ -525,10 +504,8 @@ public class MainApplication extends Application {
             "dashboard_mode", goToDashboard ? "admin" : "community"
         ));
 
-        // Let the scene render once before initializing heavy subcomponents
         javafx.application.Platform.runLater(() -> {
             landingPageView.getRoot().layout();
-            primaryStage.sizeToScene();
             applyStageMinSizeForScreen(primaryStage);
             if (!primaryStage.isMaximized()) {
                 clampStageToVisualBounds(primaryStage);
@@ -544,6 +521,17 @@ public class MainApplication extends Application {
             }
             NavigationManager.getInstance().warmup();
         });
+    }
+
+    private void swapRoot(Node nextRoot) {
+        if (nextRoot == null || primaryStage == null || primaryStage.getScene() == null) {
+            return;
+        }
+
+        nextRoot.setOpacity(1.0);
+        nextRoot.setScaleX(1.0);
+        nextRoot.setScaleY(1.0);
+        primaryStage.getScene().setRoot((javafx.scene.Parent) nextRoot);
     }
 
     private void loadCustomFonts() {
@@ -676,16 +664,22 @@ public class MainApplication extends Application {
         loginView = new LoginView();
         loginView.setOnLoginSuccess(this::navigateToLandingPage);
         
-        // Explicitly set the scene size to the current window size to prevent shrinking
-        Scene scene = new Scene(loginView.getRoot(), currentWidth, currentHeight);
-        scene.setFill(Color.BLACK); 
-        scene.getStylesheets().clear(); 
+        Scene scene = primaryStage.getScene();
+        if (scene == null) {
+            scene = new Scene(loginView.getRoot(), currentWidth, currentHeight);
+            primaryStage.setScene(scene);
+        } else {
+            loginView.getRoot().setOpacity(1.0);
+            loginView.getRoot().setScaleX(1.0);
+            loginView.getRoot().setScaleY(1.0);
+            scene.setRoot(loginView.getRoot());
+        }
+        scene.setFill(Color.BLACK);
         applyGlobalStyles(scene);
         
         applyStageMinSizeForScreen(primaryStage);
         
         ThemeManager.getInstance().setScene(scene);
-        primaryStage.setScene(scene);
         
         // Re-apply rounded corners for the transparent stage
         applyRoundedShape(scene);
@@ -716,8 +710,9 @@ public class MainApplication extends Application {
         // Reapply rounded window clip for the login scene after logout
         applyRoundedShape(scene);
         
-        // Show stage
-        primaryStage.show();
+        if (!primaryStage.isShowing()) {
+            primaryStage.show();
+        }
 
         activityLogController.logPageView("login_page", "Login Page", java.util.Map.of(
             "source", "logout"
@@ -839,6 +834,14 @@ public class MainApplication extends Application {
         Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
         stage.setX(screenBounds.getMinX() + (screenBounds.getWidth() - stage.getWidth()) / 2);
         stage.setY(screenBounds.getMinY() + (screenBounds.getHeight() - stage.getHeight()) / 2);
+    }
+
+    private void positionStageOnScreen(Stage stage, double width, double height) {
+        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
+        stage.setWidth(width);
+        stage.setHeight(height);
+        stage.setX(screenBounds.getMinX() + (screenBounds.getWidth() - width) / 2);
+        stage.setY(screenBounds.getMinY() + (screenBounds.getHeight() - height) / 2);
     }
     
     private void applyRoundedShape(Scene scene) {

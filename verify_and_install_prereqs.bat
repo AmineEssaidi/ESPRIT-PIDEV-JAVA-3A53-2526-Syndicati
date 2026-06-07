@@ -9,10 +9,12 @@ set "PF64=%ProgramFiles%"
 set "HAS_ERRORS=0"
 set "HAS_WARNINGS=0"
 set "HAS_MSVC=0"
+set "STEP=0"
 set "PY_CMD=python"
 set "PY_VER="
 set "PY_MAJOR=0"
 set "PY_MINOR=0"
+set "MVN_CMD="
 
 echo.
 echo ================================================================
@@ -29,11 +31,17 @@ if %ERRORLEVEL% EQU 0 (
 
 call :check_java
 call :check_maven
+call :check_project_files
+call :check_runtime_dirs
+call :check_infisical_config
 call :check_python
 call :check_python_packages
+call :check_maven_dependencies
 call :check_insightface_cache
 call :check_database_port
 call :check_local_config
+call :check_media_config
+call :check_google_drive_config
 call :print_manual_notes
 
 echo.
@@ -50,7 +58,7 @@ if %HAS_WARNINGS% GTR 0 (
 )
 echo.
 if %HAS_ERRORS% EQU 0 (
-    echo You can run the app now with: run-app.bat
+echo You can run the app now with: dev-run.bat
 ) else (
     echo Fix the blocking errors above, then re-run this script.
 )
@@ -59,11 +67,12 @@ pause
 exit /b %HAS_ERRORS%
 
 :check_java
-echo [1/7] Checking Java...
+call :next_step "Checking Java 25 runtime..."
 if defined JAVA_HOME (
     if exist "%JAVA_HOME%\bin\java.exe" (
         echo [OK] Using JAVA_HOME: %JAVA_HOME%
         set "PATH=%JAVA_HOME%\bin;%PATH%"
+        call :check_java_version
         goto :eof
     )
 )
@@ -73,6 +82,7 @@ if exist "%JAVA_BIN%" (
     echo [OK] Using bundled Java: %JAVA_BIN%
     set "JAVA_HOME=%ROOT%tools\jdk-25"
     set "PATH=%JAVA_HOME%\bin;%PATH%"
+    call :check_java_version
     goto :eof
 )
 
@@ -80,6 +90,7 @@ where java >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     for /f "delims=" %%j in ('where java 2^>nul') do (
         echo [OK] Java found on PATH: %%j
+        call :check_java_version
         goto :eof
     )
 )
@@ -90,6 +101,7 @@ if "%HAS_WINGET%"=="1" (
     where java >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
         echo [OK] Java installed via winget.
+        call :check_java_version
         goto :eof
     )
 )
@@ -98,13 +110,30 @@ echo [ERROR] Java 25 missing and auto-install failed.
 set /a HAS_ERRORS+=1
 goto :eof
 
+:check_java_version
+set "JAVA_VERSION_TEXT="
+for /f "tokens=3 delims= " %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do set "JAVA_VERSION_TEXT=%%~v"
+if not defined JAVA_VERSION_TEXT (
+    echo [WARN] Could not detect Java version.
+    set /a HAS_WARNINGS+=1
+    goto :eof
+)
+echo [OK] Java version: %JAVA_VERSION_TEXT%
+echo %JAVA_VERSION_TEXT% | findstr /b /c:"25" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [WARN] Project targets Java 25. Current runtime may fail if it is older.
+    set /a HAS_WARNINGS+=1
+)
+goto :eof
+
 :check_maven
 echo.
-echo [2/7] Checking Maven...
+call :next_step "Checking Maven..."
 set "MVN_BIN=%ROOT%tools\maven\bin\mvn.cmd"
 if exist "%MVN_BIN%" (
     echo [OK] Using bundled Maven: %MVN_BIN%
     set "PATH=%ROOT%tools\maven\bin;%PATH%"
+    set "MVN_CMD=%MVN_BIN%"
     goto :eof
 )
 
@@ -112,6 +141,7 @@ where mvn >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     for /f "delims=" %%m in ('where mvn 2^>nul') do (
         echo [OK] Maven found on PATH: %%m
+        set "MVN_CMD=%%m"
         goto :eof
     )
 )
@@ -122,6 +152,10 @@ if "%HAS_WINGET%"=="1" (
     where mvn >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
         echo [OK] Maven installed via winget.
+        for /f "delims=" %%m in ('where mvn 2^>nul') do (
+            set "MVN_CMD=%%m"
+            goto :eof
+        )
         goto :eof
     )
 )
@@ -130,9 +164,57 @@ echo [ERROR] Maven missing and auto-install failed.
 set /a HAS_ERRORS+=1
 goto :eof
 
+:check_project_files
+echo.
+call :next_step "Checking required project files..."
+call :require_file "pom.xml"
+call :require_file "src\main\java\com\syndicati\Launcher.java"
+call :require_file "src\main\java\com\syndicati\MainApplication.java"
+call :require_file "src\main\java\com\syndicati\utils\config\EnvConfig.java"
+call :require_file "src\main\resources\styles"
+call :require_file "src\main\resources\images"
+call :require_file "src\main\resources\app_logo"
+call :require_file "src\main\resources\lang"
+call :require_file "requirements.txt"
+call :require_file "face_detect_service.py"
+call :require_file "mediapipe_service.py"
+call :require_file "insightface_service.py"
+goto :eof
+
+:check_runtime_dirs
+echo.
+call :next_step "Checking runtime folders..."
+call :ensure_dir "cache"
+call :ensure_dir "uploads"
+call :ensure_dir "target"
+call :ensure_dir "workers"
+goto :eof
+
+:check_infisical_config
+echo.
+call :next_step "Checking Infisical bootstrap configuration..."
+if exist "%ROOT%.env" (
+    findstr /b /c:"INFISICAL_BOOTSTRAP=1" "%ROOT%.env" >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [OK] Infisical bootstrap enabled in .env.
+    ) else (
+        echo [WARN] .env exists but INFISICAL_BOOTSTRAP=1 was not found.
+        set /a HAS_WARNINGS+=1
+    )
+    call :warn_if_missing_env_key "INFISICAL_HOST"
+    call :warn_if_missing_env_key "INFISICAL_ENV"
+    call :warn_if_missing_env_key "INFISICAL_PROJECT_ID"
+    call :warn_if_missing_env_key "INFISICAL_UNIVERSAL_AUTH_CLIENT_ID"
+    call :warn_if_missing_env_key "INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET"
+) else (
+    echo [WARN] .env not found. Infisical bootstrap credentials may be missing.
+    set /a HAS_WARNINGS+=1
+)
+goto :eof
+
 :check_python
 echo.
-echo [3/7] Checking Python...
+call :next_step "Checking Python..."
 call :try_set_py311
 
 %PY_CMD% --version >nul 2>&1
@@ -242,11 +324,21 @@ goto :eof
 
 :check_python_packages
 echo.
-echo [4/7] Checking Python biometric packages...
+call :next_step "Checking Python packages..."
 
 call :ensure_py_pkg "onnxruntime" "import onnxruntime"
 call :ensure_py_pkg "opencv-python" "import cv2"
 call :ensure_py_pkg "numpy" "import numpy"
+call :ensure_py_pkg "mediapipe" "import mediapipe"
+call :ensure_py_pkg "fastapi" "import fastapi"
+call :ensure_py_pkg "uvicorn" "import uvicorn"
+call :ensure_py_pkg "pydantic" "import pydantic"
+call :ensure_py_pkg "flask" "import flask"
+call :ensure_py_pkg "textblob" "import textblob"
+call :ensure_py_pkg "playwright" "import playwright"
+call :ensure_py_pkg "langchain-groq" "import langchain_groq"
+call :ensure_py_pkg "langgraph" "import langgraph"
+call :ensure_py_pkg "langchain-core" "import langchain_core"
 call :check_optional_insightface
 
 goto :eof
@@ -357,9 +449,27 @@ echo [WARN] Could not auto-install Microsoft C++ Build Tools.
 echo [HINT] Install manually: https://visualstudio.microsoft.com/visual-cpp-build-tools/
 goto :eof
 
+:check_maven_dependencies
+echo.
+call :next_step "Checking Maven dependency resolution..."
+if not defined MVN_CMD (
+    echo [ERROR] Maven command was not resolved.
+    set /a HAS_ERRORS+=1
+    goto :eof
+)
+call "%MVN_CMD%" -q -DskipTests dependency:go-offline
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] Maven dependencies are available.
+) else (
+    echo [ERROR] Maven could not resolve all dependencies.
+    echo [HINT] Check internet access, Maven repositories, or proxy settings.
+    set /a HAS_ERRORS+=1
+)
+goto :eof
+
 :check_insightface_cache
 echo.
-echo [5/7] Checking InsightFace model cache...
+call :next_step "Checking InsightFace model cache..."
 if exist "%USERPROFILE%\.insightface" (
     echo [OK] InsightFace cache exists: %USERPROFILE%\.insightface
 ) else (
@@ -371,7 +481,7 @@ goto :eof
 
 :check_database_port
 echo.
-echo [6/7] Checking MySQL availability on 127.0.0.1:3306...
+call :next_step "Checking MySQL availability on 127.0.0.1:3306..."
 powershell -NoProfile -Command "$ok=(Test-NetConnection -ComputerName 127.0.0.1 -Port 3306 -WarningAction SilentlyContinue).TcpTestSucceeded; if($ok){exit 0}else{exit 1}" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo [OK] MySQL port 3306 is reachable.
@@ -384,7 +494,7 @@ goto :eof
 
 :check_local_config
 echo.
-echo [7/7] Checking local config...
+call :next_step "Checking local config..."
 if exist "%ROOT%config\application.local.properties" (
     echo [OK] Found config\application.local.properties
 ) else (
@@ -394,10 +504,101 @@ if exist "%ROOT%config\application.local.properties" (
 )
 goto :eof
 
+:check_media_config
+echo.
+call :next_step "Checking media/ImageKit configuration..."
+call :is_infisical_enabled
+if "%INFISICAL_ENABLED_NOW%"=="1" (
+    echo [OK] ImageKit may be loaded through Infisical bootstrap.
+    goto :eof
+)
+if exist "%ROOT%.env" (
+    findstr /i /c:"IMAGEKIT" "%ROOT%.env" >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [OK] ImageKit keys or bootstrap references found in .env.
+        goto :eof
+    )
+)
+if exist "%ROOT%config\application.local.properties" (
+    findstr /i /c:"imagekit" "%ROOT%config\application.local.properties" >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo [OK] ImageKit config found in application.local.properties.
+        goto :eof
+    )
+)
+echo [WARN] No local ImageKit config found. App may rely on Infisical values.
+set /a HAS_WARNINGS+=1
+goto :eof
+
+:check_google_drive_config
+echo.
+call :next_step "Checking optional Google Drive credentials..."
+if exist "%ROOT%src\main\resources\google_drive_credentials.json" (
+    echo [OK] Google Drive credentials file exists.
+) else (
+    call :is_infisical_enabled
+    if "%INFISICAL_ENABLED_NOW%"=="1" (
+        echo [OK] Google Drive credentials may be loaded through Infisical.
+    ) else (
+        echo [INFO] Google Drive credentials not found. Drive features will be unavailable unless configured elsewhere.
+    )
+)
+goto :eof
+
+:is_infisical_enabled
+set "INFISICAL_ENABLED_NOW=0"
+if exist "%ROOT%.env" (
+    findstr /b /c:"INFISICAL_BOOTSTRAP=1" "%ROOT%.env" >nul 2>&1
+    if %ERRORLEVEL% EQU 0 set "INFISICAL_ENABLED_NOW=1"
+) else (
+    if /I "%INFISICAL_BOOTSTRAP%"=="1" set "INFISICAL_ENABLED_NOW=1"
+)
+goto :eof
+
 :print_manual_notes
 echo.
 echo Manual checks ^(not auto-installable by script^):
 echo  - Camera permission/access in Windows Settings
 echo  - Valid SMTP credentials if you use OTP/password reset email
 echo  - Existing DB schema/data in your MySQL syndicati database
+echo  - Infisical machine identity must have access to the configured project/environment
+echo  - Playwright browsers are optional unless you run Playwright-based checks
+goto :eof
+
+:next_step
+set /a STEP+=1
+echo [%STEP%] %~1
+goto :eof
+
+:require_file
+if exist "%ROOT%%~1" (
+    echo [OK] %~1
+) else (
+    echo [ERROR] Missing required path: %~1
+    set /a HAS_ERRORS+=1
+)
+goto :eof
+
+:ensure_dir
+if exist "%ROOT%%~1" (
+    echo [OK] %~1
+) else (
+    mkdir "%ROOT%%~1" >nul 2>&1
+    if exist "%ROOT%%~1" (
+        echo [OK] Created %~1
+    ) else (
+        echo [ERROR] Could not create runtime folder: %~1
+        set /a HAS_ERRORS+=1
+    )
+)
+goto :eof
+
+:warn_if_missing_env_key
+findstr /b /c:"%~1=" "%ROOT%.env" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [OK] %~1
+) else (
+    echo [WARN] Missing %~1 in .env
+    set /a HAS_WARNINGS+=1
+)
 goto :eof

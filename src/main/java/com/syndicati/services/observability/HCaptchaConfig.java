@@ -1,5 +1,7 @@
 package com.syndicati.services.observability;
 
+import com.syndicati.utils.config.EnvConfig;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -97,7 +99,7 @@ public class HCaptchaConfig {
     }
 
     private String getStringProperty(Properties props, Properties dotenvProps, String key, String defaultValue) {
-        String env = System.getenv(key.toUpperCase().replace('.', '_'));
+        String env = EnvConfig.get(key.toUpperCase().replace('.', '_'));
         if (env != null && !env.isBlank()) {
             return env;
         }
